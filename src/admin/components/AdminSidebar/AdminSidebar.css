@@ -1,0 +1,243 @@
+.admin-sidebar {
+  width: var(--admin-sidebar-width);
+  background: #fafafa;
+  border-right: 1px solid var(--admin-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 16px 14px;
+}
+
+.admin-sidebar__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 6px 18px;
+  border-bottom: 1px solid var(--admin-border-soft);
+}
+
+.admin-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-sidebar__brand-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--admin-primary) 0%, #7f95ff 100%);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: 0 10px 20px rgba(79, 109, 245, 0.18);
+}
+
+.admin-sidebar__brand-copy {
+  min-width: 0;
+}
+
+.admin-sidebar__brand-title {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.1;
+  font-weight: 800;
+  color: #111827;
+}
+
+.admin-sidebar__brand-subtitle {
+  margin: 2px 0 0;
+  font-size: 0.77rem;
+  color: var(--admin-text-soft);
+}
+
+.admin-sidebar__brand-action {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: #fff;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.admin-sidebar__nav {
+  flex: 1;
+  overflow: auto;
+  padding: 3px 2px;
+}
+
+.admin-sidebar__group + .admin-sidebar__group {
+  margin-top: 18px;
+}
+
+.admin-sidebar__group-title {
+  margin: 0 0 1px;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--admin-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.admin-sidebar__group-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+}
+
+.admin-sidebar__link {
+  min-height: 35px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #374151;
+  transition: all 0.2s ease;
+}
+
+.admin-sidebar__link:hover {
+  background: #f1f4f9;
+  color: #111827;
+}
+
+.admin-sidebar__link--active {
+  background: #eceff4;
+  color: #111827;
+  font-weight: 600;
+}
+
+.admin-sidebar__link-icon {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.95rem;
+}
+
+.admin-sidebar__link-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.admin-sidebar__link-arrow {
+  color: var(--admin-text-muted);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.admin-sidebar__empty {
+  border: 1px dashed var(--admin-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+  color: var(--admin-text-soft);
+  font-size: 0.9rem;
+}
+
+.admin-sidebar__footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--admin-border-soft);
+}
+
+.admin-sidebar__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  padding: 10px;
+}
+
+.admin-sidebar__avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #eff4ff 0%, #dbe7ff 100%);
+  color: #1f2937;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-sidebar__user-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-sidebar__user-name,
+.admin-sidebar__user-role {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-sidebar__user-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.admin-sidebar__user-role {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--admin-text-soft);
+}
+
+.admin-sidebar__logout-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border);
+  background: #fff;
+  color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+@media (max-width: 991.98px) {
+  .admin-sidebar {
+    display: none;
+  }
+}
+
+/* ...todo tu CSS actual... */
+
+@media (max-width: 991.98px) {
+  .admin-sidebar {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 290px;
+    max-width: 88vw;
+    z-index: 120;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+  }
+
+  .admin-sidebar.admin-sidebar--open {
+    transform: translateX(0);
+  }
+}

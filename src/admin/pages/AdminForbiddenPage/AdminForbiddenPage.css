@@ -1,0 +1,10 @@
+.admin-forbidden {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+}
+
+.admin-forbidden__box {
+  padding: 2rem;
+  text-align: center;
+}

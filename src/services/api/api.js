@@ -1,0 +1,44 @@
+import axios from "axios"
+import { getAuthToken, clearAuthSession } from "../storage/authStorage"
+
+const API_BASE_URL  = `${import.meta.env.VITE_API_URL}/api/v1`
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: false, 
+  headers: {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  },
+})
+
+api.interceptors.request.use(
+  (config) => {
+    const token = getAuthToken()
+
+    //  console.log("TOKEN ACTUAL:", token)
+    // console.log("URL REQUEST:", `${config.baseURL}${config.url}`)
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status
+
+    if (status === 401) {
+      clearAuthSession()
+    }
+
+    return Promise.reject(error)
+  }
+)
+
+export default api
