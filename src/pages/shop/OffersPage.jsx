@@ -9,7 +9,7 @@ import "./offerspage.css"
 
 const OFFERS_PER_PAGE = 24
 const PROMOTION_IMAGE_PLACEHOLDER = "https://monocromia.com.mx/cdn/shop/files/Monocromia-04_6366367b-3cd5-4942-89f0-62fac4475a07_2048x.jpg?v=1742501692"
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 
 function OffersPage() {
   const navigate = useNavigate()
@@ -96,6 +96,11 @@ function OffersPage() {
       return
     }
 
+    if (isOfferOutOfStock(offer)) {
+      notifyError(offer.stockMessage || "Producto sin inventario.")
+      return
+    }
+
     try {
       setAddingOfferId(offer.id)
       const response = await addCartItem({
@@ -137,7 +142,10 @@ function OffersPage() {
         ) : offers.length ? (
           <>
             <div className="offers-page__grid">
-              {offers.map((offer) => (
+              {offers.map((offer) => {
+                const isOutOfStock = isOfferOutOfStock(offer)
+
+                return (
                 <article className="offers-page__card" key={offer.id}>
                   <div className="offers-page__card-media">
                     <img src={offer.image} alt={offer.title} />
@@ -162,14 +170,19 @@ function OffersPage() {
                         type="button"
                         className="offers-page__action offers-page__action--primary"
                         onClick={() => handleAddOfferToCart(offer)}
-                        disabled={addingOfferId === offer.id}
+                        disabled={addingOfferId === offer.id || isOutOfStock}
                       >
-                        {addingOfferId === offer.id ? "Agregando..." : "Agregar al carrito"}
+                        {addingOfferId === offer.id
+                          ? "Agregando..."
+                          : isOutOfStock
+                          ? "Producto sin inventario"
+                          : "Agregar al carrito"}
                       </button>
                     </div>
                   </div>
                 </article>
-              ))}
+                )
+              })}
             </div>
 
             {meta.last_page > 1 ? (
@@ -237,6 +250,9 @@ function normalizePromotions(items = []) {
     productId: getPromotionProductId(item),
     productName: getPromotionProductName(item),
     productSlug: getPromotionProductSlug(item),
+    stock: getPromotionProductStock(item),
+    stockStatus: getPromotionProductStockStatus(item),
+    stockMessage: getPromotionProductStockMessage(item),
     productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
     products: Array.isArray(item?.products) ? item.products : [],
   }))
@@ -274,6 +290,41 @@ function getPromotionProductSlug(item = {}) {
 
 function getPromotionProductName(item = {}) {
   return item?.product?.name || item?.products?.[0]?.name || ""
+}
+
+function getPromotionProductStock(item = {}) {
+  return item?.stock ?? item?.product?.stock ?? item?.products?.[0]?.stock ?? null
+}
+
+function getPromotionProductStockStatus(item = {}) {
+  return (
+    item?.stock_status ||
+    item?.stockStatus ||
+    item?.product?.stock_status ||
+    item?.product?.stockStatus ||
+    item?.products?.[0]?.stock_status ||
+    item?.products?.[0]?.stockStatus ||
+    "untracked"
+  )
+}
+
+function getPromotionProductStockMessage(item = {}) {
+  return (
+    item?.stock_message ||
+    item?.stockMessage ||
+    item?.product?.stock_message ||
+    item?.product?.stockMessage ||
+    item?.products?.[0]?.stock_message ||
+    item?.products?.[0]?.stockMessage ||
+    ""
+  )
+}
+
+function isOfferOutOfStock(offer = {}) {
+  const stockStatus = offer?.stockStatus || offer?.stock_status || "untracked"
+  const hasNoStockValue = offer?.stock === null || offer?.stock === undefined || offer?.stock === ""
+
+  return stockStatus === "out_of_stock" || hasNoStockValue || Number(offer.stock) <= 0
 }
 
 function normalizePromotionImage(value) {

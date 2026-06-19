@@ -7,6 +7,7 @@ import {
   getAdminProductsForPromotions,
   getAdminPromotions,
   updateAdminPromotion,
+  deleteAdminPromotion,
   toggleAdminPromotion,
 } from "../../../services/api/promotionsService.js"
 import {
@@ -57,7 +58,19 @@ const PROMOTION_TYPE_OPTIONS = [
     label: "Monto por marca y recibe SKU",
     description: "Al alcanzar el monto de una marca, entrega un producto del catálogo.",
   },
+  {
+    value: "price_scale_percentage",
+    label: "Escalas de precio por mayoreo",
+    description: "Aplica descuentos por porcentaje según la cantidad comprada de un producto.",
+  },
 ]
+
+const emptyScale = {
+  from_quantity: "",
+  to_quantity: "",
+  discount_percentage: "",
+  is_active: true,
+}
 
 const emptyConfig = {
   discount_percentage: "",
@@ -70,6 +83,7 @@ const emptyConfig = {
   brand: "",
   minimum_amount: "",
   selection_required: true,
+  scales: [{ ...emptyScale }],
 }
 
 const defaultForm = {
@@ -83,10 +97,10 @@ const defaultForm = {
   ends_at: "",
   requires_login: false,
   is_general: true,
-  is_combinable: false,
-  priority: 100,
+  priority: null,
   product_ids: [],
   gift_item_ids: [],
+  user_ids: [],
   config: { ...emptyConfig },
 }
 
@@ -95,6 +109,7 @@ function PromotionsPage() {
   const [promotions, setPromotions] = useState([])
   const [products, setProducts] = useState([])
   const [giftItems, setGiftItems] = useState([])
+  const [clients, setClients] = useState([])
   const [brandOptions, setBrandOptions] = useState([])
   const [apiPromotionTypes, setApiPromotionTypes] = useState([])
   const [loading, setLoading] = useState(true)
@@ -102,9 +117,11 @@ function PromotionsPage() {
   const [loadingFormOptions, setLoadingFormOptions] = useState(false)
   const [saving, setSaving] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
   const [search, setSearch] = useState("")
   const [productSearch, setProductSearch] = useState("")
   const [giftSearch, setGiftSearch] = useState("")
+  const [clientSearch, setClientSearch] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingPromotionId, setEditingPromotionId] = useState(null)
   const [form, setForm] = useState(defaultForm)
@@ -184,6 +201,16 @@ function PromotionsPage() {
             }))
           : []
       )
+      setClients(
+        Array.isArray(data.clients)
+          ? data.clients.map((client) => ({
+              id: Number(client.id),
+              name: client.name ?? "Cliente sin nombre",
+              email: client.email ?? "",
+              username: client.username ?? "",
+            }))
+          : []
+      )
     } catch (error) {
       console.error(
         "Error al cargar opciones del formulario de promociones:",
@@ -196,6 +223,7 @@ function PromotionsPage() {
       setApiPromotionTypes([])
       setBrandOptions([])
       setGiftItems([])
+      setClients([])
     } finally {
       setLoadingFormOptions(false)
     }
@@ -248,6 +276,17 @@ function PromotionsPage() {
     })
   }, [giftItems, giftSearch])
 
+  const filteredClients = useMemo(() => {
+    const term = clientSearch.trim().toLowerCase()
+
+    if (!term) return clients
+
+    return clients.filter((client) => {
+      const text = [client.name, client.email, client.username].join(" ").toLowerCase()
+      return text.includes(term)
+    })
+  }, [clients, clientSearch])
+
   const promotionTypeOptions = useMemo(() => {
     const merged = [...PROMOTION_TYPE_OPTIONS]
 
@@ -288,6 +327,12 @@ function PromotionsPage() {
     return giftItems.filter((item) => form.gift_item_ids.includes(item.id))
   }, [giftItems, form.gift_item_ids])
 
+  const selectedClients = useMemo(() => {
+    if (!Array.isArray(form.user_ids) || form.user_ids.length === 0) return []
+
+    return clients.filter((client) => form.user_ids.includes(client.id))
+  }, [clients, form.user_ids])
+
   const selectedTypeMeta = useMemo(() => {
     return promotionTypeOptions.find((item) => item.value === form.type)
   }, [promotionTypeOptions, form.type])
@@ -298,10 +343,12 @@ function PromotionsPage() {
       config: { ...emptyConfig },
       product_ids: [],
       gift_item_ids: [],
+      user_ids: [],
     })
     setEditingPromotionId(null)
     setProductSearch("")
     setGiftSearch("")
+    setClientSearch("")
   }
 
   const openCreateModal = () => {
@@ -322,9 +369,8 @@ function PromotionsPage() {
       starts_at: toDateTimeLocalValue(promotion.starts_at),
       ends_at: toDateTimeLocalValue(promotion.ends_at),
       requires_login: Boolean(promotion.requires_login),
-      is_general: Boolean(promotion.is_general),
-      is_combinable: Boolean(promotion.is_combinable),
-      priority: Number(promotion.priority ?? 100),
+      is_general: Boolean(promotion.is_general ?? true),
+      priority: promotion.priority ?? null,
       product_ids: Array.isArray(promotion.products)
         ? promotion.products.map((item) => Number(item.id))
         : Array.isArray(promotion.product_ids)
@@ -334,6 +380,11 @@ function PromotionsPage() {
         ? promotion.gift_items.map((item) => Number(item.id))
         : Array.isArray(promotion.gift_item_ids)
         ? promotion.gift_item_ids.map((id) => Number(id))
+        : [],
+      user_ids: Array.isArray(promotion.users)
+        ? promotion.users.map((item) => Number(item.id))
+        : Array.isArray(promotion.user_ids)
+        ? promotion.user_ids.map((id) => Number(id))
         : [],
       config: {
         ...emptyConfig,
@@ -347,11 +398,13 @@ function PromotionsPage() {
         brand: promotion?.config?.brand ?? "",
         minimum_amount: promotion?.config?.minimum_amount ?? "",
         selection_required: promotion?.config?.selection_required ?? true,
+        scales: normalizePriceScales(promotion?.config?.scales),
       },
     })
 
     setProductSearch("")
     setGiftSearch("")
+    setClientSearch("")
     setIsModalOpen(true)
   }
 
@@ -365,6 +418,12 @@ function PromotionsPage() {
     setForm((prev) => ({
       ...prev,
       [field]: value,
+      ...(field === "is_general" && value === false
+        ? { requires_login: true }
+        : {}),
+      ...(field === "is_general" && value === true
+        ? { user_ids: [] }
+        : {}),
     }))
   }
 
@@ -386,13 +445,67 @@ function PromotionsPage() {
       gift_item_ids: promotionTypeRequiresGiftItems(value)
         ? prev.gift_item_ids
         : [],
+      is_general: value === "price_scale_percentage" ? false : prev.is_general,
+      requires_login: value === "price_scale_percentage" ? true : prev.requires_login,
       config: { ...emptyConfig },
     }))
+  }
+
+  const handleScaleChange = (index, field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      config: {
+        ...prev.config,
+        scales: getConfigScales(prev.config).map((scale, currentIndex) =>
+          currentIndex === index
+            ? {
+                ...scale,
+                [field]: field === "is_active" ? Boolean(value) : value,
+              }
+            : scale
+        ),
+      },
+    }))
+  }
+
+  const addScale = () => {
+    setForm((prev) => ({
+      ...prev,
+      config: {
+        ...prev.config,
+        scales: [...getConfigScales(prev.config), { ...emptyScale }],
+      },
+    }))
+  }
+
+  const removeScale = (index) => {
+    setForm((prev) => {
+      const nextScales = getConfigScales(prev.config).filter(
+        (_scale, currentIndex) => currentIndex !== index
+      )
+
+      return {
+        ...prev,
+        config: {
+          ...prev.config,
+          scales: nextScales.length ? nextScales : [{ ...emptyScale }],
+        },
+      }
+    })
   }
 
   const toggleProductSelection = (productId) => {
     setForm((prev) => {
       const exists = prev.product_ids.includes(productId)
+
+      if (prev.type === "price_scale_percentage") {
+        return {
+          ...prev,
+          product_ids: exists ? [] : [productId],
+          is_general: false,
+          requires_login: true,
+        }
+      }
 
       return {
         ...prev,
@@ -430,10 +543,32 @@ function PromotionsPage() {
     }))
   }
 
+  const toggleClientSelection = (clientId) => {
+    setForm((prev) => {
+      const exists = prev.user_ids.includes(clientId)
+
+      return {
+        ...prev,
+        user_ids: exists
+          ? prev.user_ids.filter((id) => id !== clientId)
+          : [...prev.user_ids, clientId],
+      }
+    })
+  }
+
+  const clearSelectedClients = () => {
+    setForm((prev) => ({
+      ...prev,
+      user_ids: [],
+    }))
+  }
+
   const buildPayload = () => {
+    const name = String(form.name || "").trim()
+
     const payload = {
-      name: String(form.name || "").trim(),
-      slug: String(form.slug || "").trim(),
+      name,
+      slug: String(form.slug || "").trim() || slugify(name),
       description: String(form.description || "").trim() || null,
       type: form.type,
       is_active: Boolean(form.is_active),
@@ -441,9 +576,12 @@ function PromotionsPage() {
       ends_at: form.ends_at || null,
       requires_login: Boolean(form.requires_login),
       is_general: Boolean(form.is_general),
-      is_combinable: Boolean(form.is_combinable),
-      priority: Number(form.priority || 0),
+      priority: null,
       config: {},
+    }
+
+    if (!payload.is_general) {
+      payload.user_ids = form.user_ids.map((id) => Number(id))
     }
 
     if (promotionTypeRequiresProducts(form.type)) {
@@ -515,6 +653,20 @@ function PromotionsPage() {
         }
         break
 
+      case "price_scale_percentage":
+        payload.config = {
+          scales: getConfigScales(form.config).map((scale) => ({
+            from_quantity: Number(scale.from_quantity || 0),
+            to_quantity:
+              scale.to_quantity === "" || scale.to_quantity === null
+                ? null
+                : Number(scale.to_quantity),
+            discount_percentage: Number(scale.discount_percentage || 0),
+            is_active: Boolean(scale.is_active),
+          })),
+        }
+        break
+
       default:
         payload.config = {}
         break
@@ -530,7 +682,7 @@ function PromotionsPage() {
     }
 
     if (!payload.slug) {
-      notifyWarning("Escribe el slug de la promoción.")
+      notifyWarning("No fue posible generar el slug de la promoción.")
       return false
     }
 
@@ -544,6 +696,19 @@ function PromotionsPage() {
       !payload.product_ids?.length
     ) {
       notifyWarning("Selecciona al menos un producto para la promoción.")
+      return false
+    }
+
+    if (!payload.is_general && !payload.user_ids?.length) {
+      notifyWarning("Selecciona al menos un cliente para una promoción específica.")
+      return false
+    }
+
+    if (
+      payload.type === "price_scale_percentage" &&
+      payload.product_ids?.length !== 1
+    ) {
+      notifyWarning("Las escalas de mayoreo requieren exactamente un producto.")
       return false
     }
 
@@ -643,6 +808,15 @@ function PromotionsPage() {
       }
     }
 
+    if (payload.type === "price_scale_percentage") {
+      const validation = validatePriceScales(payload.config.scales)
+
+      if (!validation.valid) {
+        notifyWarning(validation.message)
+        return false
+      }
+    }
+
     return true
   }
 
@@ -696,6 +870,25 @@ function PromotionsPage() {
       )
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  const handleDeletePromotion = async (promotion) => {
+    if (!window.confirm(`¿Eliminar la promoción "${promotion.name}"?`)) return
+
+    try {
+      setDeletingId(promotion.id)
+      await deleteAdminPromotion(promotion.id)
+      notifySuccess("Promoción eliminada correctamente.")
+      await loadPromotions()
+    } catch (error) {
+      console.error("Error al eliminar promoción:", error?.response?.data || error)
+      notifyError(
+        error?.response?.data?.message ||
+          "No fue posible eliminar la promoción."
+      )
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -759,7 +952,6 @@ function PromotionsPage() {
                     <th>Configuración</th>
                     <th>Vigencia</th>
                     <th>Relaciones</th>
-                    <th>Prioridad</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -853,18 +1045,8 @@ function PromotionsPage() {
                         </div>
                       </td>
 
-                      <td>{promotion.priority ?? 0}</td>
-
                       <td>
                         <div className="promotion-status-cell">
-                          <span
-                            className={`promo_status ${
-                              promotion.is_active ? "active" : "inactive"
-                            }`}
-                          >
-                            {promotion.is_active ? "Activa" : "Inactiva"}
-                          </span>
-
                           <label className="switch">
                             <input
                               type="checkbox"
@@ -878,13 +1060,27 @@ function PromotionsPage() {
                       </td>
 
                       <td>
-                        <button
-                          type="button"
-                          className="btn_secondary"
-                          onClick={() => openEditModal(promotion)}
-                        >
-                          Editar
-                        </button>
+                        <div className="promotion-actions-cell">
+                          <button
+                            type="button"
+                            className="promotion-icon-button promotion-icon-button--edit"
+                            onClick={() => openEditModal(promotion)}
+                            aria-label="Editar promoción"
+                            title="Editar promoción"
+                          >
+                            <i className="bi bi-pencil-square" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="promotion-icon-button promotion-icon-button--delete"
+                            onClick={() => handleDeletePromotion(promotion)}
+                            disabled={deletingId === promotion.id}
+                            aria-label="Eliminar promoción"
+                            title="Eliminar promoción"
+                          >
+                            <i className="bi bi-trash3" aria-hidden="true" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -902,7 +1098,7 @@ function PromotionsPage() {
               <div>
                 <h3>{editingPromotionId ? "Editar promoción" : "Nueva promoción"}</h3>
                 <p>
-                  Configura reglas, vigencia y productos desde un solo lugar.
+                  Primero define la regla de promoción; después completa datos, vigencia y productos.
                 </p>
               </div>
 
@@ -919,13 +1115,13 @@ function PromotionsPage() {
             <form className="promo_form" onSubmit={handleSubmit}>
               <div className="promo_admin_layout">
                 <div className="promo_admin_main">
-                  <section className="promo_block">
+                  <section className="promo_block promo_block--general">
                     <div className="promo_block_header">
                       <h4>Datos generales</h4>
                       <span>Identificación básica de la promoción</span>
                     </div>
 
-                    <div className="promo_form_row">
+                    <div className="promo_form_row promo_form_row--single">
                       <div className="promo_form_group">
                         <label>Nombre</label>
                         <input
@@ -938,16 +1134,6 @@ function PromotionsPage() {
                             }
                           }}
                           placeholder="Ej. Promo cubeta 10%"
-                        />
-                      </div>
-
-                      <div className="promo_form_group">
-                        <label>Slug</label>
-                        <input
-                          type="text"
-                          value={form.slug}
-                          onChange={(e) => handleChange("slug", slugify(e.target.value))}
-                          placeholder="promo-cubeta-10"
                         />
                       </div>
                     </div>
@@ -963,13 +1149,13 @@ function PromotionsPage() {
                     </div>
                   </section>
 
-                  <section className="promo_block">
+                  <section className="promo_block promo_block--rules">
                     <div className="promo_block_header">
-                      <h4>Regla de promoción</h4>
+                      <h4>Reglas de promoción</h4>
                       <span>Cómo se calcula o aplica el beneficio</span>
                     </div>
 
-                    <div className="promo_form_row">
+                    <div className="promo_form_row promo_form_row--single">
                       <div className="promo_form_group">
                         <label>Tipo de promoción</label>
                         <select
@@ -983,18 +1169,6 @@ function PromotionsPage() {
                           ))}
                         </select>
                         <small>{selectedTypeMeta?.description ?? ""}</small>
-                      </div>
-
-                      <div className="promo_form_group">
-                        <label>Prioridad</label>
-                        <input
-                          type="number"
-                          value={form.priority}
-                          onChange={(e) => handleChange("priority", e.target.value)}
-                          min="0"
-                          placeholder="100"
-                        />
-                        <small>Menor número = mayor prioridad.</small>
                       </div>
                     </div>
 
@@ -1341,11 +1515,98 @@ function PromotionsPage() {
                             </div>
                           </>
                         ) : null}
+
+                        {form.type === "price_scale_percentage" ? (
+                          <div className="price-scale-config">
+                            <div className="price-scale-config__head">
+                              <div>
+                                <h5>Escalas de descuento</h5>
+                                <p>
+                                  Define rangos por cantidad. Deja "Hasta" vacío para que la última
+                                  escala aplique sin límite.
+                                </p>
+                              </div>
+                              <button type="button" className="btn_secondary" onClick={addScale}>
+                                Agregar escala
+                              </button>
+                            </div>
+
+                            <div className="price-scale-list">
+                              {getConfigScales(form.config).map((scale, index) => (
+                                <div className="price-scale-row" key={`scale-${index}`}>
+                                  <div className="promo_form_group">
+                                    <label>Desde</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={scale.from_quantity}
+                                      onChange={(e) =>
+                                        handleScaleChange(index, "from_quantity", e.target.value)
+                                      }
+                                      placeholder="2"
+                                    />
+                                  </div>
+
+                                  <div className="promo_form_group">
+                                    <label>Hasta</label>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={scale.to_quantity ?? ""}
+                                      onChange={(e) =>
+                                        handleScaleChange(index, "to_quantity", e.target.value)
+                                      }
+                                      placeholder={index === getConfigScales(form.config).length - 1 ? "Sin límite" : "5"}
+                                    />
+                                  </div>
+
+                                  <div className="promo_form_group">
+                                    <label>Descuento %</label>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={scale.discount_percentage}
+                                      onChange={(e) =>
+                                        handleScaleChange(
+                                          index,
+                                          "discount_percentage",
+                                          e.target.value
+                                        )
+                                      }
+                                      placeholder="5"
+                                    />
+                                  </div>
+
+                                  <label className="promotion-check price-scale-row__check">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(scale.is_active)}
+                                      onChange={(e) =>
+                                        handleScaleChange(index, "is_active", e.target.checked)
+                                      }
+                                    />
+                                    <span>Activa</span>
+                                  </label>
+
+                                  <button
+                                    type="button"
+                                    className="btn_secondary price-scale-row__remove"
+                                    onClick={() => removeScale(index)}
+                                    disabled={getConfigScales(form.config).length <= 1}
+                                  >
+                                    Eliminar
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </section>
 
-                  <section className="promo_block">
+                  <section className="promo_block promo_block--behavior">
                     <div className="promo_block_header">
                       <h4>Vigencia y comportamiento</h4>
                       <span>Controla cuándo aplica y cómo convive con otras promociones</span>
@@ -1394,31 +1655,98 @@ function PromotionsPage() {
                         <input
                           type="checkbox"
                           checked={form.requires_login}
+                          disabled={!form.is_general}
                           onChange={(e) =>
                             handleChange("requires_login", e.target.checked)
                           }
                         />
                         <span>Requiere login</span>
                       </label>
-
-                      <label className="promotion-check">
-                        <input
-                          type="checkbox"
-                          checked={form.is_combinable}
-                          onChange={(e) =>
-                            handleChange("is_combinable", e.target.checked)
-                          }
-                        />
-                        <span>Combinable</span>
-                      </label>
                     </div>
                   </section>
 
+                  {!form.is_general ? (
+                    <section className="promo_block promo_block--relations">
+                      <div className="promo_block_header">
+                        <h4>Clientes asignados</h4>
+                        <span>Selecciona los clientes que podrán usar esta promoción.</span>
+                      </div>
+
+                      <div className="promotion-products-toolbar">
+                        <div className="promotions_search promotions_search_products">
+                          <input
+                            type="text"
+                            placeholder="Buscar cliente por nombre, email o usuario"
+                            value={clientSearch}
+                            onChange={(e) => setClientSearch(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="promotion-products-toolbar-actions">
+                          <span className="promotion-products-counter">
+                            {selectedClients.length} cliente(s) seleccionado(s)
+                          </span>
+
+                          {selectedClients.length > 0 ? (
+                            <button
+                              type="button"
+                              className="btn_secondary"
+                              onClick={clearSelectedClients}
+                            >
+                              Limpiar selección
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="promotion-products-list">
+                        {clients.length === 0 ? (
+                          <div className="promotion-products-empty">
+                            No hay clientes disponibles para asignar.
+                          </div>
+                        ) : filteredClients.length === 0 ? (
+                          <div className="promotion-products-empty">
+                            No hay coincidencias con tu búsqueda.
+                          </div>
+                        ) : (
+                          filteredClients.map((client) => {
+                            const checked = form.user_ids.includes(client.id)
+
+                            return (
+                              <label
+                                key={client.id}
+                                className={`promotion-product-option ${
+                                  checked ? "is-selected" : ""
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleClientSelection(client.id)}
+                                />
+
+                                <span>
+                                  {client.name}
+                                  {client.email ? <small>{client.email}</small> : null}
+                                  {client.username ? <small>{client.username}</small> : null}
+                                </span>
+                              </label>
+                            )
+                          })
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
+
                   {promotionTypeRequiresProducts(form.type) ? (
-                    <section className="promo_block">
+                    <section className="promo_block promo_block--relations">
                       <div className="promo_block_header">
                         <h4>Productos asignados</h4>
-                        <span>Selecciona los productos que activan la promoción</span>
+                        <span>
+                          {form.type === "price_scale_percentage"
+                            ? "Selecciona un solo producto para aplicar sus escalas de mayoreo"
+                            : "Selecciona los productos que activan la promoción"}
+                        </span>
                       </div>
 
                       <div className="promotion-products-toolbar">
@@ -1434,6 +1762,7 @@ function PromotionsPage() {
                         <div className="promotion-products-toolbar-actions">
                           <span className="promotion-products-counter">
                             {selectedProducts.length} seleccionado(s)
+                            {form.type === "price_scale_percentage" ? " · máximo 1" : ""}
                           </span>
 
                           {selectedProducts.length > 0 ? (
@@ -1491,7 +1820,7 @@ function PromotionsPage() {
                   ) : null}
 
                   {promotionTypeRequiresGiftItems(form.type) ? (
-                    <section className="promo_block">
+                    <section className="promo_block promo_block--relations">
                       <div className="promo_block_header">
                         <h4>Artículos de regalo</h4>
                         <span>Selecciona los regalos disponibles para esta promoción</span>
@@ -1587,6 +1916,13 @@ function PromotionsPage() {
                       <strong>{selectedProducts.length}</strong>
                     </div>
 
+                    {!form.is_general ? (
+                      <div className="promo_resume_item">
+                        <span>Clientes</span>
+                        <strong>{selectedClients.length}</strong>
+                      </div>
+                    ) : null}
+
                     {promotionTypeRequiresGiftItems(form.type) ? (
                       <div className="promo_resume_item">
                         <span>Regalos</span>
@@ -1601,14 +1937,16 @@ function PromotionsPage() {
                       </div>
                     ) : null}
 
+                    {form.type === "price_scale_percentage" ? (
+                      <div className="promo_resume_item">
+                        <span>Escalas</span>
+                        <strong>{getConfigScales(form.config).length}</strong>
+                      </div>
+                    ) : null}
+
                     <div className="promo_resume_item">
                       <span>Estado</span>
                       <strong>{form.is_active ? "Activa" : "Inactiva"}</strong>
-                    </div>
-
-                    <div className="promo_resume_item">
-                      <span>Prioridad</span>
-                      <strong>{form.priority || 0}</strong>
                     </div>
 
                     <div className="promo_resume_note">
@@ -1708,6 +2046,7 @@ function promotionTypeRequiresProducts(type) {
     "buy_x_get_discount",
     "buy_x_get_y",
     "buy_sku_get_gift_item",
+    "price_scale_percentage",
   ].includes(type)
 }
 
@@ -1772,9 +2111,110 @@ function formatPromotionConfig(promotion, products = []) {
       }`
     }
 
+    case "price_scale_percentage": {
+      const scales = normalizePriceScales(config.scales).filter((scale) =>
+        Boolean(scale.is_active)
+      )
+
+      if (!scales.length) return "Sin escalas activas"
+
+      return scales
+        .map((scale) => {
+          const toQuantity = scale.to_quantity ? ` a ${scale.to_quantity}` : "+"
+          return `${scale.from_quantity}${toQuantity}: ${scale.discount_percentage}%`
+        })
+        .join(" · ")
+    }
+
     default:
       return "Sin configuración"
   }
+}
+
+function normalizePriceScales(scales) {
+  if (!Array.isArray(scales) || scales.length === 0) return [{ ...emptyScale }]
+
+  return scales.map((scale) => ({
+    from_quantity: scale?.from_quantity ?? "",
+    to_quantity: scale?.to_quantity ?? "",
+    discount_percentage: scale?.discount_percentage ?? "",
+    is_active: Boolean(scale?.is_active ?? true),
+  }))
+}
+
+function getConfigScales(config) {
+  return normalizePriceScales(config?.scales)
+}
+
+function validatePriceScales(scales = []) {
+  if (!Array.isArray(scales) || scales.length === 0) {
+    return { valid: false, message: "Agrega al menos una escala de mayoreo." }
+  }
+
+  const activeScales = scales.filter((scale) => Boolean(scale.is_active))
+
+  if (!activeScales.length) {
+    return { valid: false, message: "Debe existir al menos una escala activa." }
+  }
+
+  for (let index = 0; index < scales.length; index += 1) {
+    const scale = scales[index]
+    const fromQuantity = Number(scale.from_quantity || 0)
+    const toQuantity = scale.to_quantity === null ? null : Number(scale.to_quantity || 0)
+    const discount = Number(scale.discount_percentage || 0)
+
+    if (fromQuantity <= 0) {
+      return { valid: false, message: `La escala ${index + 1} necesita una cantidad inicial.` }
+    }
+
+    if (scale.to_quantity !== null && scale.to_quantity !== "" && toQuantity < fromQuantity) {
+      return {
+        valid: false,
+        message: `La escala ${index + 1} tiene una cantidad final menor a la inicial.`,
+      }
+    }
+
+    if (discount <= 0) {
+      return { valid: false, message: `La escala ${index + 1} necesita un descuento válido.` }
+    }
+  }
+
+  const sortedActiveScales = [...activeScales].sort(
+    (a, b) => Number(a.from_quantity || 0) - Number(b.from_quantity || 0)
+  )
+
+  for (let index = 0; index < sortedActiveScales.length; index += 1) {
+    const scale = sortedActiveScales[index]
+    const nextScale = sortedActiveScales[index + 1]
+    const toQuantity = scale.to_quantity === null ? null : Number(scale.to_quantity || 0)
+
+    if ((scale.to_quantity === null || scale.to_quantity === "") && index < sortedActiveScales.length - 1) {
+      return {
+        valid: false,
+        message: "La escala sin límite debe ser la última escala activa.",
+      }
+    }
+
+    if (nextScale && toQuantity >= Number(nextScale.from_quantity || 0)) {
+      return { valid: false, message: "Las escalas activas no pueden traslaparse." }
+    }
+  }
+
+  for (let index = 0; index < scales.length; index += 1) {
+    const scale = scales[index]
+    const hasHigherActiveScale = scales
+      .slice(index + 1)
+      .some((nextScale) => Boolean(nextScale.is_active))
+
+    if (!scale.is_active && hasHigherActiveScale) {
+      return {
+        valid: false,
+        message: "No puedes desactivar una escala intermedia si hay una escala superior activa.",
+      }
+    }
+  }
+
+  return { valid: true, message: "" }
 }
 
 function formatDateTime(value) {

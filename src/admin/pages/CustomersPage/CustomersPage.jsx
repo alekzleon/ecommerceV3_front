@@ -22,7 +22,6 @@ const INITIAL_MODAL_FORM = {
   username: "",
   email: "",
   profile: {
-    id_microsip: "",
     status: CUSTOMER_STATUS.ACTIVO,
     credit_limit: "",
     credit_days: "",
@@ -272,7 +271,6 @@ function CustomersPage() {
         username: customer.username || "",
         email: customer.email || "",
         profile: {
-          id_microsip: profile.id_microsip || "",
           status: profile.status || CUSTOMER_STATUS.ACTIVO,
           credit_limit: profile.credit_limit ?? "",
           credit_days: profile.credit_days ?? "",
@@ -773,7 +771,7 @@ function CustomersPage() {
                 type="text"
                 name="search"
                 className="form-control"
-                placeholder="Nombre, username, correo, Microsip..."
+                placeholder="Nombre, username o correo..."
                 value={filters.search}
                 onChange={handleFilterChange}
               />
@@ -847,7 +845,6 @@ function CustomersPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>ID Microsip</th>
                   <th>Nombre</th>
                   <th>Username</th>
                   <th>Correo</th>
@@ -858,13 +855,13 @@ function CustomersPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4">
+                    <td colSpan="6" className="text-center py-4">
                       Cargando información...
                     </td>
                   </tr>
                 ) : customers.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4">
+                    <td colSpan="6" className="text-center py-4">
                       No se encontraron clientes.
                     </td>
                   </tr>
@@ -872,7 +869,6 @@ function CustomersPage() {
                   customers.map((customer) => {
                     const profile = customer.customer_profile || customer.customerProfile || {}
                     const status = profile.status || ""
-                    const microsipId = profile.id_microsip || "-"
                     const actions = getAvailableActions(status)
 
                     return (
@@ -882,7 +878,6 @@ function CustomersPage() {
                         onClick={() => handleOpenPanel(customer.id)}
                       >
                         <td className="fw-semibold">{customer.id}</td>
-                        <td>{microsipId}</td>
                         <td>{customer.name}</td>
                         <td>{customer.username}</td>
                         <td>{customer.email}</td>
@@ -1112,17 +1107,6 @@ function CustomersPage() {
 
                   <div className="row g-3">
                     <div className="col-12 col-md-4">
-                      <label className="form-label">ID Microsip</label>
-                      <input
-                        type="text"
-                        name="profile.id_microsip"
-                        className="form-control"
-                        value={panelForm.profile.id_microsip}
-                        onChange={handlePanelChange}
-                      />
-                    </div>
-
-                    <div className="col-12 col-md-4">
                       <label className="form-label">Estatus</label>
                       <select
                         name="profile.status"
@@ -1217,13 +1201,6 @@ function CustomersPage() {
                   <h4 className="customer-detail__card-title">Resumen comercial</h4>
 
                   <div className="customer-detail__stats">
-                    <div className="customer-detail__stat">
-                      <span className="customer-detail__stat-label">ID Microsip</span>
-                      <strong className="customer-detail__stat-value">
-                        {panelForm.profile.id_microsip || "-"}
-                      </strong>
-                    </div>
-
                     <div className="customer-detail__stat">
                       <span className="customer-detail__stat-label">Ruta</span>
                       <strong className="customer-detail__stat-value">

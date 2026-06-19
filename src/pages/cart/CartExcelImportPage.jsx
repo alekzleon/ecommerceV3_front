@@ -331,7 +331,7 @@ function syncCartSummary(cartData) {
     total: Number(cartData?.total ?? 0),
   }
 
-  localStorage.setItem("pidefacil_cart_summary", JSON.stringify(summary))
+  localStorage.setItem("ecommerce_cart_summary", JSON.stringify(summary))
   window.dispatchEvent(
     new CustomEvent("cart:updated", {
       detail: summary,

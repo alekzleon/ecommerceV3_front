@@ -3,6 +3,7 @@ import "./searchbar.css"
 import { useLocation, useNavigate } from "react-router-dom"
 import { getSearchSuggestions } from "../../../services/api/productService"
 import { useAuth } from "../../../context/AuthContext"
+import { saveRecentSearchTerm } from "../../../utils/recentSearchTerms"
 
 const currencyFormatter = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -108,6 +109,7 @@ function SearchBar({ onSearchSubmit }) {
 
     if (!normalizedValue) return
 
+    saveRecentSearchTerm(normalizedValue)
     closeDropdown()
 
     if (onSearchSubmit) {

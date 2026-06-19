@@ -5,10 +5,12 @@ import { getRecentPurchases } from "../../../services/api/productService"
 import { useAuth } from "../../../context/AuthContext"
 import { notifyError, notifySuccess } from "../../../utils/toast"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl"
+import { getRecentSearchTerms } from "../../../utils/recentSearchTerms"
 import "./latestpurchases.css"
 
 const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Producto"
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
+const RECENT_PURCHASES_LIMIT = 10
 
 function LatestPurchases() {
   const navigate = useNavigate()
@@ -21,23 +23,42 @@ function LatestPurchases() {
   const [favoriteLoadingId, setFavoriteLoadingId] = useState(null)
 
   useEffect(() => {
+    if (!sessionReady) return undefined
+
+    let isMounted = true
+
     const fetchProducts = async () => {
       try {
         setLoading(true)
-        const response = await getRecentPurchases()
+        const searchTerms = getRecentSearchTerms()
+        const response = await getRecentPurchases({
+          limit: RECENT_PURCHASES_LIMIT,
+          search_terms: searchTerms.join(","),
+        })
+
+        if (!isMounted) return
+
         setProducts(normalizeProducts(response?.data || []))
         setStartIndex(0)
       } catch (error) {
+        if (!isMounted) return
+
         console.error("Error al cargar últimos productos:", error?.response?.data || error)
         notifyError(error?.response?.data?.message || "No fue posible cargar los productos recientes.")
         setProducts([])
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchProducts()
-  }, [])
+
+    return () => {
+      isMounted = false
+    }
+  }, [sessionReady])
 
   useEffect(() => {
     const handleResize = () => {

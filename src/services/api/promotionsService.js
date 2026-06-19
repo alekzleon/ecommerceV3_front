@@ -40,6 +40,11 @@ export async function updateAdminPromotion(id, payload) {
   return response.data
 }
 
+export async function deleteAdminPromotion(id) {
+  const response = await api.delete(`/admin/promotions/${id}`)
+  return response.data
+}
+
 export async function toggleAdminPromotion(id) {
   const response = await api.patch(`/admin/promotions/${id}/toggle`)
   return response.data

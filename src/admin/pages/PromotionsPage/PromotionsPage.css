@@ -292,7 +292,57 @@
 .promotion-status-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 8px;
+}
+
+.promotion-actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.promotion-icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  display: inline-grid;
+  place-items: center;
+  background: #ffffff;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.promotion-icon-button:hover {
+  transform: translateY(-1px);
+}
+
+.promotion-icon-button--edit {
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.promotion-icon-button--edit:hover {
+  background: #dbeafe;
+}
+
+.promotion-icon-button--delete {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fff7f7;
+}
+
+.promotion-icon-button--delete:hover {
+  background: #fee2e2;
+}
+
+.promotion-icon-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* ===============================
@@ -393,19 +443,19 @@
 
 .promo_modal {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1120px;
   max-height: calc(100vh - 36px);
   overflow-y: auto;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow: 0 32px 90px rgba(15, 23, 42, 0.24);
-  padding: 18px;
+  padding: 14px;
   animation: promoModalIn 0.18s ease-out;
 }
 
 .promo_modal_compact {
-  max-width: 1220px;
+  max-width: 1120px;
 }
 
 @keyframes promoModalIn {
@@ -424,14 +474,14 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 4px 4px 10px;
+  margin-bottom: 10px;
+  padding: 2px 2px 8px;
 }
 
 .promotion-modal-header h3 {
   margin: 0 0 4px;
   color: #0f172a;
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 800;
   line-height: 1.2;
 }
@@ -471,26 +521,26 @@
 .promo_form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .promo_admin_layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 12px;
   align-items: start;
 }
 
 .promo_admin_main {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .promo_admin_aside {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   position: sticky;
   top: 0;
 }
@@ -504,19 +554,35 @@
 }
 
 .promo_block {
-  padding: 16px;
+  padding: 12px;
 }
 
 .promo_resume_card {
-  padding: 16px;
+  padding: 12px;
+}
+
+.promo_block--rules {
+  order: 1;
+}
+
+.promo_block--general {
+  order: 2;
+}
+
+.promo_block--behavior {
+  order: 3;
+}
+
+.promo_block--relations {
+  order: 4;
 }
 
 .promo_block_header {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #eef2f7;
 }
 
@@ -538,7 +604,11 @@
 .promo_form_row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
+}
+
+.promo_form_row--single {
+  grid-template-columns: 1fr;
 }
 
 .promo_form_group {
@@ -565,8 +635,8 @@
   width: 100%;
   border: 1px solid #dbe4ee;
   background: #ffffff;
-  border-radius: 12px;
-  padding: 11px 12px;
+  border-radius: 10px;
+  padding: 9px 10px;
   font-size: 13px;
   color: #0f172a;
   outline: none;
@@ -575,7 +645,7 @@
 
 .promo_form_group textarea {
   resize: vertical;
-  min-height: 84px;
+  min-height: 72px;
 }
 
 .promo_form_group input:focus,
@@ -593,15 +663,15 @@
 .promo_config_box {
   background: #f8fafc;
   border: 1px solid #edf2f7;
-  border-radius: 16px;
-  padding: 14px;
+  border-radius: 12px;
+  padding: 10px;
   margin-top: 4px;
 }
 
 .promotion-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .promotion-section h4 {
@@ -611,13 +681,69 @@
   font-weight: 800;
 }
 
+.price-scale-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.price-scale-config__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.price-scale-config__head h5 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.price-scale-config__head p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.price-scale-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.price-scale-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  gap: 8px;
+  align-items: end;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.price-scale-row__check {
+  align-self: end;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.price-scale-row__remove {
+  align-self: end;
+  min-height: 38px;
+}
+
 /* ===============================
    Checks
 =============================== */
 
 .promotion-switches {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
   padding-top: 2px;
 }
@@ -631,10 +757,10 @@
   font-weight: 700;
   cursor: pointer;
   min-height: 38px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid #e2e8f0;
   background: #fff;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: border-color 0.2s ease, background 0.2s ease,
     box-shadow 0.2s ease;
 }
@@ -662,8 +788,8 @@
 .promotion-products-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .promotion-products-toolbar-actions {
@@ -690,7 +816,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  max-height: 320px;
+  max-height: 240px;
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -710,8 +836,8 @@
   align-items: flex-start;
   gap: 10px;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 10px;
   background: #fff;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease,

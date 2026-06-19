@@ -30,6 +30,16 @@ export async function clearCart() {
   return response.data
 }
 
+export async function applyCartCoupon(payload) {
+  const response = await api.post("/cart/coupon", payload)
+  return response.data
+}
+
+export async function clearCartCoupon() {
+  const response = await api.delete("/cart/coupon")
+  return response.data
+}
+
 export async function selectCartPromotionGift(promotionId, payload) {
   const response = await api.post(
     `/cart/promotions/${promotionId}/select-gift`,
@@ -40,6 +50,16 @@ export async function selectCartPromotionGift(promotionId, payload) {
 
 export async function clearCartPromotionGiftSelection(promotionId) {
   const response = await api.delete(`/cart/promotions/${promotionId}/select-gift`)
+  return response.data
+}
+
+export async function applyCartCashback(payload) {
+  const response = await api.post("/cart/cashback/apply", payload)
+  return response.data
+}
+
+export async function clearCartCashback() {
+  const response = await api.delete("/cart/cashback")
   return response.data
 }
 

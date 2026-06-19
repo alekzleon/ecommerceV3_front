@@ -1,18 +1,21 @@
 import Header from "../components/common/Header/Header"
-import { Outlet } from "react-router-dom"
+import { Outlet, useLocation } from "react-router-dom"
 import Footer from "../components/common/Footer/Footer"
 
 
 function MainLayout() {
+  const { pathname } = useLocation()
+  const isFullscreenRoute = ["/login", "/registro"].includes(pathname)
+
   return (
     <>
-      <Header />
+      {!isFullscreenRoute ? <Header /> : null}
 
       <main>
         <Outlet />
       </main>
 
-      <Footer />
+      {!isFullscreenRoute ? <Footer /> : null}
     </>
   )
 }

@@ -8,7 +8,7 @@ import { notifySuccess, notifyError } from "../../utils/toast"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
 import "./productdetailpage.css"
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 
 function ProductDetailPage() {
@@ -71,6 +71,14 @@ function ProductDetailPage() {
         ? normalizeVariantOptions(productData.variant_options)
         : buildVariantOptions(variants)
     const defaultPrice = Number(productData.default_price || 0)
+    const activePromotions = Array.isArray(productData.active_promotions)
+      ? productData.active_promotions
+      : []
+    const priceScales = normalizePromotionScales(productData.price_scales)
+    const hasActivePromotions = Boolean(productData.has_active_promotions) || activePromotions.length > 0
+    const activePromotionsCount = Number(
+      productData.active_promotions_count ?? activePromotions.length
+    )
 
     return {
       id: productData.id,
@@ -84,6 +92,9 @@ function ProductDetailPage() {
       price: defaultPrice,
       oldPrice: defaultPrice,
       priceInfo: productData.price_info ?? null,
+      stock: productData.stock ?? null,
+      stockStatus: productData.stock_status || "untracked",
+      stockMessage: productData.stock_message || "",
       discountLabel: "",
       category: productData.category?.name || "Productos",
       family: productData.family?.name || "",
@@ -97,9 +108,10 @@ function ProductDetailPage() {
         productData.description ||
           "Este producto forma parte del catálogo base del ecommerce."
       ),
-      activePromotions: Array.isArray(productData.active_promotions)
-        ? productData.active_promotions
-        : [],
+      hasActivePromotions,
+      activePromotionsCount,
+      activePromotions,
+      priceScales,
       variants,
       variantOptions,
       technicalSpecs: [
@@ -107,7 +119,6 @@ function ProductDetailPage() {
         { label: "SKU", value: productData.sku || "N/D" },
         { label: "Categoría", value: productData.category?.name || "N/D" },
         { label: "Familia", value: productData.family?.name || "N/D" },
-        { label: "Microsip", value: productData.microsip_id || "N/D" },
         { label: "Keyword", value: productData.keyword || "N/D" },
         { label: "Estado", value: productData.is_active ? "Activo" : "Inactivo" },
       ],
@@ -132,6 +143,7 @@ function ProductDetailPage() {
   const displayPrice = Number(product?.price ?? 0)
   const comparePrice = Number(product?.oldPrice ?? 0)
   const selectedVariantStock = selectedVariant?.stock
+  const selectedVariantHasTrackedStock = selectedVariantStock !== null && selectedVariantStock !== undefined && selectedVariantStock !== ""
   const canShowPrices = sessionReady && isAuthenticated
   const hasAvailablePrice =
     displayPrice > 0 && product?.priceInfo?.source !== PRICE_UNAVAILABLE_SOURCE
@@ -174,7 +186,22 @@ function ProductDetailPage() {
     setSelectedAttributeValueIds(buildSelectedMapFromVariant(firstVariant))
   }, [product])
 
-  const increaseQty = () => setQuantity((prev) => prev + 1)
+  const hasNoStockValue = product?.stock === null || product?.stock === undefined || product?.stock === ""
+  const isOutOfStock = product?.stockStatus === "out_of_stock" || hasNoStockValue || Number(product?.stock) <= 0
+  const effectiveStockStatus = isOutOfStock ? "out_of_stock" : product?.stockStatus
+  const isSelectedVariantOutOfStock =
+    Boolean(selectedVariant) &&
+    (!selectedVariantHasTrackedStock || Number(selectedVariantStock) <= 0)
+  const hasInvalidStockQuantity =
+    !isOutOfStock && Number(product?.stock) > 0 && quantity > Number(product.stock)
+  const increaseQty = () =>
+    setQuantity((prev) => {
+      if (!isOutOfStock && Number(product?.stock) > 0) {
+        return Math.min(prev + 1, Number(product.stock))
+      }
+
+      return prev + 1
+    })
   const decreaseQty = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1))
 
   const syncCartSummary = (payload) => {
@@ -201,6 +228,16 @@ function ProductDetailPage() {
 
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")
+      return
+    }
+
+    if (isOutOfStock || isSelectedVariantOutOfStock) {
+      notifyError(product.stockMessage || "Producto sin inventario.")
+      return
+    }
+
+    if (hasInvalidStockQuantity) {
+      notifyError(`Solo hay ${product.stock} pieza(s) disponibles.`)
       return
     }
 
@@ -431,6 +468,16 @@ function ProductDetailPage() {
               </div>
             ) : null}
 
+            {product.hasActivePromotions ? (
+              <div className="product-detail__promo-badges">
+                <span className="product-detail__promo-badge">
+                  {product.activePromotionsCount > 1
+                    ? `${product.activePromotionsCount} promociones vigentes`
+                    : "Promoción vigente"}
+                </span>
+              </div>
+            ) : null}
+
             <h1 className="product-detail__title">{product.name}</h1>
 
             <div className="product-detail__meta-row">
@@ -469,7 +516,33 @@ function ProductDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {effectiveStockStatus !== "untracked" ? (
+                <div className={`product-detail__stock product-detail__stock--${effectiveStockStatus}`}>
+                  {product.stockMessage || formatStockMessage(effectiveStockStatus)}
+                  {product.stock !== null && product.stock !== undefined && effectiveStockStatus !== "out_of_stock"
+                    ? ` Stock: ${product.stock}`
+                    : ""}
+                </div>
+              ) : null}
             </div>
+
+            {product.priceScales.length ? (
+              <div className="product-detail__scale">
+                <h3 className="product-detail__box-title">Escalas de mayoreo</h3>
+                <div className="product-detail__scale-table">
+                  {product.priceScales.map((scale, index) => (
+                    <div
+                      className="product-detail__scale-row"
+                      key={`${scale.from_quantity}-${scale.to_quantity ?? "inf"}-${index}`}
+                    >
+                      <span>{formatScaleRange(scale.from_quantity, scale.to_quantity)}</span>
+                      <strong>{formatScaleDiscount(scale.discount_percentage)}</strong>
+                      <small>Automático en carrito</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             {product.variantOptions.length ? (
               <div className="product-detail__variants-box">
@@ -566,12 +639,16 @@ function ProductDetailPage() {
                     disabled={
                       addingToCart ||
                       !hasAvailablePrice ||
-                      (product.variants.length > 0 && !selectedVariant) ||
-                      Number(selectedVariantStock ?? 1) <= 0
+                      isOutOfStock ||
+                      isSelectedVariantOutOfStock ||
+                      hasInvalidStockQuantity ||
+                      (product.variants.length > 0 && !selectedVariant)
                     }
                   >
                     {addingToCart
                       ? "Agregando..."
+                      : isOutOfStock || isSelectedVariantOutOfStock
+                      ? "Producto sin inventario"
                       : hasAvailablePrice
                       ? "Agregar al carrito"
                       : "Precio no disponible"}
@@ -595,7 +672,7 @@ function ProductDetailPage() {
             <div className="product-detail__promo-box">
               <h3 className="product-detail__box-title">Promociones</h3>
               <ul className="product-detail__promo-list">
-                {product.activePromotions.length > 0 ? (
+                {product.hasActivePromotions && product.activePromotions.length > 0 ? (
                   product.activePromotions.map((promotion) => (
                     <li key={promotion.id}>
                       <span className="product-detail__promo-icon">%</span>
@@ -603,6 +680,9 @@ function ProductDetailPage() {
                         <strong>{promotion.message || promotion.name}</strong>
                         {promotion.description ? (
                           <small>{promotion.description}</small>
+                        ) : null}
+                        {promotion.type === "price_scale_percentage" ? (
+                          <PromotionScaleList promotion={promotion} />
                         ) : null}
                       </span>
                     </li>
@@ -621,7 +701,7 @@ function ProductDetailPage() {
               <div className="product-detail__specs">
                 <div className="product-detail__spec-row">
                   <span>Promociones activas</span>
-                  <strong>{productData.has_active_promotions ? productData.active_promotions_count || product.activePromotions.length : 0}</strong>
+                  <strong>{product.hasActivePromotions ? product.activePromotionsCount : 0}</strong>
                 </div>
                 <div className="product-detail__spec-row">
                   <span>Variante seleccionada</span>
@@ -739,6 +819,68 @@ function ProductDetailPage() {
 }
 
 export default ProductDetailPage
+
+function PromotionScaleList({ promotion }) {
+  const scales = normalizePromotionScales(promotion?.config?.scales)
+
+  if (!scales.length) return null
+
+  return (
+    <div className="product-detail__promo-scales">
+      {scales.map((scale, index) => (
+        <div
+          className="product-detail__promo-scale"
+          key={`${scale.from_quantity}-${scale.to_quantity ?? "inf"}-${index}`}
+        >
+          <span>{formatScaleRange(scale.from_quantity, scale.to_quantity)}</span>
+          <strong>{formatScaleDiscount(scale.discount_percentage)}</strong>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function normalizePromotionScales(scales) {
+  if (!Array.isArray(scales)) return []
+
+  return scales
+    .filter((scale) => Boolean(scale?.is_active ?? true))
+    .map((scale) => ({
+      from_quantity: Number(scale.from_quantity || 0),
+      to_quantity:
+        scale.to_quantity === null || scale.to_quantity === "" || scale.to_quantity === undefined
+          ? null
+          : Number(scale.to_quantity),
+      discount_percentage: Number(scale.discount_percentage || 0),
+    }))
+    .filter((scale) => scale.from_quantity > 0 && scale.discount_percentage > 0)
+    .sort((a, b) => a.from_quantity - b.from_quantity)
+}
+
+function formatScaleRange(fromQuantity, toQuantity) {
+  if (!toQuantity) return `Desde ${fromQuantity} piezas`
+  if (Number(fromQuantity) === Number(toQuantity)) return `${fromQuantity} piezas`
+  return `De ${fromQuantity} a ${toQuantity} piezas`
+}
+
+function formatScaleDiscount(value) {
+  const numberValue = Number(value || 0)
+  const formattedValue = Number.isInteger(numberValue)
+    ? String(numberValue)
+    : numberValue.toFixed(2)
+
+  return `${formattedValue}% de descuento`
+}
+
+function formatStockMessage(status) {
+  const messages = {
+    out_of_stock: "Producto sin inventario",
+    low_stock: "Hay pocas piezas disponibles.",
+    in_stock: "Inventario disponible",
+  }
+
+  return messages[status] || ""
+}
 
 function buildVariantOptions(variants = []) {
   const optionMap = new Map()

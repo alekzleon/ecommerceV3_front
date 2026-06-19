@@ -7,7 +7,7 @@ import { getCatalogSidebar, getProducts } from "../../services/api/productServic
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
 import "./productspage.css"
 
-const PRODUCTS_PER_PAGE = 24
+const PRODUCTS_PER_PAGE = 16
 const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Producto"
 const PAGINATION_SIBLINGS = 1
 const PAGINATION_BOUNDARIES = 1
@@ -144,7 +144,7 @@ function ProductsPage() {
             id: item?.id ?? null,
             name: item?.name ?? "Producto sin nombre",
             slug: item?.slug ?? "",
-            image: normalizeMediaUrl(item?.image_url || item?.image_path) || PRODUCT_IMAGE_PLACEHOLDER,
+            image: getProductImage(item),
             price,
             oldPrice: price,
             priceInfo: item?.price_info ?? null,
@@ -161,6 +161,9 @@ function ProductsPage() {
             badges: promotionMessage ? [promotionMessage] : [],
             activePromotions,
             promotionMessage,
+            stock: item?.stock ?? null,
+            stockStatus: item?.stock_status ?? "untracked",
+            stockMessage: item?.stock_message ?? "",
             isFavorite: Boolean(item?.is_favorite),
           }
         })
@@ -445,6 +448,46 @@ function ProductsPage() {
         </div>
       </aside>
     </section>
+  )
+}
+
+function getProductImage(item = {}) {
+  const galleryImage = Array.isArray(item?.gallery)
+    ? item.gallery.find((media) => {
+        const isActive = Boolean(media?.is_active ?? true)
+        const mediaType = media?.media_type || media?.type || "image"
+
+        return isActive && mediaType !== "video" && getProductImageSource(media)
+      })
+    : null
+
+  const rawImage =
+    item?.image_url ||
+    item?.image_path ||
+    item?.main_image_url ||
+    item?.main_image_path ||
+    item?.media_url ||
+    item?.media_path ||
+    item?.thumbnail_url ||
+    item?.thumbnail_path ||
+    item?.file_url ||
+    item?.url ||
+    item?.image ||
+    getProductImageSource(galleryImage)
+
+  return normalizeMediaUrl(rawImage) || PRODUCT_IMAGE_PLACEHOLDER
+}
+
+function getProductImageSource(media = {}) {
+  return (
+    media?.media_url ||
+    media?.media_path ||
+    media?.image_url ||
+    media?.image_path ||
+    media?.file_url ||
+    media?.url ||
+    media?.path ||
+    ""
   )
 }
 

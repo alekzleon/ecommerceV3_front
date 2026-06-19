@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import AdminCard from "../../components/AdminCard/AdminCard"
 import ProductDetailPanel from "./ProductDetailPanel"
+import AdminSidePanel from "../../../components/AdminSidePanel/AdminSidePanel"
 import {
   getAdminProducts,
   getAdminProduct,
@@ -11,6 +12,7 @@ import {
 } from "../../../services/api/adminProductService.js"
 import {
   createAdminProductGalleryItem,
+  deleteAdminProductGalleryItem,
   getAdminProductGallery,
   reorderAdminProductGallery,
   toggleAdminProductGalleryItem,
@@ -25,6 +27,11 @@ import {
   updateAdminProductVariant,
   updateAdminProductVariantStatus,
 } from "../../../services/api/adminProductVariantService.js"
+import {
+  deleteAdminProductPriceScales,
+  getAdminProductPriceScales,
+  updateAdminProductPriceScales,
+} from "../../../services/api/adminProductPriceScaleService.js"
 import { notifyError, notifySuccess } from "../../../utils/toast.js"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl.js"
 import "./ProductsPage.css"
@@ -33,12 +40,12 @@ const INITIAL_PRODUCT_FORM = {
   id: null,
   category_id: "",
   family_id: "",
-  microsip_id: "",
   name: "",
   slug: "",
   description: "",
   short_description: "",
   default_price: "",
+  stock: "",
   sku: "",
   brand: "",
   keyword: "",
@@ -92,10 +99,23 @@ const INITIAL_VARIANT_FORM = {
   metadata_supplier_code: "",
 }
 
+const INITIAL_PRICE_SCALE_FORM = {
+  scales: [
+    {
+      from_quantity: "2",
+      to_quantity: "",
+      discount_percentage: "",
+      is_active: true,
+    },
+  ],
+}
+
 function ProductsPage() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState(null)
+  const [inlineSavingKey, setInlineSavingKey] = useState("")
+  const [imagePreview, setImagePreview] = useState(null)
 
   const [filters, setFilters] = useState({
     search: "",
@@ -130,6 +150,11 @@ function ProductsPage() {
   const [variantsSaving, setVariantsSaving] = useState(false)
   const [variantOptionForm, setVariantOptionForm] = useState(INITIAL_VARIANT_OPTION_FORM)
   const [variantForm, setVariantForm] = useState(INITIAL_VARIANT_FORM)
+  const [priceScalePanelOpen, setPriceScalePanelOpen] = useState(false)
+  const [priceScaleLoading, setPriceScaleLoading] = useState(false)
+  const [priceScaleSaving, setPriceScaleSaving] = useState(false)
+  const [priceScaleProduct, setPriceScaleProduct] = useState(null)
+  const [priceScaleForm, setPriceScaleForm] = useState(INITIAL_PRICE_SCALE_FORM)
   const imagePreviewUrlRef = useRef("")
   const galleryPreviewUrlRef = useRef("")
   const gallerySaveTimersRef = useRef({})
@@ -257,12 +282,12 @@ function ProductsPage() {
       id: normalizedProduct.id || null,
       category_id: normalizedProduct.category_id ?? "",
       family_id: normalizedProduct.family_id ?? "",
-      microsip_id: normalizedProduct.microsip_id ?? "",
       name: normalizedProduct.name || "",
       slug: normalizedProduct.slug || "",
       description: normalizedProduct.description || "",
       short_description: normalizedProduct.short_description || "",
       default_price: normalizedProduct.default_price_number ?? normalizedProduct.default_price ?? "",
+      stock: normalizedProduct.stock ?? "",
       sku: normalizedProduct.sku || "",
       brand: normalizedProduct.brand || "",
       keyword: normalizedProduct.keyword || "",
@@ -493,7 +518,7 @@ function ProductsPage() {
     }
   }
 
-  function handleGalleryFormChange(event) {
+  async function handleGalleryFormChange(event) {
     const { name, value, type, checked, files } = event.target
 
     if (type === "file") {
@@ -527,35 +552,54 @@ function ProductsPage() {
         return
       }
 
-      if (!selectedProductId) {
-        const nextItems = selectedFiles.map((file, index) => ({
-          id: `pending-${Date.now()}-${index}`,
-          pending: true,
-          media: file,
-          media_type: file.type.startsWith("image/") ? "image" : "video",
-          media_url: URL.createObjectURL(file),
-          title: "",
-          description: "",
-          sort_order: galleryItems.length + index + 1,
-          is_active: true,
-        }))
+      const nextItems = selectedFiles.map((file, index) => ({
+        id: `pending-${Date.now()}-${index}`,
+        pending: true,
+        media: file,
+        media_type: file.type.startsWith("image/") ? "image" : "video",
+        media_url: URL.createObjectURL(file),
+        title: "",
+        description: "",
+        sort_order: galleryItems.length + index + 1,
+        is_active: true,
+      }))
 
-        setGalleryItems((prev) => sortGalleryItems([...prev, ...nextItems]))
-        setGalleryForm(INITIAL_GALLERY_FORM)
-        event.target.value = ""
+      setGalleryItems((prev) => sortGalleryItems([...prev, ...nextItems]))
+      setGalleryForm(INITIAL_GALLERY_FORM)
+      event.target.value = ""
+
+      if (!selectedProductId) {
         return
       }
 
-      const file = selectedFiles[0]
-      const previewUrl = URL.createObjectURL(file)
-      galleryPreviewUrlRef.current = previewUrl
+      try {
+        setGallerySaving(true)
+        await Promise.all(
+          nextItems.map((item) =>
+            createGalleryItem(selectedProductId, {
+              media: item.media,
+              media_type: item.media_type,
+              sort_order: item.sort_order,
+              is_active: true,
+            })
+          )
+        )
 
-      setGalleryForm((prev) => ({
-        ...prev,
-        media: file,
-        preview_url: previewUrl,
-        media_type: file.type.startsWith("image/") ? "image" : "video",
-      }))
+        notifySuccess(
+          nextItems.length > 1
+            ? "Archivos agregados a la galería."
+            : "Archivo agregado a la galería."
+        )
+        await fetchGallery(selectedProductId)
+      } catch (error) {
+        console.error("Error al agregar galería:", error)
+        notifyError(error?.response?.data?.message || "No fue posible agregar los archivos a la galería.")
+        await fetchGallery(selectedProductId)
+      } finally {
+        nextItems.forEach((item) => URL.revokeObjectURL(item.media_url))
+        setGallerySaving(false)
+      }
+
       return
     }
 
@@ -673,6 +717,52 @@ function ProductsPage() {
     } catch (error) {
       console.error("Error al alternar galería:", error)
       notifyError("No fue posible actualizar el estatus de la galería.")
+    } finally {
+      setGallerySaving(false)
+    }
+  }
+
+  async function handleGalleryDelete(itemId) {
+    const item = galleryItems.find((galleryItem) => galleryItem.id === itemId)
+
+    if (!item) return
+
+    if (!selectedProductId || item.pending) {
+      if (item.media_url?.startsWith("blob:")) {
+        URL.revokeObjectURL(item.media_url)
+      }
+
+      setGalleryItems((prev) =>
+        sortGalleryItems(
+          prev
+            .filter((galleryItem) => galleryItem.id !== itemId)
+            .map((galleryItem, index) => ({
+              ...galleryItem,
+              sort_order: index + 1,
+            }))
+        )
+      )
+      return
+    }
+
+    try {
+      setGallerySaving(true)
+      await deleteAdminProductGalleryItem(selectedProductId, itemId)
+      setGalleryItems((prev) =>
+        sortGalleryItems(
+          prev
+            .filter((galleryItem) => galleryItem.id !== itemId)
+            .map((galleryItem, index) => ({
+              ...galleryItem,
+              sort_order: index + 1,
+            }))
+        )
+      )
+      notifySuccess("Archivo eliminado de la galería.")
+      await fetchGallery(selectedProductId)
+    } catch (error) {
+      console.error("Error al eliminar galería:", error)
+      notifyError(error?.response?.data?.message || "No fue posible eliminar el archivo de galería.")
     } finally {
       setGallerySaving(false)
     }
@@ -1048,17 +1138,9 @@ function ProductsPage() {
     )
   }
 
-  function buildProductPayload(form, { imageOnly = false } = {}) {
+  function buildProductPayload(form) {
     const hasImage = form.image instanceof File
     const payload = hasImage ? new FormData() : {}
-
-    if (imageOnly) {
-      if (hasImage) {
-        payload.append("image", form.image)
-      }
-
-      return payload
-    }
 
     function appendField(key, value) {
       if (value === "" || value === null || value === undefined) return
@@ -1074,12 +1156,12 @@ function ProductsPage() {
     const fields = {
       category_id: form.category_id === "" ? "" : Number(form.category_id),
       family_id: form.family_id === "" ? "" : Number(form.family_id),
-      microsip_id: form.microsip_id === "" ? "" : Number(form.microsip_id),
       name: form.name,
       slug: form.slug,
       description: form.description,
       short_description: form.short_description,
       default_price: Number(form.default_price),
+      stock: form.stock === "" ? null : Number(form.stock),
       sku: form.sku,
       brand: form.brand,
       keyword: form.keyword,
@@ -1101,11 +1183,6 @@ function ProductsPage() {
   async function handlePanelSubmit(event) {
     event.preventDefault()
 
-    if (panelMode === "edit" && !(panelForm.image instanceof File)) {
-      notifyError("Selecciona una imagen principal para actualizar el producto.")
-      return
-    }
-
     if (panelMode === "create" && !panelForm.category_id) {
       notifyError("Selecciona una categoría existente o crea una cuando el endpoint esté disponible.")
       return
@@ -1114,7 +1191,7 @@ function ProductsPage() {
     try {
       setPanelSaving(true)
 
-      const payload = buildProductPayload(panelForm, { imageOnly: panelMode === "edit" })
+      const payload = buildProductPayload(panelForm)
 
       if (panelMode === "create") {
         const response = await createAdminProduct(payload)
@@ -1197,6 +1274,71 @@ function ProductsPage() {
     }
   }
 
+  async function handleInlineProductFieldSave(product, field, rawValue) {
+    const currentValue = field === "default_price"
+      ? Number(product.default_price_number ?? product.default_price ?? 0)
+      : product.stock ?? ""
+    const cleanValue = String(rawValue ?? "").trim()
+    const nextValue = field === "stock" && cleanValue === "" ? null : Number(cleanValue)
+
+    if (field === "default_price" && (!Number.isFinite(nextValue) || nextValue < 0)) {
+      notifyError("Ingresa un precio válido.")
+      return
+    }
+
+    if (field === "stock" && nextValue !== null && (!Number.isFinite(nextValue) || nextValue < 0)) {
+      notifyError("Ingresa un stock válido o deja el campo vacío.")
+      return
+    }
+
+    if (
+      (field === "default_price" && Number(nextValue) === Number(currentValue)) ||
+      (field === "stock" && String(nextValue ?? "") === String(currentValue ?? ""))
+    ) {
+      return
+    }
+
+    const savingKey = `${product.id}:${field}`
+
+    try {
+      setInlineSavingKey(savingKey)
+      const payload = buildInlineProductPayload(product, {
+        [field]: nextValue,
+      })
+      const response = await updateAdminProduct(product.id, payload)
+      const updatedProduct = normalizeProductMedia(response?.data || {
+        ...product,
+        [field]: nextValue,
+        ...(field === "default_price" ? { default_price_number: nextValue } : {}),
+      })
+
+      setProducts((prev) =>
+        prev.map((currentProduct) =>
+          currentProduct.id === product.id
+            ? {
+                ...currentProduct,
+                ...updatedProduct,
+              }
+            : currentProduct
+        )
+      )
+
+      if (selectedProductId === product.id) {
+        setPanelForm((prev) => ({
+          ...prev,
+          [field === "default_price" ? "default_price" : "stock"]: nextValue ?? "",
+        }))
+      }
+
+      notifySuccess(field === "default_price" ? "Precio actualizado." : "Stock actualizado.")
+    } catch (error) {
+      console.error("Error al actualizar producto inline:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible actualizar el producto.")
+    } finally {
+      setInlineSavingKey("")
+    }
+  }
+
   async function handleDelete(productId) {
     try {
       setActionLoadingId(productId)
@@ -1237,6 +1379,118 @@ function ProductsPage() {
       ...prev,
       page: nextPage,
     }))
+  }
+
+  async function openPriceScalePanel(product) {
+    setPriceScaleProduct(product)
+    setPriceScalePanelOpen(true)
+    setPriceScaleLoading(true)
+
+    try {
+      const response = await getAdminProductPriceScales(product.id)
+      const data = response?.data || response || {}
+      setPriceScaleForm(mapPriceScaleResponseToForm(data, product))
+    } catch (error) {
+      console.error("Error al cargar escalas:", error?.response?.data || error)
+      setPriceScaleForm(INITIAL_PRICE_SCALE_FORM)
+    } finally {
+      setPriceScaleLoading(false)
+    }
+  }
+
+  function closePriceScalePanel() {
+    if (priceScaleSaving) return
+    setPriceScalePanelOpen(false)
+    setPriceScaleProduct(null)
+    setPriceScaleForm(INITIAL_PRICE_SCALE_FORM)
+  }
+
+  function handlePriceScaleRowChange(index, field, value) {
+    setPriceScaleForm((prev) => ({
+      ...prev,
+      scales: prev.scales.map((scale, currentIndex) =>
+        currentIndex === index
+          ? {
+              ...scale,
+              [field]: field === "is_active" ? Boolean(value) : value,
+            }
+          : scale
+      ),
+    }))
+  }
+
+  function addPriceScaleRow() {
+    setPriceScaleForm((prev) => {
+      const scales = prev.scales.length ? prev.scales : INITIAL_PRICE_SCALE_FORM.scales
+      const lastScale = scales[scales.length - 1]
+      const lastTo = lastScale.to_quantity || lastScale.from_quantity || ""
+      const nextFrom = lastTo ? Number(lastTo) + 1 : ""
+
+      return {
+        ...prev,
+        scales: [
+          ...scales.slice(0, -1),
+          {
+            ...lastScale,
+            to_quantity: lastTo,
+          },
+          {
+            from_quantity: nextFrom || "",
+            to_quantity: "",
+            discount_percentage: "",
+            is_active: true,
+          },
+        ],
+      }
+    })
+  }
+
+  function removeLastPriceScaleRow() {
+    setPriceScaleForm((prev) => ({
+      ...prev,
+      scales: prev.scales.length > 1 ? prev.scales.slice(0, -1) : prev.scales,
+    }))
+  }
+
+  async function savePriceScales() {
+    if (!priceScaleProduct?.id) return
+
+    const payload = buildPriceScalePayload(priceScaleForm, priceScaleProduct)
+    const validation = validateProductPriceScales(payload.scales)
+
+    if (!validation.valid) {
+      notifyError(validation.message)
+      return
+    }
+
+    try {
+      setPriceScaleSaving(true)
+      const response = await updateAdminProductPriceScales(priceScaleProduct.id, payload)
+      notifySuccess(response?.message || "Escalas de precio actualizadas correctamente.")
+      setPriceScaleForm(mapPriceScaleResponseToForm(response?.data || response, priceScaleProduct))
+    } catch (error) {
+      console.error("Error al guardar escalas:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible guardar las escalas.")
+    } finally {
+      setPriceScaleSaving(false)
+    }
+  }
+
+  async function deactivatePriceScales() {
+    if (!priceScaleProduct?.id) return
+    if (!window.confirm(`¿Desactivar las escalas de "${priceScaleProduct.name}"?`)) return
+
+    try {
+      setPriceScaleSaving(true)
+      const response = await deleteAdminProductPriceScales(priceScaleProduct.id)
+      notifySuccess(response?.message || "Escalas desactivadas correctamente.")
+      closePriceScalePanel()
+    } catch (error) {
+      console.error("Error al desactivar escalas:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible desactivar las escalas.")
+    } finally {
+      setPriceScaleSaving(false)
+    }
   }
 
   function renderPagination() {
@@ -1381,6 +1635,7 @@ function ProductsPage() {
                   <th>Nombre</th>
                   <th>Marca</th>
                   <th>Precio</th>
+                  <th>Inventario</th>
                   <th>Categoría</th>
                   <th>Estatus</th>
                   <th className="text-end">Acciones</th>
@@ -1389,13 +1644,13 @@ function ProductsPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4">
+                    <td colSpan="9" className="text-center py-4">
                       Cargando información...
                     </td>
                   </tr>
                 ) : products.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-4">
+                    <td colSpan="9" className="text-center py-4">
                       No se encontraron productos.
                     </td>
                   </tr>
@@ -1411,7 +1666,31 @@ function ProductsPage() {
                       >
                         <td className="fw-semibold">{product.id}</td>
                         <td>
-                          <div className="product-page__thumb">
+                          <div
+                            className="product-page__thumb"
+                            onMouseEnter={(event) => {
+                              if (!product.image_url) return
+                              setImagePreview({
+                                src: product.image_url,
+                                alt: product.name,
+                                x: event.clientX,
+                                y: event.clientY,
+                              })
+                            }}
+                            onMouseMove={(event) => {
+                              if (!product.image_url) return
+                              setImagePreview((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      x: event.clientX,
+                                      y: event.clientY,
+                                    }
+                                  : prev
+                              )
+                            }}
+                            onMouseLeave={() => setImagePreview(null)}
+                          >
                             {product.image_url ? (
                               <img src={product.image_url} alt={product.name} />
                             ) : (
@@ -1419,9 +1698,72 @@ function ProductsPage() {
                             )}
                           </div>
                         </td>
-                        <td>{product.name}</td>
+                        <td>
+                          <div className="product-page__name-cell">
+                            <span>{product.name}</span>
+                            <button
+                              type="button"
+                              className="product-page__mini-action"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openPriceScalePanel(product)
+                              }}
+                              title="Escalas de precio"
+                              aria-label={`Escalas de precio de ${product.name}`}
+                            >
+                              <i className="bi bi-layers" aria-hidden="true" />
+                              <span>Escalas</span>
+                            </button>
+                          </div>
+                        </td>
                         <td>{product.brand || "-"}</td>
-                        <td>${Number(product.default_price_number || 0).toFixed(2)}</td>
+                        <td onClick={(event) => event.stopPropagation()}>
+                          <label className="product-page__inline-number">
+                            <span>$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              key={`price-${product.id}-${product.default_price_number ?? product.default_price ?? 0}`}
+                              defaultValue={Number(product.default_price_number ?? product.default_price ?? 0).toFixed(2)}
+                              disabled={inlineSavingKey === `${product.id}:default_price`}
+                              onBlur={(event) => handleInlineProductFieldSave(product, "default_price", event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") event.currentTarget.blur()
+                                if (event.key === "Escape") {
+                                  event.currentTarget.value = Number(product.default_price_number ?? product.default_price ?? 0).toFixed(2)
+                                  event.currentTarget.blur()
+                                }
+                              }}
+                            />
+                          </label>
+                        </td>
+                        <td>
+                          <div className="product-page__stock-cell" onClick={(event) => event.stopPropagation()}>
+                            <label className="product-page__inline-number product-page__inline-number--stock">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Sin control"
+                                key={`stock-${product.id}-${product.stock ?? "null"}`}
+                                defaultValue={product.stock ?? ""}
+                                disabled={inlineSavingKey === `${product.id}:stock`}
+                                onBlur={(event) => handleInlineProductFieldSave(product, "stock", event.target.value)}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") event.currentTarget.blur()
+                                  if (event.key === "Escape") {
+                                    event.currentTarget.value = product.stock ?? ""
+                                    event.currentTarget.blur()
+                                  }
+                                }}
+                              />
+                            </label>
+                            <span className={`product-page__stock-badge is-${product.stock_status || "untracked"}`}>
+                              {formatAdminStock(product)}
+                            </span>
+                          </div>
+                        </td>
                         <td>{product.category?.name || "-"}</td>
                         <td>
                           <span className={`badge text-bg-${isActive ? "success" : "secondary"}`}>
@@ -1504,6 +1846,7 @@ function ProductsPage() {
         onGalleryAdd={handleGalleryAdd}
         onGalleryItemChange={handleGalleryItemChange}
         onGalleryItemToggle={handleGalleryItemToggle}
+        onGalleryDelete={handleGalleryDelete}
         onGalleryMove={handleGalleryMove}
         onVariantOptionFormChange={handleVariantOptionFormChange}
         onVariantOptionAdd={handleVariantOptionAdd}
@@ -1514,6 +1857,133 @@ function ProductsPage() {
         onVariantStatusChange={handleVariantStatusChange}
         onSubmit={handlePanelSubmit}
       />
+
+      {imagePreview ? (
+        <div
+          className="product-page__image-preview"
+          style={{
+            left: imagePreview.x + 18,
+            top: imagePreview.y + 18,
+          }}
+        >
+          <img src={imagePreview.src} alt={imagePreview.alt} />
+        </div>
+      ) : null}
+
+      <AdminSidePanel
+        isOpen={priceScalePanelOpen}
+        title="Escalas de precio"
+        subtitle={priceScaleProduct ? `${priceScaleProduct.name}${priceScaleProduct.sku ? ` · ${priceScaleProduct.sku}` : ""}` : ""}
+        onClose={closePriceScalePanel}
+        closeDisabled={priceScaleSaving}
+        width="lg"
+        footer={
+          <div className="price-scales-panel__footer">
+            <button
+              type="button"
+              className="btn btn-outline-danger"
+              onClick={deactivatePriceScales}
+              disabled={priceScaleSaving || priceScaleLoading}
+            >
+              Desactivar escalas
+            </button>
+            <div className="price-scales-panel__footer-actions">
+              <button
+                type="button"
+                className="btn btn-outline-secondary"
+                onClick={closePriceScalePanel}
+                disabled={priceScaleSaving}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={savePriceScales}
+                disabled={priceScaleSaving || priceScaleLoading}
+              >
+                {priceScaleSaving ? "Guardando..." : "Guardar escalas"}
+              </button>
+            </div>
+          </div>
+        }
+      >
+        {priceScaleLoading ? (
+          <div className="product-page__panel-loading">Cargando escalas...</div>
+        ) : (
+          <div className="price-scales-panel">
+            <section className="price-scales-panel__block">
+              <div className="price-scales-panel__head">
+                <div>
+                  <h4>Rangos</h4>
+                  <p>La última escala puede quedar sin límite en “Hasta”.</p>
+                </div>
+                <button type="button" className="btn btn-outline-primary btn-sm" onClick={addPriceScaleRow}>
+                  Agregar escala
+                </button>
+              </div>
+
+              <div className="price-scales-panel__rows">
+                {priceScaleForm.scales.map((scale, index) => (
+                  <div className="price-scales-panel__row" key={`scale-${index}`}>
+                    <label className="price-scales-panel__field">
+                      <span>Desde</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={scale.from_quantity}
+                        onChange={(event) => handlePriceScaleRowChange(index, "from_quantity", event.target.value)}
+                      />
+                    </label>
+
+                    <label className="price-scales-panel__field">
+                      <span>Hasta</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={scale.to_quantity ?? ""}
+                        onChange={(event) => handlePriceScaleRowChange(index, "to_quantity", event.target.value)}
+                        placeholder={index === priceScaleForm.scales.length - 1 ? "Sin límite" : "5"}
+                      />
+                    </label>
+
+                    <label className="price-scales-panel__field">
+                      <span>Descuento %</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={scale.discount_percentage}
+                        onChange={(event) => handlePriceScaleRowChange(index, "discount_percentage", event.target.value)}
+                      />
+                    </label>
+
+                    <label className="price-scales-panel__check">
+                      <input
+                        type="checkbox"
+                        checked={scale.is_active}
+                        onChange={(event) => handlePriceScaleRowChange(index, "is_active", event.target.checked)}
+                      />
+                      <span>Activa</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      className="price-scales-panel__remove"
+                      onClick={removeLastPriceScaleRow}
+                      disabled={index !== priceScaleForm.scales.length - 1 || priceScaleForm.scales.length <= 1}
+                      title="Solo se elimina desde la última escala"
+                      aria-label="Eliminar última escala"
+                    >
+                      <i className="bi bi-trash3" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+      </AdminSidePanel>
     </>
   )
 }
@@ -1597,6 +2067,116 @@ function buildPanelTitle(mode, form) {
   if (name) return name
 
   return mode === "create" ? "Nuevo producto" : "Detalle del producto"
+}
+
+function buildInlineProductPayload(product = {}, overrides = {}) {
+  const payload = {
+    category_id: product.category_id ?? product.category?.id ?? "",
+    family_id: product.family_id ?? product.family?.id ?? "",
+    name: product.name ?? "",
+    slug: product.slug ?? "",
+    description: product.description ?? "",
+    short_description: product.short_description ?? "",
+    default_price: Number(overrides.default_price ?? product.default_price_number ?? product.default_price ?? 0),
+    stock: Object.prototype.hasOwnProperty.call(overrides, "stock")
+      ? overrides.stock
+      : product.stock ?? null,
+    sku: product.sku ?? "",
+    brand: product.brand ?? "",
+    keyword: product.keyword ?? "",
+    is_active: Boolean(product.is_active),
+    processed: Boolean(product.processed),
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload).filter(([key, value]) => {
+      if (key === "stock") return true
+      return value !== "" && value !== undefined
+    })
+  )
+}
+
+function formatAdminStock(product = {}) {
+  const status = product.stock_status || "untracked"
+  const stock = product.stock
+  const labels = {
+    untracked: "Sin control",
+    out_of_stock: "Sin inventario",
+    low_stock: stock === null || stock === undefined ? "Pocas piezas" : `${stock} pzas.`,
+    in_stock: stock === null || stock === undefined ? "Disponible" : `${stock} pzas.`,
+  }
+
+  return labels[status] || "Sin control"
+}
+
+function mapPriceScaleResponseToForm(data = {}, product = {}) {
+  const scales = Array.isArray(data.scales) && data.scales.length
+    ? data.scales.map((scale) => ({
+        from_quantity: scale.from_quantity ?? "",
+        to_quantity: scale.to_quantity ?? "",
+        discount_percentage: scale.discount_percentage ?? "",
+        is_active: Boolean(scale.is_active ?? true),
+      }))
+    : INITIAL_PRICE_SCALE_FORM.scales
+
+  return {
+    scales,
+  }
+}
+
+function buildPriceScalePayload(form, product = {}) {
+  return {
+    name: `Escalas ${product.name || ""}`.trim() || "Escalas de precio",
+    description: null,
+    is_active: true,
+    starts_at: null,
+    ends_at: null,
+    scales: form.scales.map((scale) => ({
+      from_quantity: Number(scale.from_quantity || 0),
+      to_quantity:
+        scale.to_quantity === "" || scale.to_quantity === null
+          ? null
+          : Number(scale.to_quantity),
+      discount_percentage: Number(scale.discount_percentage || 0),
+      is_active: Boolean(scale.is_active),
+    })),
+  }
+}
+
+function validateProductPriceScales(scales = []) {
+  if (!Array.isArray(scales) || scales.length === 0) {
+    return { valid: false, message: "Agrega al menos una escala." }
+  }
+
+  for (let index = 0; index < scales.length; index += 1) {
+    const scale = scales[index]
+    const from = Number(scale.from_quantity)
+    const to = scale.to_quantity === null ? null : Number(scale.to_quantity)
+    const discount = Number(scale.discount_percentage)
+
+    if (!Number.isFinite(from) || from < 1) {
+      return { valid: false, message: "Cada escala debe tener una cantidad inicial válida." }
+    }
+
+    if (to !== null && (!Number.isFinite(to) || to < from)) {
+      return { valid: false, message: "La cantidad final debe ser mayor o igual a la inicial." }
+    }
+
+    if (!Number.isFinite(discount) || discount <= 0) {
+      return { valid: false, message: "Cada escala debe tener un descuento mayor a 0." }
+    }
+
+    if (to === null && index < scales.length - 1) {
+      return { valid: false, message: "Una escala sin límite debe ser la última." }
+    }
+
+    const next = scales[index + 1]
+    if (next && to !== null && Number(next.from_quantity) !== to + 1) {
+      return { valid: false, message: "Las escalas deben ser consecutivas, sin huecos ni traslapes." }
+    }
+  }
+
+  return { valid: true, message: "" }
 }
 
 function normalizeProductMedia(product = {}) {

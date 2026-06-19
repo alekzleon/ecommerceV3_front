@@ -22,8 +22,13 @@ export async function getProductDetail(slug) {
   return data
 }
 
-export async function getRecentPurchases() {
-  const { data } = await api.get("/products/recent-purchases")
+export async function getRecentPurchases(params = {}) {
+  const searchParams = new URLSearchParams()
+
+  if (params.limit) searchParams.set("limit", String(params.limit))
+  if (params.search_terms) searchParams.set("search_terms", params.search_terms)
+
+  const { data } = await api.get("/products/recent-purchases", { params: searchParams })
   return data
 }
 

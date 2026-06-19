@@ -36,40 +36,22 @@ const adminMenuMap = [
     subtitle: "Gestiona la información de clientes.",
   },
   {
-    module: "credito",
-    path: "/admin/credit",
-    title: "Crédito",
-    subtitle: "Administra crédito y validaciones financieras.",
-  },
-  {
-    module: "cobranza",
-    path: "/admin/collections",
-    title: "Cobranza",
-    subtitle: "Da seguimiento a cartera, cobros y movimientos.",
-  },
-  {
-    module: "marketing",
-    path: "/admin/marketing",
-    title: "Marketing",
-    subtitle: "Gestiona la parte comercial y visual.",
-  },
-  {
     module: "promociones",
     path: "/admin/promotions",
     title: "Promociones",
     subtitle: "Controla promociones, ofertas y banners.",
   },
   {
+    module: "cupones",
+    path: "/admin/coupons",
+    title: "Cupones",
+    subtitle: "Gestiona códigos promocionales de marketing.",
+  },
+  {
     module: "logs",
     path: "/admin/logs",
     title: "Logs",
     subtitle: "Consulta los registros del sistema.",
-  },
-  {
-    module: "sincronizacion",
-    path: "/admin/sync",
-    title: "Sincronización",
-    subtitle: "Supervisa procesos y tareas de sincronización.",
   },
   {
     module: "configuracion_ecommerce",

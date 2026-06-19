@@ -6,7 +6,7 @@ import { toggleAccountFavorite } from "../../../services/api/accountService"
 import { useAuth } from "../../../context/AuthContext"
 import { notifySuccess, notifyError } from "../../../utils/toast"
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 
 function ProductCard({ product, onFavoriteChange }) {
@@ -28,6 +28,11 @@ function ProductCard({ product, onFavoriteChange }) {
   const productDiscountLabel = product?.discountLabel || ""
   const productBrand = product?.brand || "Sin marca"
   const productShipping = product?.shipping || ""
+  const stockStatus = product?.stockStatus || product?.stock_status || "untracked"
+  const stockMessage = product?.stockMessage || product?.stock_message || ""
+  const hasNoStockValue = product?.stock === null || product?.stock === undefined || product?.stock === ""
+  const blocksByStock = stockStatus === "out_of_stock" || hasNoStockValue || Number(product.stock) <= 0
+  const effectiveStockStatus = blocksByStock ? "out_of_stock" : stockStatus
   const productBadges = Array.isArray(product?.badges) ? product.badges : []
   const productPromotionMessage = product?.promotionMessage || ""
   const productPriceInfo = product?.priceInfo || product?.price_info || {}
@@ -66,6 +71,11 @@ function ProductCard({ product, onFavoriteChange }) {
 
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")
+      return
+    }
+
+    if (blocksByStock) {
+      notifyError(stockMessage || "Producto sin inventario.")
       return
     }
 
@@ -216,6 +226,12 @@ function ProductCard({ product, onFavoriteChange }) {
 
         <div className="product-card__shipping">{productShipping}</div>
 
+        {effectiveStockStatus !== "untracked" ? (
+          <div className={`product-card__stock product-card__stock--${effectiveStockStatus}`}>
+            {stockMessage || formatStockMessage(effectiveStockStatus)}
+          </div>
+        ) : null}
+
         {!sessionReady ? (
           <button
             type="button"
@@ -229,10 +245,12 @@ function ProductCard({ product, onFavoriteChange }) {
             type="button"
             className="product-card__add-to-cart"
             onClick={handleAddToCart}
-            disabled={addingToCart || !hasAvailablePrice}
+            disabled={addingToCart || !hasAvailablePrice || blocksByStock}
           >
             {addingToCart
               ? "Agregando..."
+              : blocksByStock
+              ? "Producto sin inventario"
               : hasAvailablePrice
               ? "Añadir al carrito"
               : "Precio no disponible"}
@@ -249,6 +267,16 @@ function ProductCard({ product, onFavoriteChange }) {
       </div>
     </article>
   )
+}
+
+function formatStockMessage(status) {
+  const messages = {
+    out_of_stock: "Producto sin inventario",
+    low_stock: "Hay pocas piezas disponibles.",
+    in_stock: "Inventario disponible",
+  }
+
+  return messages[status] || ""
 }
 
 export default ProductCard

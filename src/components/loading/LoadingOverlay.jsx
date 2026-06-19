@@ -1,6 +1,9 @@
+import { useSettings } from "../../context/SettingsContext";
 import "./loading-overlay.css";
 
 function LoadingOverlay({ show = false }) {
+  const { brandName, logoUrl } = useSettings();
+
   if (!show) return null;
 
   return (
@@ -11,11 +14,11 @@ function LoadingOverlay({ show = false }) {
       aria-busy="true"
     >
       <div className="loading-overlay-box">
-        <img
-          src="https://www.pidefacilraul.com/cms/wp-content/uploads/2020/09/CC-175-PIDEFaCIL-LOGO-HORIZONTAL-e1724443779289.png"
-          alt="PideFacilRaul"
-          className="loading-overlay-logo"
-        />
+        {logoUrl ? (
+          <img src={logoUrl} alt={brandName} className="loading-overlay-logo" />
+        ) : (
+          <strong className="loading-overlay-brand">{brandName}</strong>
+        )}
         {/* <p className="loading-overlay-text">{text}</p> */}
       </div>
     </div>

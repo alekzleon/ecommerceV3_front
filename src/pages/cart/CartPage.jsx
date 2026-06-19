@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   addCartPromotionGiftProduct,
+  applyCartCoupon,
+  applyCartCashback,
+  clearCartCoupon,
+  clearCartCashback,
   clearCartPromotionGiftSelection,
   clearCart,
   getCart,
@@ -14,8 +18,8 @@ import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast.js"
 import { normalizeMediaUrl } from "../../utils/mediaUrl.js"
 import "./cart.css"
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
-const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "pidefacil_stripe_success_return"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
+const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "ecommerce_stripe_success_return"
 const DEBUG_RECOVERABLE_CART = true
 
 const emptyCartState = {
@@ -31,6 +35,8 @@ const emptyCartState = {
     items: [],
   },
   total: 0,
+  loyalty: null,
+  coupon: null,
   last_activity_at: null,
   promotionsApplied: [],
   items: [],
@@ -46,6 +52,10 @@ function CartPage() {
   const [processingRemoveSelected, setProcessingRemoveSelected] = useState(false)
   const [itemLoadingMap, setItemLoadingMap] = useState({})
   const [promotionLoadingMap, setPromotionLoadingMap] = useState({})
+  const [cashbackAmount, setCashbackAmount] = useState("")
+  const [cashbackLoading, setCashbackLoading] = useState(false)
+  const [couponCode, setCouponCode] = useState("")
+  const [couponLoading, setCouponLoading] = useState(false)
   const restoringRecoverableRef = useRef(false)
 
   const syncCartSummary = (cartData) => {
@@ -173,10 +183,7 @@ function CartPage() {
       return {
         id: item.id ?? item.cart_item_id ?? item.product_id,
         productId: item.product_id,
-        image:
-          item.image ||
-          item.image_snapshot ||
-          "https://via.placeholder.com/400x400?text=Producto",
+        image: normalizeCartItemImage(item),
         name: item.name || item.name_snapshot || "Producto sin nombre",
         brand: item.brand || item.brand_snapshot || "Sin marca",
         presentation: item.presentation || item.sku || item.sku_snapshot || "",
@@ -189,6 +196,7 @@ function CartPage() {
         available: null,
         lineSubtotal,
         status: item.status || "",
+        stock: normalizeCartItemStock(item),
         sku: item.sku || item.sku_snapshot || "",
         category: item.category || item.category_snapshot || "",
         family: item.family || item.family_snapshot || "",
@@ -258,6 +266,8 @@ function CartPage() {
           cartData?.totals?.total ??
           fallbackTotal
       ),
+      loyalty: normalizeLoyalty(cartData?.loyalty),
+      coupon: normalizeCoupon(cartData?.coupon ?? cartData?.totals?.coupon),
       last_activity_at: cartData?.last_activity_at ?? null,
       promotionsApplied: promotionsApplied.map((promotion) => ({
         id: promotion.id ?? null,
@@ -446,6 +456,101 @@ function CartPage() {
     const namesText = names.length ? `: ${names.join(", ")}` : ""
 
     return `${unitText} de artículos promocionales${namesText}`
+  }
+
+  const handleApplyCashback = async (event) => {
+    event.preventDefault()
+
+    const amount = Number(cashbackAmount)
+
+    if (!amount || amount <= 0) {
+      notifyWarning("Ingresa un monto de cashback válido.")
+      return
+    }
+
+    try {
+      setCashbackLoading(true)
+      const response = await applyCartCashback({ amount })
+      applyCartResponse(response, { keepSelected: true })
+      setCashbackAmount("")
+      notifySuccess(response?.message || "Cashback aplicado correctamente.")
+    } catch (error) {
+      console.error("Error al aplicar cashback:", error?.response?.data || error)
+      notifyError(
+        error?.response?.data?.message || "No fue posible aplicar el cashback."
+      )
+    } finally {
+      setCashbackLoading(false)
+    }
+  }
+
+  const handleClearCashback = async () => {
+    try {
+      setCashbackLoading(true)
+      const response = await clearCartCashback()
+      applyCartResponse(response, { keepSelected: true })
+      setCashbackAmount("")
+      notifySuccess(response?.message || "Cashback removido correctamente.")
+    } catch (error) {
+      console.error("Error al quitar cashback:", error?.response?.data || error)
+      notifyError(
+        error?.response?.data?.message || "No fue posible quitar el cashback."
+      )
+    } finally {
+      setCashbackLoading(false)
+    }
+  }
+
+  const handleApplyCoupon = async (event) => {
+    event.preventDefault()
+
+    const code = couponCode.trim()
+
+    if (!code) {
+      notifyWarning("Ingresa un código de cupón.")
+      return
+    }
+
+    try {
+      setCouponLoading(true)
+      const response = await applyCartCoupon({ code })
+      const normalized = applyCartResponse(response, { keepSelected: true })
+      const nextCoupon = normalized.coupon
+
+      if (nextCoupon?.message) {
+        if (nextCoupon.is_valid === false) {
+          notifyWarning(nextCoupon.message)
+        } else {
+          notifySuccess(nextCoupon.message)
+        }
+      } else {
+        notifySuccess(response?.message || "Cupón aplicado correctamente.")
+      }
+
+      setCouponCode("")
+    } catch (error) {
+      console.error("Error al aplicar cupón:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible aplicar el cupón.")
+      await fetchCartData({ keepSelected: true })
+    } finally {
+      setCouponLoading(false)
+    }
+  }
+
+  const handleClearCoupon = async () => {
+    try {
+      setCouponLoading(true)
+      const response = await clearCartCoupon()
+      applyCartResponse(response, { keepSelected: true })
+      setCouponCode("")
+      notifySuccess(response?.message || "Cupón eliminado del carrito.")
+    } catch (error) {
+      console.error("Error al quitar cupón:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible quitar el cupón.")
+      await fetchCartData({ keepSelected: true })
+    } finally {
+      setCouponLoading(false)
+    }
   }
 
   const getSelectedGiftItem = (promotion) => {
@@ -805,8 +910,17 @@ function CartPage() {
 
     return !getSelectedGiftItem(promotion)
   })
+  const hasInvalidStockItems = products.some((product) => {
+    return product.status === "unavailable" || product.stock?.is_valid === false
+  })
 
   const handleCheckoutNavigation = (event) => {
+    if (hasInvalidStockItems) {
+      event.preventDefault()
+      notifyWarning("Ajusta los productos sin inventario suficiente antes de continuar.")
+      return
+    }
+
     if (!hasPendingGiftSelection) return
 
     event.preventDefault()
@@ -958,6 +1072,14 @@ function CartPage() {
                                   </div>
                                 ) : null}
 
+                                <CartScalePromotion product={product} />
+
+                                {product.stock?.is_valid === false ? (
+                                  <div className="cart_item_stock_alert">
+                                    {product.stock.message || "Inventario insuficiente para este producto."}
+                                  </div>
+                                ) : null}
+
                                 {product.giftUnits > 0 ? (
                                   <div className="cart_item_gift_note">
                                     {getGiftAccountingText(product)}
@@ -1082,7 +1204,9 @@ function CartPage() {
                                 </div>
 
                                 <span className="cart_item_available">
-                                  {product.status === "active"
+                                  {product.stock?.is_valid === false
+                                    ? "Inventario insuficiente"
+                                    : product.status === "active"
                                     ? "Disponible"
                                     : "Revisar disponibilidad"}
                                 </span>
@@ -1320,6 +1444,26 @@ function CartPage() {
                 </div>
               ) : null}
 
+                <CartLoyaltySummary
+                  loyalty={cart.loyalty}
+                  cashbackAmount={cashbackAmount}
+                  cashbackLoading={cashbackLoading}
+                  onCashbackAmountChange={setCashbackAmount}
+                  onApplyCashback={handleApplyCashback}
+                  onClearCashback={handleClearCashback}
+                  formatMoney={formatMoney}
+                />
+
+                <CartCouponBox
+                  coupon={cart.coupon}
+                  couponCode={couponCode}
+                  couponLoading={couponLoading}
+                  onCouponCodeChange={setCouponCode}
+                  onApplyCoupon={handleApplyCoupon}
+                  onClearCoupon={handleClearCoupon}
+                  formatMoney={formatMoney}
+                />
+
                 <div className="summary_rows">
                   <div className="summary_row">
                     <span>Productos ({cart.items_count || products.length})</span>
@@ -1351,10 +1495,10 @@ function CartPage() {
                   <Link
                     to="/checkout"
                     className={`btn btn_primary ${
-                      hasPendingGiftSelection ? "is-disabled" : ""
+                      hasPendingGiftSelection || hasInvalidStockItems ? "is-disabled" : ""
                     }`}
                     onClick={handleCheckoutNavigation}
-                    aria-disabled={hasPendingGiftSelection}
+                    aria-disabled={hasPendingGiftSelection || hasInvalidStockItems}
                   >
                     Continuar al checkout
                   </Link>
@@ -1379,10 +1523,10 @@ function CartPage() {
           <Link
             to="/checkout"
             className={`btn btn_primary mobile_checkout_btn ${
-              hasPendingGiftSelection ? "is-disabled" : ""
+              hasPendingGiftSelection || hasInvalidStockItems ? "is-disabled" : ""
             }`}
             onClick={handleCheckoutNavigation}
-            aria-disabled={hasPendingGiftSelection}
+            aria-disabled={hasPendingGiftSelection || hasInvalidStockItems}
           >
             Checkout
           </Link>
@@ -1408,6 +1552,90 @@ function normalizeGiftItems(items) {
     }))
 }
 
+function normalizeCartItemImage(item = {}) {
+  const rawImage =
+    item.image_url ||
+    item.image_path ||
+    item.image ||
+    item.image_snapshot ||
+    item.product?.image_url ||
+    item.product?.image_path ||
+    item.product?.image ||
+    item.product?.main_image_url ||
+    item.product?.media_url ||
+    item.product?.media_path ||
+    ""
+
+  return normalizeMediaUrl(rawImage) || "https://via.placeholder.com/400x400?text=Producto"
+}
+
+function normalizeCartItemStock(item = {}) {
+  const stock = item.stock
+
+  if (stock && typeof stock === "object") {
+    const rawAvailableStock =
+      stock.available_stock ??
+      stock.availableStock ??
+      item.available_stock ??
+      item.stock_available ??
+      item.product?.stock ??
+      null
+    const hasAvailableStockValue =
+      rawAvailableStock !== null && rawAvailableStock !== undefined && rawAvailableStock !== ""
+    const availableStock = hasAvailableStockValue ? Number(rawAvailableStock) : null
+    const requestedQuantity = Number(stock.requested_quantity ?? item.quantity ?? 0)
+    const isValid =
+      stock.is_valid === false
+        ? false
+        : hasAvailableStockValue
+        ? Number.isFinite(availableStock) && availableStock > 0 && requestedQuantity <= availableStock
+        : true
+
+    return {
+      is_tracked: true,
+      is_valid: isValid,
+      available_stock: Number.isFinite(availableStock) ? availableStock : null,
+      requested_quantity: requestedQuantity,
+      message:
+        stock.message ||
+        item.stock_message ||
+        item.product?.stock_message ||
+        (Number(availableStock || 0) <= 0
+          ? "Producto sin inventario disponible."
+          : `Solo hay ${availableStock} pieza(s) disponibles.`),
+    }
+  }
+
+  const rawAvailableStock =
+    stock ??
+    item.available_stock ??
+    item.stock_available ??
+    item.product?.stock ??
+    null
+
+  if (rawAvailableStock === null || rawAvailableStock === undefined || rawAvailableStock === "") {
+    return null
+  }
+
+  const availableStock =
+    Number(rawAvailableStock)
+  const requestedQuantity = Number(item.quantity ?? 0)
+  const isValid = Number.isFinite(availableStock) && requestedQuantity <= availableStock && availableStock > 0
+
+  return {
+    is_tracked: true,
+    is_valid: isValid,
+    available_stock: Number.isFinite(availableStock) ? availableStock : 0,
+    requested_quantity: requestedQuantity,
+    message:
+      item.stock_message ||
+      item.product?.stock_message ||
+      (availableStock <= 0
+        ? "Producto sin inventario disponible."
+        : `Solo hay ${availableStock} pieza(s) disponibles.`),
+  }
+}
+
 function normalizeTaxes(taxes) {
   if (!Array.isArray(taxes)) return []
 
@@ -1428,11 +1656,48 @@ function normalizeTaxBreakdown(taxBreakdown) {
     items: items.filter(Boolean).map((item) => ({
       cart_item_id: item.cart_item_id ?? item.id ?? null,
       product_id: item.product_id ?? null,
-      microsip_id: item.microsip_id ?? "",
       taxable_base: Number(item.taxable_base ?? 0),
       tax_amount: Number(item.tax_amount ?? item.tax ?? 0),
       taxes: normalizeTaxes(item.taxes),
     })),
+  }
+}
+
+function normalizeLoyalty(loyalty) {
+  if (!loyalty || typeof loyalty !== "object") return null
+
+  return {
+    firstPurchaseDiscount: {
+      enabled: Boolean(loyalty.first_purchase_discount?.enabled),
+      eligible: Boolean(loyalty.first_purchase_discount?.eligible),
+      percentage: Number(loyalty.first_purchase_discount?.percentage ?? 0),
+      amount: Number(loyalty.first_purchase_discount?.amount ?? 0),
+    },
+    cashback: {
+      availableBalance: Number(loyalty.cashback?.available_balance ?? 0),
+      maxRedeemable: Number(loyalty.cashback?.max_redeemable ?? 0),
+      appliedAmount: Number(loyalty.cashback?.applied_amount ?? 0),
+      earn: {
+        enabled: Boolean(loyalty.cashback?.earn?.enabled),
+        percentage: Number(loyalty.cashback?.earn?.percentage ?? 0),
+        amount: Number(loyalty.cashback?.earn?.amount ?? 0),
+      },
+    },
+  }
+}
+
+function normalizeCoupon(coupon) {
+  if (!coupon || typeof coupon !== "object") return null
+
+  return {
+    id: coupon.id ?? null,
+    code: coupon.code ?? "",
+    name: coupon.name ?? "",
+    discountType: coupon.discount_type ?? "",
+    discountValue: Number(coupon.discount_value ?? 0),
+    discountAmount: Number(coupon.discount_amount ?? 0),
+    is_valid: coupon.is_valid !== false,
+    message: coupon.message ?? "",
   }
 }
 
@@ -1449,6 +1714,360 @@ function hasRecentStripeSuccessReturn() {
   } catch {
     return false
   }
+}
+
+function CartCouponBox({
+  coupon,
+  couponCode,
+  couponLoading,
+  onCouponCodeChange,
+  onApplyCoupon,
+  onClearCoupon,
+  formatMoney,
+}) {
+  return (
+    <div className={`summary_coupon ${coupon ? "has-coupon" : ""} ${coupon?.is_valid === false ? "is-invalid" : ""}`}>
+      <div className="summary_coupon_head">
+        <i className="bi bi-ticket-perforated" aria-hidden="true" />
+        <div>
+          <strong>Cupón</strong>
+          <span>{coupon ? coupon.message || "Cupón aplicado al carrito" : "Agrega un código promocional"}</span>
+        </div>
+      </div>
+
+      {coupon ? (
+        <div className="summary_coupon_applied">
+          <div>
+            <strong>{coupon.code}</strong>
+            {coupon.name ? <span>{coupon.name}</span> : null}
+          </div>
+          <div className="summary_coupon_amount">
+            <strong>-{formatMoney(coupon.discountAmount)}</strong>
+            {coupon.is_valid === false ? <span>No válido</span> : null}
+          </div>
+          <button
+            type="button"
+            className="summary_coupon_clear"
+            onClick={onClearCoupon}
+            disabled={couponLoading}
+          >
+            {couponLoading ? "Quitando..." : "Quitar"}
+          </button>
+        </div>
+      ) : (
+        <form className="summary_coupon_form" onSubmit={onApplyCoupon}>
+          <input
+            type="text"
+            value={couponCode}
+            onChange={(event) => onCouponCodeChange(event.target.value.toUpperCase())}
+            placeholder="VERANO10"
+            disabled={couponLoading}
+          />
+          <button type="submit" disabled={couponLoading}>
+            {couponLoading ? "Aplicando..." : "Aplicar"}
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
+
+function CartLoyaltySummary({
+  loyalty,
+  cashbackAmount,
+  cashbackLoading,
+  onCashbackAmountChange,
+  onApplyCashback,
+  onClearCashback,
+  formatMoney,
+}) {
+  if (!loyalty) return null
+
+  const firstPurchase = loyalty.firstPurchaseDiscount
+  const cashback = loyalty.cashback
+  const canRedeem = cashback.availableBalance > 0 && cashback.maxRedeemable > 0
+
+  if (
+    !firstPurchase?.enabled &&
+    !cashback?.earn?.enabled &&
+    !cashback?.availableBalance &&
+    !cashback?.appliedAmount
+  ) {
+    return null
+  }
+
+  return (
+    <div className="summary_loyalty">
+      <div className="summary_loyalty_head">
+        <i className="bi bi-stars" aria-hidden="true" />
+        <div>
+          <strong>Fidelidad</strong>
+          <span>Beneficios aplicados a tu cuenta</span>
+        </div>
+      </div>
+
+      {firstPurchase.enabled ? (
+        <div className="summary_loyalty_row">
+          <span>
+            Primera compra {firstPurchase.eligible ? "aplicada" : "no disponible"}
+            {firstPurchase.percentage > 0 ? ` · ${firstPurchase.percentage}%` : ""}
+          </span>
+          <strong>
+            {firstPurchase.amount > 0 ? `- ${formatMoney(firstPurchase.amount)}` : formatMoney(0)}
+          </strong>
+        </div>
+      ) : null}
+
+      {cashback.earn.enabled ? (
+        <div className="summary_loyalty_row">
+          <span>Cashback a ganar · {cashback.earn.percentage}%</span>
+          <strong>{formatMoney(cashback.earn.amount)}</strong>
+        </div>
+      ) : null}
+
+      <div className="summary_loyalty_row">
+        <span>Cashback disponible</span>
+        <strong>{formatMoney(cashback.availableBalance)}</strong>
+      </div>
+
+      {cashback.appliedAmount > 0 ? (
+        <div className="summary_loyalty_row is-applied">
+          <span>Cashback aplicado</span>
+          <strong>- {formatMoney(cashback.appliedAmount)}</strong>
+        </div>
+      ) : null}
+
+      {canRedeem ? (
+        <form className="summary_cashback_form" onSubmit={onApplyCashback}>
+          <label>
+            <span>Usar cashback</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={cashbackAmount}
+              onChange={(event) => onCashbackAmountChange(event.target.value)}
+              placeholder={String(Math.min(cashback.availableBalance, cashback.maxRedeemable))}
+              disabled={cashbackLoading}
+            />
+          </label>
+
+          <button type="submit" className="btn btn_secondary" disabled={cashbackLoading}>
+            {cashbackLoading ? "Aplicando..." : "Aplicar"}
+          </button>
+
+          {cashback.appliedAmount > 0 ? (
+            <button
+              type="button"
+              className="btn btn_ghost"
+              onClick={onClearCashback}
+              disabled={cashbackLoading}
+            >
+              Quitar
+            </button>
+          ) : null}
+        </form>
+      ) : null}
+    </div>
+  )
+}
+
+function CartScalePromotion({ product }) {
+  const scalePromotion = getCartScalePromotion(product)
+
+  if (!scalePromotion) return null
+
+  const currentQuantity = Number(product.quantity || 0)
+  const currentScale = getCurrentScale(scalePromotion.scales, currentQuantity)
+  const futureScales = scalePromotion.scales.filter((scale) => {
+    if (!currentScale) return scale.from_quantity > currentQuantity
+    return scale.from_quantity > currentScale.from_quantity
+  })
+
+  return (
+    <div className="cart_item_scale_promo">
+      <div className="cart_item_scale_promo_head">
+        <strong>{scalePromotion.name || "Escalas de precio por mayoreo"}</strong>
+        {currentScale ? (
+          <span>Escala aplicada</span>
+        ) : (
+          <span>Escalas disponibles</span>
+        )}
+      </div>
+
+      <div className="cart_item_scale_list">
+        {scalePromotion.scales.map((scale, index) => {
+          const isCurrent = currentScale && isSameScale(scale, currentScale)
+          const isPast = currentScale && scale.from_quantity < currentScale.from_quantity
+
+          return (
+            <div
+              className={`cart_item_scale ${isCurrent ? "is-current" : ""} ${
+                isPast ? "is-past" : ""
+              }`}
+              key={`${scale.from_quantity}-${scale.to_quantity ?? "inf"}-${index}`}
+            >
+              <span>{formatCartScaleRange(scale.from_quantity, scale.to_quantity)}</span>
+              <strong>{formatCartScaleDiscount(scale.discount_percentage)}</strong>
+            </div>
+          )
+        })}
+      </div>
+
+      {futureScales.length > 0 ? (
+        <small>
+          {buildNextScaleMessage(futureScales[0], currentQuantity)}
+        </small>
+      ) : currentScale && isInfiniteScale(currentScale) ? (
+        <small>Estás en la escala máxima de mayoreo para este producto.</small>
+      ) : null}
+    </div>
+  )
+}
+
+function getCartScalePromotion(product) {
+  const appliedPromotion =
+    product?.promotion?.type === "price_scale_percentage" ? product.promotion : null
+
+  const availablePromotion = Array.isArray(product?.availablePromotions)
+    ? product.availablePromotions.find((promotion) => {
+        return (
+          promotion?.type === "price_scale_percentage" ||
+          promotion?.snapshot?.type === "price_scale_percentage"
+        )
+      })
+    : null
+
+  if (!appliedPromotion && !availablePromotion) return null
+
+  const appliedSnapshot = appliedPromotion?.snapshot || {}
+  const availableSnapshot = availablePromotion?.snapshot || {}
+  const scales = mergeCartPromotionScales(
+    getScalesFromPromotion(appliedPromotion),
+    getScalesFromPromotion(availablePromotion)
+  )
+
+  const fallbackScale = normalizeCartPromotionScales([
+    appliedSnapshot.scale || {
+      from_quantity: appliedSnapshot.from_quantity,
+      to_quantity: appliedSnapshot.to_quantity,
+      discount_percentage: appliedSnapshot.discount_percentage,
+      is_active: true,
+    },
+  ])
+
+  const normalizedScales = scales.length ? scales : fallbackScale
+
+  if (!normalizedScales.length) return null
+
+  return {
+    id: appliedPromotion?.id ?? availablePromotion?.id,
+    name:
+      appliedPromotion?.name ||
+      availablePromotion?.name ||
+      appliedSnapshot.label ||
+      availableSnapshot.label ||
+      "Escalas de precio por mayoreo",
+    scales: normalizedScales,
+  }
+}
+
+function getScalesFromPromotion(promotion) {
+  if (!promotion) return []
+
+  const snapshot = promotion.snapshot || {}
+  const directScales = normalizeCartPromotionScales(
+    snapshot.scales ||
+      promotion.config?.scales ||
+      promotion.scales ||
+      snapshot.all_scales ||
+      snapshot.available_scales
+  )
+
+  if (directScales.length) return directScales
+
+  return normalizeCartPromotionScales([
+    promotion.current_scale,
+    promotion.next_scale,
+    snapshot.scale,
+    snapshot.current_scale,
+    snapshot.next_scale,
+  ])
+}
+
+function mergeCartPromotionScales(...scaleGroups) {
+  const scaleMap = new Map()
+
+  scaleGroups.flat().forEach((scale) => {
+    const key = `${scale.from_quantity}-${scale.to_quantity ?? "inf"}`
+    scaleMap.set(key, scale)
+  })
+
+  return [...scaleMap.values()].sort((a, b) => a.from_quantity - b.from_quantity)
+}
+
+function normalizeCartPromotionScales(scales) {
+  if (!Array.isArray(scales)) return []
+
+  return scales
+    .filter((scale) => Boolean(scale?.is_active ?? true))
+    .map((scale) => ({
+      from_quantity: Number(scale.from_quantity || 0),
+      to_quantity:
+        scale.to_quantity === null || scale.to_quantity === "" || scale.to_quantity === undefined
+          ? null
+          : Number(scale.to_quantity),
+      discount_percentage: Number(scale.discount_percentage || 0),
+    }))
+    .filter((scale) => scale.from_quantity > 0 && scale.discount_percentage > 0)
+    .sort((a, b) => a.from_quantity - b.from_quantity)
+}
+
+function getCurrentScale(scales, quantity) {
+  return scales.find((scale) => {
+    const fromQuantity = Number(scale.from_quantity || 0)
+    const toQuantity = scale.to_quantity === null ? null : Number(scale.to_quantity || 0)
+
+    return quantity >= fromQuantity && (!toQuantity || quantity <= toQuantity)
+  })
+}
+
+function isSameScale(scale, currentScale) {
+  return (
+    Number(scale.from_quantity) === Number(currentScale.from_quantity) &&
+    Number(scale.to_quantity || 0) === Number(currentScale.to_quantity || 0)
+  )
+}
+
+function isInfiniteScale(scale) {
+  return scale.to_quantity === null || scale.to_quantity === undefined || scale.to_quantity === ""
+}
+
+function formatCartScaleRange(fromQuantity, toQuantity) {
+  if (!toQuantity) return `Desde ${fromQuantity} pzas.`
+  if (Number(fromQuantity) === Number(toQuantity)) return `${fromQuantity} pzas.`
+  return `${fromQuantity} a ${toQuantity} pzas.`
+}
+
+function formatCartScaleDiscount(value) {
+  const numberValue = Number(value || 0)
+  const formattedValue = Number.isInteger(numberValue)
+    ? String(numberValue)
+    : numberValue.toFixed(2)
+
+  return `${formattedValue}% OFF`
+}
+
+function buildNextScaleMessage(nextScale, currentQuantity) {
+  const missingQuantity = Math.max(Number(nextScale.from_quantity || 0) - currentQuantity, 0)
+
+  if (missingQuantity <= 0) {
+    return `Siguiente escala: ${formatCartScaleDiscount(nextScale.discount_percentage)}.`
+  }
+
+  return `Agrega ${missingQuantity} pza(s) más para ${formatCartScaleDiscount(
+    nextScale.discount_percentage
+  )}.`
 }
 
 export default CartPage

@@ -188,6 +188,30 @@
   color: #16a34a;
 }
 
+.product-card__stock {
+  margin-top: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+  padding: 7px 8px;
+}
+
+.product-card__stock--in_stock {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.product-card__stock--low_stock {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.product-card__stock--out_of_stock {
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
 .product-card__add-to-cart {
   width: 100%;
   height: 42px;

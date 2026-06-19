@@ -1,12 +1,16 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 import SearchBar from "../SearchBar/SearchBar"
+import InlineSettingEditor from "../InlineSettingEditor/InlineSettingEditor"
+import InlineLogoSettingEditor from "../InlineLogoSettingEditor/InlineLogoSettingEditor"
 import { useAuth } from "../../../context/AuthContext"
+import { useSettings } from "../../../context/SettingsContext"
 import { getCatalogSidebar } from "../../../services/api/productService"
 import { getCartSummary } from "../../../services/api/cartService"
 import "./header.css"
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
+const DEFAULT_NAV_TAGLINE = "Todo para tu negocio, al mejor precio y con entrega garantizada."
 
 const defaultCartSummary = {
   id: null,
@@ -23,7 +27,8 @@ const defaultCartSummary = {
 
 function Header() {
   const navigate = useNavigate()
-  const { isAuthenticated, user, logout } = useAuth()
+  const { isAuthenticated, isInternal, modules, user, logout } = useAuth()
+  const { settings, loading: settingsLoading, brandName, logoUrl, updateLocalSetting } = useSettings()
 
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -31,10 +36,15 @@ function Header() {
   const [categories, setCategories] = useState([])
   const [categoriesLoading, setCategoriesLoading] = useState(true)
   const [cartSummary, setCartSummary] = useState(defaultCartSummary)
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState("")
 
   const displayName = user?.name ? user.name.split(" ")[0] : ""
   const profileName = user?.name ? user.name.toUpperCase() : ""
   const avatarLetter = user?.name ? user.name.charAt(0).toUpperCase() : ""
+  const navTitle = settings.nav_title?.title || DEFAULT_NAV_TAGLINE
+  const canEditNavTitle = isAuthenticated && isInternal && hasModule(modules, "configuracion_ecommerce")
+  const canEditGeneralLogo = canEditNavTitle
+  const visibleLogoUrl = logoPreviewUrl || logoUrl
 
   const readStoredCartSummary = () => {
     try {
@@ -183,13 +193,27 @@ function Header() {
     <header className="header">
       <div className="header-top container-main">
         <div className="header-logo">
-          <Link to="/" onClick={closeMobileMenu}>
-            <img
-              src="https://www.pidefacilraul.com/cms/wp-content/uploads/2020/09/CC-175-PIDEFaCIL-LOGO-HORIZONTAL-e1724443779289.png"
-              alt="PideFacilRaul"
-              className="logo-img"
-            />
-          </Link>
+          {settingsLoading ? (
+            <span className="header-logo__skeleton" aria-hidden="true" />
+          ) : (
+            <>
+              <Link to="/" onClick={closeMobileMenu}>
+                {visibleLogoUrl ? (
+                  <img src={visibleLogoUrl} alt={brandName} className="logo-img" />
+                ) : (
+                  <span className="header-logo__text">{brandName}</span>
+                )}
+              </Link>
+              <InlineLogoSettingEditor
+                canEdit={canEditGeneralLogo}
+                onPreviewChange={setLogoPreviewUrl}
+                onSaved={(logo) => {
+                  updateLocalSetting("general_logo", logo)
+                  updateLocalSetting("logo_url", logo.logo_url)
+                }}
+              />
+            </>
+          )}
         </div>
 
         <div className="header-search">
@@ -197,9 +221,19 @@ function Header() {
         </div>
 
         <div className="header-promo">
-          <span>
-            Todo para tu negocio, al mejor precio y con entrega garantizada.
-          </span>
+          {settingsLoading ? (
+            <span className="header-promo__skeleton" aria-hidden="true" />
+          ) : (
+            <InlineSettingEditor
+              settingKey="nav_title.title"
+              value={navTitle}
+              canEdit={canEditNavTitle}
+              onSaved={(value) => updateLocalSetting("nav_title.title", value)}
+              className="inline-setting-editor--wrap"
+              inputLabel="Editar mensaje del nav"
+              allowEmpty
+            />
+          )}
         </div>
 
         <button
@@ -325,7 +359,7 @@ function Header() {
                       closeMobileMenu()
                     }}
                   >
-                    Compras
+                    Mis pedidos
                   </Link>
 
                   <hr className="header-profile-divider" />
@@ -339,28 +373,6 @@ function Header() {
                     }}
                   >
                     Listas
-                  </Link>
-
-                  <Link
-                    to="/credito"
-                    className="header-profile-item"
-                    onClick={() => {
-                      setIsProfileOpen(false)
-                      closeMobileMenu()
-                    }}
-                  >
-                    Crédito
-                  </Link>
-
-                  <Link
-                    to="/pedido-frecuente"
-                    className="header-profile-item"
-                    onClick={() => {
-                      setIsProfileOpen(false)
-                      closeMobileMenu()
-                    }}
-                  >
-                    Pedido frecuente
                   </Link>
 
                   <hr className="header-profile-divider" />
@@ -429,6 +441,13 @@ function Header() {
 
 export default Header
 
+function hasModule(modules = [], moduleName) {
+  return Array.isArray(modules) && modules.some((module) => {
+    if (typeof module === "string") return module === moduleName
+    return module?.name === moduleName || module?.module === moduleName
+  })
+}
+
 function normalizeTaxBreakdown(taxBreakdown) {
   const items = Array.isArray(taxBreakdown?.items) ? taxBreakdown.items : []
 
@@ -437,7 +456,6 @@ function normalizeTaxBreakdown(taxBreakdown) {
     items: items.filter(Boolean).map((item) => ({
       cart_item_id: item.cart_item_id ?? item.id ?? null,
       product_id: item.product_id ?? null,
-      microsip_id: item.microsip_id ?? "",
       taxable_base: Number(item.taxable_base ?? 0),
       tax_amount: Number(item.tax_amount ?? item.tax ?? 0),
       taxes: Array.isArray(item.taxes)

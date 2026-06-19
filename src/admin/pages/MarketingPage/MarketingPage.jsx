@@ -21,13 +21,24 @@ import {
   toggleAdminMonthlyPromotion,
   updateAdminMonthlyPromotion,
 } from "../../../services/api/monthlyPromotionsService.js"
+import {
+  createAdminBrandBanner,
+  deleteAdminBrandBanner,
+  getAdminBrandBanner,
+  getAdminBrandBanners,
+  reorderAdminBrandBanners,
+  toggleAdminBrandBanner,
+  updateAdminBrandBanner,
+} from "../../../services/api/brandBannerService.js"
 import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast.js"
 import "./MarketingPage.css"
 
 const MONTHLY_PROMOTIONS_SECTION = "monthly_promotions"
+const BRAND_BANNERS_SECTION = "brand_banners"
 
 const BANNER_SECTIONS = [
   { value: "home", label: "Banners Inicio" },
+  { value: BRAND_BANNERS_SECTION, label: "Banner de marcas" },
   { value: MONTHLY_PROMOTIONS_SECTION, label: "Banner promociones" },
 ]
 
@@ -56,7 +67,11 @@ function MarketingPage() {
   const [panelLoading, setPanelLoading] = useState(false)
   const [editingBannerId, setEditingBannerId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [inlineBrandEdits, setInlineBrandEdits] = useState({})
+  const [brandLinkEditingId, setBrandLinkEditingId] = useState(null)
+  const [draggingId, setDraggingId] = useState(null)
   const isMonthlyPromotionsSection = activeSection === MONTHLY_PROMOTIONS_SECTION
+  const isBrandBannersSection = activeSection === BRAND_BANNERS_SECTION
 
   const activeSectionLabel = useMemo(() => {
     return BANNER_SECTIONS.find((item) => item.value === activeSection)?.label || "Banners"
@@ -67,10 +82,16 @@ function MarketingPage() {
       return [...monthlyPromotions].sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
     }
 
+    if (isBrandBannersSection) {
+      return banners
+        .filter((banner) => getBannerSection(banner) === BRAND_BANNERS_SECTION)
+        .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
+    }
+
     return banners
       .filter((banner) => getBannerSection(banner) === activeSection)
       .sort((a, b) => Number(a.sort_order ?? 0) - Number(b.sort_order ?? 0))
-  }, [activeSection, banners, isMonthlyPromotionsSection, monthlyPromotions])
+  }, [activeSection, banners, isBrandBannersSection, isMonthlyPromotionsSection, monthlyPromotions])
 
   const selectedFiles = useMemo(() => {
     return Array.from(form.files || [])
@@ -87,12 +108,24 @@ function MarketingPage() {
   const loadBanners = useCallback(async (section) => {
     try {
       setLoading(true)
-      const response = await getAdminBanners({ without_pagination: true })
+      const response = section === BRAND_BANNERS_SECTION
+        ? await getAdminBrandBanners({ without_pagination: true })
+        : await getAdminBanners({ without_pagination: true })
       const nextBanners = normalizeCollectionResponse(response)
+      const normalizedBanners = section === BRAND_BANNERS_SECTION
+        ? nextBanners.map((banner) => ({
+          ...banner,
+          metadata: {
+            ...(banner.metadata || {}),
+            section: BRAND_BANNERS_SECTION,
+            section_label: "Banner de marcas",
+          },
+        }))
+        : nextBanners
 
       setBanners((prev) => {
         const otherSections = prev.filter((banner) => getBannerSection(banner) !== section)
-        return [...otherSections, ...nextBanners.filter((banner) => getBannerSection(banner) === section)]
+        return [...otherSections, ...normalizedBanners.filter((banner) => getBannerSection(banner) === section)]
       })
       setLoadedSections((prev) => ({ ...prev, [section]: true }))
     } catch (error) {
@@ -154,11 +187,13 @@ function MarketingPage() {
 
       const response = isMonthlyPromotionsSection
         ? await getAdminMonthlyPromotion(item.id)
-        : await getAdminBanner(item.id)
+        : isBrandBannersSection
+          ? await getAdminBrandBanner(item.id)
+          : await getAdminBanner(item.id)
       const detail = response?.data || response || item
 
       setForm({
-        title: detail.title || detail.name || "",
+        title: detail.title || detail.brand_name || detail.name || "",
         subtitle: detail.subtitle || "",
         description: detail.description || "",
         button_text: detail.button_text || detail.buttonText || "",
@@ -196,8 +231,95 @@ function MarketingPage() {
     }))
   }
 
+  function setInlineBrandEdit(id, field, value) {
+    setInlineBrandEdits((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  function getInlineBrandValue(item, field) {
+    const edits = inlineBrandEdits[item.id] || {}
+
+    if (Object.prototype.hasOwnProperty.call(edits, field)) return edits[field]
+
+    if (field === "title") return getBannerTitle(item) === `Banner #${item.id}` ? "" : getBannerTitle(item)
+    if (field === "link_url") return getBannerLink(item)
+    if (field === "starts_at" || field === "ends_at") return toDateTimeLocalValue(item[field])
+
+    return item[field] || ""
+  }
+
+  async function saveInlineBrandField(item, field, value) {
+    const normalizedValue = field === "starts_at" || field === "ends_at" ? toApiDateTime(value) : value
+    const currentValue = field === "starts_at" || field === "ends_at"
+      ? toApiDateTime(toDateTimeLocalValue(item[field]))
+      : field === "link_url"
+        ? getBannerLink(item)
+        : field === "title"
+          ? (getBannerTitle(item) === `Banner #${item.id}` ? "" : getBannerTitle(item))
+          : item[field] || ""
+
+    if (String(normalizedValue || "") === String(currentValue || "")) return
+
+    try {
+      setActionLoadingId(item.id)
+      await updateAdminBrandBanner(item.id, { [field]: normalizedValue })
+      setBanners((prev) => prev.map((banner) => {
+        if (banner.id !== item.id) return banner
+        return {
+          ...banner,
+          [field]: normalizedValue,
+          ...(field === "title" ? { brand_name: normalizedValue } : {}),
+        }
+      }))
+      notifySuccess("Banner de marcas actualizado.")
+      await loadActiveSection()
+    } catch (error) {
+      console.error("Error al actualizar banner de marca:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible actualizar el banner de marca.")
+      setInlineBrandEdit(item.id, field, getInlineBrandValue(item, field))
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  function handleInlineBrandKeyDown(event, item, field) {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      saveInlineBrandField(item, field, event.currentTarget.value)
+      if (field === "link_url") setBrandLinkEditingId(null)
+    }
+  }
+
   function buildPayload(file = null) {
     const payload = new FormData()
+
+    if (isBrandBannersSection) {
+      if (editingBannerId) {
+        if (file) {
+          payload.append("media", file)
+          payload.append("media_type", getMediaTypeFromMime(file.type))
+        }
+        return payload
+      }
+
+      payload.append("title", "")
+      payload.append("description", "")
+      payload.append("button_text", "")
+      payload.append("link_url", "")
+      payload.append("is_active", "1")
+      payload.append("subtitle", "")
+      payload.append("brand_name", "")
+      if (file) {
+        payload.append("media", file)
+        payload.append("media_type", getMediaTypeFromMime(file.type))
+      }
+      return payload
+    }
 
     payload.append("title", form.title.trim())
     payload.append("description", form.description.trim())
@@ -229,8 +351,13 @@ function MarketingPage() {
   }
 
   function validateBeforeSubmit() {
-    if (!form.title.trim()) {
+    if (isMonthlyPromotionsSection && !form.title.trim()) {
       notifyWarning("Escribe un nombre para identificar el elemento.")
+      return false
+    }
+
+    if (isBrandBannersSection && editingBannerId && selectedFiles.length === 0) {
+      notifyWarning("Selecciona una imagen o video para reemplazar el banner de marca.")
       return false
     }
 
@@ -238,7 +365,9 @@ function MarketingPage() {
       notifyWarning(
         isMonthlyPromotionsSection
           ? "Selecciona una imagen para la promoción."
-          : "Selecciona al menos una imagen o video."
+          : isBrandBannersSection
+            ? "Selecciona una o varias imágenes/videos."
+            : "Selecciona al menos una imagen o video."
       )
       return false
     }
@@ -269,6 +398,16 @@ function MarketingPage() {
       } else if (isMonthlyPromotionsSection) {
         await createAdminMonthlyPromotion(buildPayload(selectedFiles[0] || null))
         notifySuccess("Promoción del mes creada correctamente.")
+      } else if (isBrandBannersSection && editingBannerId) {
+        await updateAdminBrandBanner(editingBannerId, buildPayload(selectedFiles[0] || null))
+        notifySuccess("Banner de marcas actualizado correctamente.")
+      } else if (isBrandBannersSection) {
+        await Promise.all(selectedFiles.map((file) => createAdminBrandBanner(buildPayload(file))))
+        notifySuccess(
+          selectedFiles.length > 1
+            ? "Banners de marcas creados correctamente."
+            : "Banner de marcas creado correctamente."
+        )
       } else if (editingBannerId) {
         await updateAdminBanner(editingBannerId, buildPayload(selectedFiles[0] || null))
         notifySuccess("Banner actualizado correctamente.")
@@ -296,6 +435,8 @@ function MarketingPage() {
       setActionLoadingId(item.id)
       if (isMonthlyPromotionsSection) {
         await toggleAdminMonthlyPromotion(item.id)
+      } else if (isBrandBannersSection) {
+        await toggleAdminBrandBanner(item.id)
       } else {
         await toggleAdminBanner(item.id)
       }
@@ -317,6 +458,8 @@ function MarketingPage() {
       setActionLoadingId(item.id)
       if (isMonthlyPromotionsSection) {
         await deleteAdminMonthlyPromotion(item.id)
+      } else if (isBrandBannersSection) {
+        await deleteAdminBrandBanner(item.id)
       } else {
         await deleteAdminBanner(item.id)
       }
@@ -341,9 +484,14 @@ function MarketingPage() {
     reordered.splice(nextIndex, 0, moved)
 
     const orderedItems = reordered.map((currentItem, index) => ({
-        ...currentItem,
-        sort_order: index + 1,
-      }))
+      ...currentItem,
+      sort_order: index + 1,
+    }))
+
+    await persistOrder(orderedItems, item.id)
+  }
+
+  async function persistOrder(orderedItems, loadingId = null) {
     const nextPayload = isMonthlyPromotionsSection
       ? {
         monthly_promotions: orderedItems.map((currentItem) => ({
@@ -351,6 +499,13 @@ function MarketingPage() {
           sort_order: currentItem.sort_order,
         })),
       }
+      : isBrandBannersSection
+        ? {
+          banners: orderedItems.map((currentItem) => ({
+            id: currentItem.id,
+            sort_order: currentItem.sort_order,
+          })),
+        }
       : {
         banners: orderedItems.map((currentItem) => ({
           id: currentItem.id,
@@ -359,10 +514,16 @@ function MarketingPage() {
       }
 
     try {
-      setActionLoadingId(item.id)
+      setActionLoadingId(loadingId)
       if (isMonthlyPromotionsSection) {
         setMonthlyPromotions(orderedItems)
         await reorderAdminMonthlyPromotions(nextPayload)
+      } else if (isBrandBannersSection) {
+        setBanners((prev) => {
+          const otherSections = prev.filter((currentItem) => getBannerSection(currentItem) !== BRAND_BANNERS_SECTION)
+          return [...otherSections, ...orderedItems]
+        })
+        await reorderAdminBrandBanners(nextPayload)
       } else {
         setBanners((prev) => {
           const otherSections = prev.filter((currentItem) => getBannerSection(currentItem) !== activeSection)
@@ -381,9 +542,45 @@ function MarketingPage() {
     }
   }
 
+  function handleDragStart(item) {
+    if (!isBrandBannersSection) return
+    setDraggingId(item.id)
+  }
+
+  function handleDragOver(event) {
+    if (!isBrandBannersSection) return
+    event.preventDefault()
+  }
+
+  async function handleDropBanner(targetItem) {
+    if (!isBrandBannersSection || !draggingId || draggingId === targetItem.id) {
+      setDraggingId(null)
+      return
+    }
+
+    const fromIndex = currentItems.findIndex((item) => item.id === draggingId)
+    const toIndex = currentItems.findIndex((item) => item.id === targetItem.id)
+
+    if (fromIndex < 0 || toIndex < 0) {
+      setDraggingId(null)
+      return
+    }
+
+    const reordered = [...currentItems]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+    const orderedItems = reordered.map((item, index) => ({
+      ...item,
+      sort_order: index + 1,
+    }))
+
+    setDraggingId(null)
+    await persistOrder(orderedItems, moved.id)
+  }
+
   const rightActions = (
     <button type="button" className="marketing-button marketing-button--primary" onClick={openCreatePanel}>
-      {isMonthlyPromotionsSection ? "Nueva promoción" : "Nuevo banner"}
+      {isMonthlyPromotionsSection ? "Nueva promoción" : isBrandBannersSection ? "Subir banners" : "Nuevo banner"}
     </button>
   )
 
@@ -449,22 +646,54 @@ function MarketingPage() {
                   </tr>
                 ) : (
                   currentItems.map((banner, index) => (
-                    <tr key={banner.id}>
+                    <tr
+                      key={banner.id}
+                      draggable={isBrandBannersSection}
+                      className={draggingId === banner.id ? "is-dragging" : ""}
+                      onDragStart={() => handleDragStart(banner)}
+                      onDragOver={handleDragOver}
+                      onDragEnd={() => setDraggingId(null)}
+                      onDrop={() => handleDropBanner(banner)}
+                    >
                       <td>
                         <BannerPreview banner={banner} />
                       </td>
                       <td>
-                        <div className="marketing-page__banner-info">
-                          <strong>{getBannerTitle(banner)}</strong>
-                          <span>{getBannerSubtitle(banner) || "Sin descripción"}</span>
-                          {getBannerLink(banner) ? <small>{getBannerLink(banner)}</small> : null}
-                        </div>
+                        {isBrandBannersSection ? (
+                          <BrandBannerInlineInfo
+                            banner={banner}
+                            valueGetter={getInlineBrandValue}
+                            onChange={setInlineBrandEdit}
+                            onSave={saveInlineBrandField}
+                            onKeyDown={handleInlineBrandKeyDown}
+                            linkEditingId={brandLinkEditingId}
+                            setLinkEditingId={setBrandLinkEditingId}
+                            disabled={actionLoadingId === banner.id}
+                          />
+                        ) : (
+                          <div className="marketing-page__banner-info">
+                            <strong>{getBannerTitle(banner)}</strong>
+                            <span>{getBannerSubtitle(banner) || "Sin descripción"}</span>
+                            {getBannerLink(banner) ? <small>{getBannerLink(banner)}</small> : null}
+                          </div>
+                        )}
                       </td>
                       <td>
-                        <div className="marketing-page__dates">
-                          <span>Inicio: {formatDateTime(banner.starts_at)}</span>
-                          <span>Fin: {formatDateTime(banner.ends_at)}</span>
-                        </div>
+                        {isBrandBannersSection ? (
+                          <BrandBannerInlineDates
+                            banner={banner}
+                            valueGetter={getInlineBrandValue}
+                            onChange={setInlineBrandEdit}
+                            onSave={saveInlineBrandField}
+                            onKeyDown={handleInlineBrandKeyDown}
+                            disabled={actionLoadingId === banner.id}
+                          />
+                        ) : (
+                          <div className="marketing-page__dates">
+                            <span>Inicio: {formatDateTime(banner.starts_at)}</span>
+                            <span>Fin: {formatDateTime(banner.ends_at)}</span>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div className="marketing-page__order-actions">
@@ -528,10 +757,18 @@ function MarketingPage() {
         isOpen={panelOpen}
         title={
           editingBannerId
-            ? isMonthlyPromotionsSection ? "Editar promoción" : "Editar banner"
-            : isMonthlyPromotionsSection ? "Nueva promoción" : "Nuevo banner"
+            ? isBrandBannersSection
+              ? "Reemplazar banner de marca"
+              : isMonthlyPromotionsSection ? "Editar promoción" : "Editar banner"
+            : isBrandBannersSection
+              ? "Subir banners de marcas"
+              : isMonthlyPromotionsSection ? "Nueva promoción" : "Nuevo banner"
         }
-        subtitle={`${activeSectionLabel} · ${isMonthlyPromotionsSection ? "imagen" : "imagen o video"}`}
+        subtitle={
+          isBrandBannersSection
+            ? "Banner de marcas · archivos"
+            : `${activeSectionLabel} · ${isMonthlyPromotionsSection ? "imagen" : "imagen o video"}`
+        }
         onClose={closePanel}
         closeDisabled={saving}
         width="lg"
@@ -553,8 +790,10 @@ function MarketingPage() {
             >
               {saving
                 ? "Guardando..."
-                : editingBannerId
-                  ? "Guardar cambios"
+                : isBrandBannersSection
+                  ? editingBannerId ? "Subir reemplazo" : "Subir"
+                  : editingBannerId
+                    ? "Guardar cambios"
                   : isMonthlyPromotionsSection ? "Crear promoción" : "Crear banner"}
             </button>
           </div>
@@ -564,73 +803,75 @@ function MarketingPage() {
           <div className="marketing-panel__loading">Cargando banner...</div>
         ) : (
           <form id="marketing-banner-form" className="marketing-panel" onSubmit={handleSubmit}>
-            <section className="marketing-panel__card">
-              <h4>Contenido</h4>
+            {!isBrandBannersSection ? (
+              <section className="marketing-panel__card">
+                <h4>Contenido</h4>
 
-              <div className="marketing-panel__grid">
-                <label className="marketing-panel__field">
-                  <span>Nombre</span>
-                  <input
-                    type="text"
-                    name="title"
-                    value={form.title}
-                    onChange={handleChange}
-                    placeholder={isMonthlyPromotionsSection ? "Ej. Promociones de abril" : "Ej. Banner principal de inicio"}
-                  />
-                </label>
+                <div className="marketing-panel__grid">
+                  <label className="marketing-panel__field">
+                    <span>Nombre</span>
+                    <input
+                      type="text"
+                      name="title"
+                      value={form.title}
+                      onChange={handleChange}
+                      placeholder={isMonthlyPromotionsSection ? "Ej. Promociones de abril" : "Ej. Banner principal de inicio"}
+                    />
+                  </label>
+
+                  <label className="marketing-panel__field">
+                    <span>Botón</span>
+                    <input
+                      type="text"
+                      name="button_text"
+                      value={form.button_text}
+                      onChange={handleChange}
+                      placeholder="Ej. Comprar ahora"
+                    />
+                  </label>
+                </div>
+
+                {!isMonthlyPromotionsSection ? (
+                  <label className="marketing-panel__field">
+                    <span>Subtítulo</span>
+                    <textarea
+                      name="subtitle"
+                      value={form.subtitle}
+                      onChange={handleChange}
+                      placeholder="Texto breve para identificar o acompañar el banner."
+                    />
+                  </label>
+                ) : null}
 
                 <label className="marketing-panel__field">
-                  <span>Botón</span>
-                  <input
-                    type="text"
-                    name="button_text"
-                    value={form.button_text}
-                    onChange={handleChange}
-                    placeholder="Ej. Comprar ahora"
-                  />
-                </label>
-              </div>
-
-              {!isMonthlyPromotionsSection ? (
-                <label className="marketing-panel__field">
-                  <span>Subtítulo</span>
+                  <span>Descripción</span>
                   <textarea
-                    name="subtitle"
-                    value={form.subtitle}
+                    name="description"
+                    value={form.description}
                     onChange={handleChange}
-                    placeholder="Texto breve para identificar o acompañar el banner."
+                    placeholder={
+                      isMonthlyPromotionsSection
+                        ? "Ahorra en productos seleccionados durante este mes."
+                        : "Descripción extendida opcional para el banner."
+                    }
                   />
                 </label>
-              ) : null}
 
-              <label className="marketing-panel__field">
-                <span>Descripción</span>
-                <textarea
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  placeholder={
-                    isMonthlyPromotionsSection
-                      ? "Ahorra en productos seleccionados durante este mes."
-                      : "Descripción extendida opcional para el banner."
-                  }
-                />
-              </label>
-
-              <label className="marketing-panel__field">
-                <span>Enlace</span>
-                <input
-                  type="text"
-                  name="link_url"
-                  value={form.link_url}
-                  onChange={handleChange}
-                  placeholder="/productos, /promociones o URL completa"
-                />
-              </label>
-            </section>
+                <label className="marketing-panel__field">
+                  <span>Enlace</span>
+                  <input
+                    type="text"
+                    name="link_url"
+                    value={form.link_url}
+                    onChange={handleChange}
+                    placeholder="/productos, /promociones o URL completa"
+                  />
+                </label>
+              </section>
+            ) : null}
 
             <section className="marketing-panel__card">
-              <h4>Archivo</h4>
+              <h4>{isBrandBannersSection ? "Archivos" : "Archivo"}</h4>
 
               <label className="marketing-panel__dropzone">
                 <input
@@ -641,14 +882,18 @@ function MarketingPage() {
                   onChange={handleChange}
                 />
                 <strong>
-                  {editingBannerId
-                    ? "Selecciona un archivo para reemplazar el actual"
-                    : isMonthlyPromotionsSection
-                      ? "Selecciona una imagen"
-                      : "Selecciona una o varias imágenes/videos"}
+                  {isBrandBannersSection
+                    ? editingBannerId ? "Selecciona una imagen o video" : "Selecciona una o varias imágenes/videos"
+                    : editingBannerId
+                      ? "Selecciona un archivo para reemplazar el actual"
+                      : isMonthlyPromotionsSection
+                        ? "Selecciona una imagen"
+                        : "Selecciona una o varias imágenes/videos"}
                 </strong>
                 <span>
-                  {isMonthlyPromotionsSection
+                  {isBrandBannersSection
+                    ? "Puedes subir varias imágenes o videos y acomodarlos después en el listado."
+                    : isMonthlyPromotionsSection
                     ? "Formato de imagen compatible con el navegador."
                     : "Formatos de imagen o video compatibles con el navegador."}
                 </span>
@@ -670,6 +915,7 @@ function MarketingPage() {
               ) : null}
             </section>
 
+            {!isBrandBannersSection ? (
             <section className="marketing-panel__card">
               <h4>Publicación</h4>
 
@@ -719,10 +965,105 @@ function MarketingPage() {
                 </label>
               </div>
             </section>
+            ) : null}
           </form>
         )}
       </AdminSidePanel>
     </>
+  )
+}
+
+function BrandBannerInlineInfo({
+  banner,
+  valueGetter,
+  onChange,
+  onSave,
+  onKeyDown,
+  linkEditingId,
+  setLinkEditingId,
+  disabled,
+}) {
+  const titleValue = valueGetter(banner, "title")
+  const linkValue = valueGetter(banner, "link_url")
+  const isEditingLink = linkEditingId === banner.id
+
+  return (
+    <div className="marketing-page__banner-info marketing-page__banner-info--inline">
+      <label className="marketing-inline-field">
+        <span>Nombre</span>
+        <input
+          type="text"
+          value={titleValue}
+          onChange={(event) => onChange(banner.id, "title", event.target.value)}
+          onKeyDown={(event) => onKeyDown(event, banner, "title")}
+          onBlur={(event) => onSave(banner, "title", event.target.value)}
+          disabled={disabled}
+          placeholder="Sin nombre"
+        />
+      </label>
+
+      <div className="marketing-inline-link">
+        {isEditingLink ? (
+          <input
+            type="text"
+            value={linkValue}
+            onChange={(event) => onChange(banner.id, "link_url", event.target.value)}
+            onKeyDown={(event) => onKeyDown(event, banner, "link_url")}
+            onBlur={(event) => {
+              onSave(banner, "link_url", event.target.value)
+              setLinkEditingId(null)
+            }}
+            disabled={disabled}
+            placeholder="/productos"
+            autoFocus
+          />
+        ) : (
+          <>
+            <small>{linkValue || "Sin enlace"}</small>
+            <button
+              type="button"
+              className="marketing-inline-icon-button"
+              onClick={() => setLinkEditingId(banner.id)}
+              disabled={disabled}
+              title="Editar enlace"
+              aria-label="Editar enlace"
+            >
+              <i className="bi bi-link-45deg" aria-hidden="true" />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BrandBannerInlineDates({ banner, valueGetter, onChange, onSave, onKeyDown, disabled }) {
+  return (
+    <div className="marketing-page__dates marketing-page__dates--inline">
+      <label className="marketing-inline-field">
+        <span>Inicio</span>
+        <input
+          type="datetime-local"
+          value={valueGetter(banner, "starts_at")}
+          onChange={(event) => onChange(banner.id, "starts_at", event.target.value)}
+          onKeyDown={(event) => onKeyDown(event, banner, "starts_at")}
+          onBlur={(event) => onSave(banner, "starts_at", event.target.value)}
+          disabled={disabled}
+        />
+      </label>
+
+      <label className="marketing-inline-field">
+        <span>Fin</span>
+        <input
+          type="datetime-local"
+          value={valueGetter(banner, "ends_at")}
+          onChange={(event) => onChange(banner.id, "ends_at", event.target.value)}
+          onKeyDown={(event) => onKeyDown(event, banner, "ends_at")}
+          onBlur={(event) => onSave(banner, "ends_at", event.target.value)}
+          disabled={disabled}
+        />
+      </label>
+    </div>
   )
 }
 
@@ -751,6 +1092,10 @@ function normalizeCollectionResponse(response) {
   if (Array.isArray(payload)) return payload
   if (Array.isArray(payload?.data)) return payload.data
   if (Array.isArray(payload?.banners)) return payload.banners
+  if (Array.isArray(payload?.brand_banners)) return payload.brand_banners
+  if (Array.isArray(payload?.brandBanners)) return payload.brandBanners
+  if (Array.isArray(payload?.monthly_promotions)) return payload.monthly_promotions
+  if (Array.isArray(payload?.monthlyPromotions)) return payload.monthlyPromotions
 
   return []
 }
@@ -763,7 +1108,7 @@ function getBannerSection(banner) {
 }
 
 function getBannerTitle(banner) {
-  return banner.title || banner.name || `Banner #${banner.id}`
+  return banner.title || banner.brand_name || banner.name || `Banner #${banner.id}`
 }
 
 function getBannerSubtitle(banner) {

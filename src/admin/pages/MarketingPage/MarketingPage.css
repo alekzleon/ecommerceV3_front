@@ -107,6 +107,15 @@
   background: #fcfdff;
 }
 
+.marketing-page__table tbody tr[draggable="true"] {
+  cursor: grab;
+}
+
+.marketing-page__table tbody tr.is-dragging td {
+  background: #f1f5f9;
+  opacity: 0.72;
+}
+
 .marketing-page__preview {
   width: 132px;
   height: 76px;
@@ -155,6 +164,78 @@
   word-break: break-word;
 }
 
+.marketing-page__banner-info--inline {
+  gap: 0.55rem;
+}
+
+.marketing-inline-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.marketing-inline-field span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.marketing-inline-field input,
+.marketing-inline-link input {
+  width: 100%;
+  border: 1px solid #d6dee8;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.8rem;
+  min-height: 34px;
+  padding: 0.45rem 0.55rem;
+  outline: none;
+}
+
+.marketing-inline-field input:focus,
+.marketing-inline-link input:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.15);
+}
+
+.marketing-inline-field input:disabled,
+.marketing-inline-link input:disabled {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
+.marketing-inline-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.marketing-inline-link small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketing-inline-icon-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #13426b;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.marketing-inline-icon-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .marketing-page__dates {
   display: flex;
   flex-direction: column;
@@ -162,6 +243,10 @@
   min-width: 160px;
   color: #475569;
   font-size: 0.78rem;
+}
+
+.marketing-page__dates--inline {
+  min-width: 220px;
 }
 
 .marketing-page__order-actions {

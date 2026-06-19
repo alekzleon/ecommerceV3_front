@@ -11,8 +11,8 @@ function TermsPage() {
             Este contrato describe los términos y condiciones generales (en adelante
             únicamente <strong>“TÉRMINOS Y CONDICIONES”</strong>) aplicables al uso de los
             contenidos, productos y servicios ofrecidos a través del sitio web{" "}
-            <strong>www.pidefacilraul.com</strong> (en adelante <strong>“SITIO WEB”</strong>),
-            del cual es titular <strong>Pidefácil Raúl</strong> (en adelante,{" "}
+            <strong>el sitio web</strong> (en adelante <strong>“SITIO WEB”</strong>),
+            del cual es titular <strong>la tienda</strong> (en adelante,{" "}
             <strong>“TITULAR”</strong>) quién tiene su domicilio establecido en Jalisco,
             en la siguiente dirección:
           </p>
@@ -37,14 +37,14 @@ function TermsPage() {
             El objeto de los presentes <strong>TÉRMINOS Y CONDICIONES</strong> es regular
             el acceso y la utilización del <strong>SITIO WEB</strong>, entendido por este
             cualquier tipo de contenido, producto o servicio que se encuentre a disposición
-            del público en general dentro del dominio: <strong>www.pidefacilraul.com</strong>.
+            del público en general dentro del dominio: <strong>el sitio web</strong>.
           </p>
 
           <p>
             El <strong>TITULAR</strong> se reserva la facultad de modificar en cualquier
             momento y sin previo aviso, la presentación de los contenidos, la funcionalidad,
             los productos y la configuración que pudiera estar contenida en el sitio web;
-            en este sentido, el Usuario reconoce y acepta que <strong>Pidefácil Raúl</strong>
+            en este sentido, el Usuario reconoce y acepta que <strong>la tienda</strong>
             en cualquier momento podrá interrumpir, desactivar o cancelar cualquiera de los
             elementos que conforman el <strong>SITIO WEB</strong> o el acceso a los mismos.
           </p>
@@ -64,13 +64,13 @@ function TermsPage() {
             El acceso a parte de los contenidos y servicios del <strong>SITIO WEB</strong>
             podrá realizarse previa suscripción o registro previo del <strong>USUARIO</strong>.
             El <strong>SITIO WEB</strong> se encuentra dirigido principalmente a usuarios
-            residentes de la República Mexicana, por lo cual <strong>Pidefácil Raúl</strong>
+            residentes de la República Mexicana, por lo cual <strong>la tienda</strong>
             no asegura que el <strong>SITIO WEB</strong> cumpla total o parcialmente con la
             legislación de otros países, de forma que, si el <strong>USUARIO</strong> reside
             o tiene domicilio establecido en otro país y decide acceder al <strong>SITIO WEB</strong>,
             lo hará bajo su propia responsabilidad y deberá asegurarse de que tal acceso y
             navegación cumple con la legislación local que le es aplicable, no asumiendo
-            <strong>Pidefácil Raúl</strong> ninguna responsabilidad que se pueda derivar de dicho acto.
+            <strong>la tienda</strong> ninguna responsabilidad que se pueda derivar de dicho acto.
           </p>
 
           <p>
@@ -135,11 +135,11 @@ function TermsPage() {
             los contenidos, productos o servicios ofrecidos a través del <strong>SITIO WEB</strong>,
             no obstante, el <strong>TITULAR</strong> llevará a cabo las acciones que de acuerdo con sus
             posibilidades le permitan mantener el buen funcionamiento del <strong>SITIO WEB</strong>,
-            sin que esto suponga alguna responsabilidad por parte de <strong>Pidefácil Raúl</strong>.
+            sin que esto suponga alguna responsabilidad por parte de <strong>la tienda</strong>.
           </p>
 
           <p>
-            De igual forma, <strong>Pidefácil Raúl</strong> no será responsable ni garantizará que el
+            De igual forma, <strong>la tienda</strong> no será responsable ni garantizará que el
             contenido o software al que pueda accederse a través del <strong>SITIO WEB</strong> se
             encuentre libre de errores, software malicioso o que pueda causar algún daño a nivel de
             software o hardware en el equipo a través del cual el <strong>USUARIO</strong> accede al
@@ -149,7 +149,7 @@ function TermsPage() {
           <p>
             El <strong>TITULAR</strong> tampoco se hace responsable de los daños totales o parciales que
             pudiesen ocasionarse por un uso inadecuado del <strong>SITIO WEB</strong>. En ningún caso,
-            <strong>Pidefácil Raúl</strong> será responsable por las pérdidas, daños o perjuicios de
+            <strong>la tienda</strong> será responsable por las pérdidas, daños o perjuicios de
             cualquier tipo que surjan por el sólo acceso o utilización del <strong>SITIO WEB</strong>.
           </p>
 
@@ -184,20 +184,20 @@ function TermsPage() {
           <p>
             El tratamiento de datos personales se limitará al cumplimiento de las finalidades previstas
             en el Aviso de Privacidad, el cual se encontrará disponible en la siguiente dirección
-            electrónica: <strong>www.pidefacilraul.com</strong>.
+            electrónica: <strong>el sitio web</strong>.
           </p>
 
           <p>
             El <strong>SITIO WEB</strong> podrá incluir hipervínculos o enlaces que permitan acceder a
-            páginas web de terceros distintos de <strong>Pidefácil Raúl</strong>. Los titulares de dichos
+            páginas web de terceros distintos de <strong>la tienda</strong>. Los titulares de dichos
             sitios web dispondrán de sus propias políticas de privacidad y protección de datos, por lo
-            cual <strong>Pidefácil Raúl</strong> no asume ningún tipo de responsabilidad por los datos
+            cual <strong>la tienda</strong> no asume ningún tipo de responsabilidad por los datos
             que sean facilitados por el <strong>USUARIO</strong> a través de cualquier sitio web distinto
-            a <strong>www.pidefacilraul.com</strong>.
+            a <strong>el sitio web</strong>.
           </p>
 
           <p>
-            <strong>Pidefácil Raúl</strong> se reserva el derecho a modificar su Política de Privacidad,
+            <strong>la tienda</strong> se reserva el derecho a modificar su Política de Privacidad,
             de acuerdo con sus necesidades o derivado de algún cambio en la legislación. El acceso o
             utilización del <strong>SITIO WEB</strong> después de dichos cambios implicará la aceptación
             de esos cambios.
@@ -240,21 +240,21 @@ function TermsPage() {
             La utilización de esos enlaces, contenidos, servicios o funciones tiene por objeto mejorar la
             experiencia del <strong>USUARIO</strong> al hacer uso del <strong>SITIO WEB</strong>, sin que
             pueda considerarse una sugerencia, recomendación o invitación para hacer uso de sitios externos.
-            <strong>Pidefácil Raúl</strong> en ningún caso revisará o controlará el contenido de los sitios
+            <strong>la tienda</strong> en ningún caso revisará o controlará el contenido de los sitios
             externos, ni garantizará su disponibilidad, exactitud, veracidad, calidad o legalidad.
           </p>
 
           <p>
             Así mismo, el <strong>TITULAR</strong> no asume ninguna responsabilidad por los daños y
             perjuicios que pudieran producirse por el acceso o uso de los contenidos, productos o servicios
-            disponibles en los sitios web no gestionados por <strong>Pidefácil Raúl</strong> a los que se
+            disponibles en los sitios web no gestionados por <strong>la tienda</strong> a los que se
             pueda acceder mediante el <strong>SITIO WEB</strong>.
           </p>
 
           <h2>VI. POLÍTICA EN MATERIA DE PROPIEDAD INTELECTUAL E INDUSTRIAL</h2>
 
           <p>
-            <strong>Pidefácil Raúl</strong>, por sí o como parte cesionaria, es titular de todos los
+            <strong>la tienda</strong>, por sí o como parte cesionaria, es titular de todos los
             derechos de propiedad intelectual e industrial del <strong>SITIO WEB</strong>, entendiendo por
             este el código fuente que hace posible su funcionamiento, así como las imágenes, archivos de
             audio o video, logotipos, marcas, combinaciones de colores, estructuras, diseños y demás
@@ -264,7 +264,7 @@ function TermsPage() {
           <p>
             Queda expresamente prohibida la reproducción, distribución o difusión de los contenidos del
             <strong> SITIO WEB</strong>, con fines comerciales, en cualquier soporte y por cualquier medio,
-            sin la autorización de <strong>Pidefácil Raúl</strong>.
+            sin la autorización de <strong>la tienda</strong>.
           </p>
 
           <p>
@@ -277,22 +277,22 @@ function TermsPage() {
           <p>
             En caso de que el <strong>USUARIO</strong> o algún tercero consideren que cualquiera de los
             contenidos del <strong>SITIO WEB</strong> suponga una violación de los derechos de propiedad
-            industrial o intelectual, deberá comunicarlo inmediatamente a <strong>Pidefácil Raúl</strong>
+            industrial o intelectual, deberá comunicarlo inmediatamente a <strong>la tienda</strong>
             a través de los datos de contacto disponibles en el propio <strong>SITIO WEB</strong> o por
-            medio de <strong>contacto@pidefacilraul.com</strong>.
+            medio de <strong>contacto.com</strong>.
           </p>
 
           <h2>VII. LEGISLACIÓN Y JURISDICCIÓN APLICABLE</h2>
 
           <p>
-            <strong>Pidefácil Raúl</strong> se reserva la facultad de presentar las acciones civiles o
+            <strong>la tienda</strong> se reserva la facultad de presentar las acciones civiles o
             penales que considere necesarias por la utilización indebida del <strong>SITIO WEB</strong>,
             sus contenidos, productos o servicios o por el incumplimiento de los presentes{" "}
             <strong>TÉRMINOS Y CONDICIONES</strong>.
           </p>
 
           <p>
-            La relación entre el <strong>USUARIO</strong> y <strong>Pidefácil Raúl</strong> se regirá por
+            La relación entre el <strong>USUARIO</strong> y <strong>la tienda</strong> se regirá por
             la legislación vigente en México, específicamente en Jalisco. De surgir cualquier controversia
             en relación con la interpretación o la aplicación de los presentes{" "}
             <strong>TÉRMINOS Y CONDICIONES</strong>, las partes se someterán a la jurisdicción ordinaria

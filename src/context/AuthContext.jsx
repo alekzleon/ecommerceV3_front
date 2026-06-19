@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { loginRequest, logoutRequest, meRequest } from "../services/api/authService"
+import { loginRequest, logoutRequest, meRequest, registerRequest } from "../services/api/authService"
 import {
   clearAuthSession,
   getAuthToken,
@@ -22,6 +22,21 @@ export function AuthProvider({ children }) {
       login,
       password,
       device_name,
+    })
+
+    setAuthSession(response.token, response.user)
+    setToken(response.token)
+    setUser(response.user)
+    setIsAuthenticated(true)
+    setSessionReady(true)
+
+    return response
+  }
+
+  const register = async (payload) => {
+    const response = await registerRequest({
+      ...payload,
+      device_name: payload.device_name || "react-web",
     })
 
     setAuthSession(response.token, response.user)
@@ -99,6 +114,7 @@ export function AuthProvider({ children }) {
       isInternal,
       sessionReady,
       login,
+      register,
       logout,
       refreshMe,
     }

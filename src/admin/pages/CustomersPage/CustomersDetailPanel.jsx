@@ -106,17 +106,6 @@ function CustomerDetailPanel({
 
             <div className="customer-detail-panel__grid customer-detail-panel__grid--4">
               <div>
-                <label className="form-label">ID Microsip</label>
-                <input
-                  type="text"
-                  name="profile.id_microsip"
-                  className="form-control"
-                  value={form.profile.id_microsip}
-                  onChange={onChange}
-                />
-              </div>
-
-              <div>
                 <label className="form-label">Estatus</label>
                 <select
                   name="profile.status"

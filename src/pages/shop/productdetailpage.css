@@ -219,6 +219,27 @@
   background: #7c3aed;
 }
 
+.product-detail__promo-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.product-detail__promo-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #13426b;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .product-detail__title {
   margin: 0 0 12px;
   font-size: 28px;
@@ -393,6 +414,31 @@
   padding: 5px 9px;
 }
 
+.product-detail__stock {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 10px;
+}
+
+.product-detail__stock--in_stock {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.product-detail__stock--low_stock {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.product-detail__stock--out_of_stock {
+  background: #fff1f2;
+  color: #b91c1c;
+}
+
 .product-detail__variants-box {
   margin-top: 18px;
   padding: 16px;
@@ -534,6 +580,36 @@
   margin-top: 1px;
 }
 
+.product-detail__promo-scales {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.product-detail__promo-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
+.product-detail__promo-scale span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.product-detail__promo-scale strong {
+  color: #13426b;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: right;
+}
+
 .product-detail__scale-table {
   display: flex;
   flex-direction: column;
@@ -552,6 +628,17 @@
 
 .product-detail__scale-row:last-child {
   border-bottom: none;
+}
+
+.product-detail__scale-row strong {
+  color: #13426b;
+  font-weight: 900;
+}
+
+.product-detail__scale-row small {
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
 }
 
 .product-detail__content-section {

@@ -176,7 +176,7 @@ function AccountAddressesPage() {
         ) : sortedAddresses.length === 0 ? (
           <div className="address_empty_state">
             <h2>No hay direcciones disponibles</h2>
-            <p>Las direcciones de entrega se sincronizan desde Microsip.</p>
+            <p>Agrega una dirección de entrega para poder completar tus pedidos.</p>
           </div>
         ) : (
           <section className="account_addresses_grid">
@@ -187,7 +187,7 @@ function AccountAddressesPage() {
                     {address.is_default ? (
                       <>
                         <span className="address_default_text">Predeterminada:</span>
-                        <span className="address_default_brand">PideFácil</span>
+                        <span className="address_default_brand">Tienda</span>
                       </>
                     ) : (
                       <span className="address_secondary_text">Dirección guardada</span>

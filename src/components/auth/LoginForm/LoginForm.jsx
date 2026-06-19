@@ -114,19 +114,12 @@ function LoginForm() {
 
   return (
     <div className="login-form">
-      <div className="login-form__header">
-        <h2 className="login-form__title">Iniciar sesión</h2>
-        <p className="login-form__subtitle">
-          Accede con tu correo o usuario.
-        </p>
-      </div>
-
       <form onSubmit={handleSubmit} noValidate className="login-form__form">
         {errors.general ? (
           <div className="login-form__alert">{errors.general}</div>
         ) : null}
 
-        <div className="login-form__field">
+        <div className={`login-form__field ${errors.login ? "is-error" : ""}`}>
           <label htmlFor="login" className="login-form__label">
             Correo o usuario
           </label>
@@ -144,7 +137,7 @@ function LoginForm() {
           ) : null}
         </div>
 
-        <div className="login-form__field">
+        <div className={`login-form__field ${errors.password ? "is-error" : ""}`}>
           <label htmlFor="password" className="login-form__label">
             Contraseña
           </label>
@@ -174,27 +167,24 @@ function LoginForm() {
           </label>
 
           <Link to="/recuperar-password" className="login-form__link">
-            ¿Olvidaste tu contraseña?
+            Olvidé mi contraseña
           </Link>
         </div>
 
-        <button
-          type="submit"
-          className="login-form__submit"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
+        <div className="login-form__actions">
+          <button
+            type="submit"
+            className="login-form__submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Entrando..." : "Entrar"}
+          </button>
 
-      <div className="login-form__footer">
-        <p>
-          ¿Aún no tienes cuenta?{" "}
-          <Link to="/registro" className="login-form__link">
-            Crear cuenta
+          <Link to="/registro" className="login-form__signup">
+            Registrarse
           </Link>
-        </p>
-      </div>
+        </div>
+      </form>
     </div>
   )
 }

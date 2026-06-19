@@ -13,6 +13,15 @@ export async function loginRequest(payload) {
   }
 }
 
+export async function registerRequest(payload) {
+  try {
+    const { data } = await api.post("/register", payload)
+    return data
+  } catch (error) {
+    throwResponseData(error)
+  }
+}
+
 export async function meRequest(token) {
   try {
     const { data } = await api.get("/me", {

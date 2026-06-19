@@ -36,6 +36,15 @@
   font-weight: 800;
   font-size: 1rem;
   box-shadow: 0 10px 20px rgba(79, 109, 245, 0.18);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.admin-sidebar__brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #ffffff;
 }
 
 .admin-sidebar__brand-copy {
@@ -198,20 +207,6 @@
   margin-top: 2px;
   font-size: 0.75rem;
   color: var(--admin-text-soft);
-}
-
-.admin-sidebar__logout-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid var(--admin-border);
-  background: #fff;
-  color: #6b7280;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
 }
 
 @media (max-width: 991.98px) {

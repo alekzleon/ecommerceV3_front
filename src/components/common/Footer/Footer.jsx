@@ -1,10 +1,16 @@
 import { useState } from "react"
+import { useSettings } from "../../../context/SettingsContext"
 import { sendContactLead } from "../../../services/api/contactService"
 import "./footer.css"
 
 function Footer() {
+  const { settings, brandName, logoUrl } = useSettings()
   const [submittingLead, setSubmittingLead] = useState(false)
   const [leadStatus, setLeadStatus] = useState(null)
+  const contactNumbers = Array.isArray(settings.contact_numbers)
+    ? settings.contact_numbers.filter(Boolean)
+    : []
+  const socialLinks = settings.social_links || {}
 
   const handleLeadSubmit = async (event) => {
     event.preventDefault()
@@ -108,17 +114,30 @@ function Footer() {
               >
                 <h3 className="f-title f_600 t_color f_size_18">Contáctanos</h3>
                 <ul className="list-unstyled f_list">
-                  <li><a href="tel:3313490669">33 1349 0669</a></li>
-                  <li><a href="mailto:contacto@pidefacilraul.com">contacto@pidefacilraul.com</a></li>
-                  <li>
-                    <a
-                      href="https://maps.google.com/?q=Calle+8,+Ferrocarril,+44440+Guadalajara"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Calle 8, Ferrocarril, 44440 Guadalajara
-                    </a>
-                  </li>
+                  {contactNumbers.map((number) => (
+                    <li key={number}>
+                      <a href={`tel:${number.replace(/\s+/g, "")}`}>{number}</a>
+                    </li>
+                  ))}
+                  {settings.email ? (
+                    <li>
+                      <a href={`mailto:${settings.email}`}>{settings.email}</a>
+                    </li>
+                  ) : null}
+                  {settings.address ? (
+                    <li>
+                      <a
+                        href={`https://maps.google.com/?q=${encodeURIComponent(settings.address)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {settings.address}
+                      </a>
+                    </li>
+                  ) : null}
+                  {!contactNumbers.length && !settings.email && !settings.address ? (
+                    <li>Configura tus datos de contacto</li>
+                  ) : null}
                 </ul>
               </div>
             </div>
@@ -155,19 +174,44 @@ function Footer() {
                 <h3 className="f-title f_600 t_color f_size_18">Nuestras redes</h3>
 
                 <div className="f_social_icon">
-                  <a href="#" className="fab fa-facebook-f" aria-label="Facebook"></a>
-                  <a href="#" className="fab fa-twitter" aria-label="Twitter"></a>
-                  <a href="#" className="fab fa-linkedin-in" aria-label="LinkedIn"></a>
-                  <a href="#" className="fab fa-pinterest-p" aria-label="Pinterest"></a>
+                  {socialLinks.facebook ? (
+                    <a
+                      href={socialLinks.facebook}
+                      className="fab fa-facebook-f"
+                      aria-label="Facebook"
+                      target="_blank"
+                      rel="noreferrer"
+                    ></a>
+                  ) : null}
+                  {socialLinks.instagram ? (
+                    <a
+                      href={socialLinks.instagram}
+                      className="fab fa-instagram"
+                      aria-label="Instagram"
+                      target="_blank"
+                      rel="noreferrer"
+                    ></a>
+                  ) : null}
+                  {socialLinks.tiktok ? (
+                    <a
+                      href={socialLinks.tiktok}
+                      className="fab fa-tiktok"
+                      aria-label="TikTok"
+                      target="_blank"
+                      rel="noreferrer"
+                    ></a>
+                  ) : null}
                 </div>
 
-                <div style={{ marginTop: "24px" }}>
-                  <img
-                    src="https://www.pidefacilraul.com/cms/wp-content/uploads/2020/09/CC-175-PIDEFaCIL-LOGO-HORIZONTAL-e1724443779289.png"
-                    alt="PideFácil Raúl"
-                    style={{ maxWidth: "220px", width: "100%", height: "auto" }}
-                  />
-                </div>
+                {logoUrl ? (
+                  <div style={{ marginTop: "24px" }}>
+                    <img
+                      src={logoUrl}
+                      alt={brandName}
+                      style={{ maxWidth: "220px", width: "100%", height: "auto" }}
+                    />
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -183,11 +227,21 @@ function Footer() {
         <div className="footer_container">
           <div className="footer_bottom_row">
             <div className="footer_bottom_left">
-              <p className="mb-0 f_400">Todos los derechos reservados PideFácil Raúl 2026</p>
+              <p className="mb-0 f_400">todos los derechos reservados de {brandName}</p>
             </div>
 
             <div className="footer_bottom_right">
-              <p>Diseño por TecIOT</p>
+              <p>
+                Diseñado por 🚀{" "}
+                <a
+                  href="https://cloudi.mx"
+                  className="footer_cloudi_link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  cloudi
+                </a>
+              </p>
             </div>
           </div>
         </div>

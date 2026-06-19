@@ -140,7 +140,7 @@ function AccountProfilePage() {
 
     return {
       name: profile.name || user?.name || "-",
-      customerNumber: profile.customer_number || profile.id_microsip || user?.id || "-",
+      customerNumber: profile.customer_number || user?.id || "-",
       email: profile.email || user?.email || "-",
       phone: profile.phone || profile.whatsapp || "-",
     };

@@ -40,16 +40,16 @@ body {
 }
 
 .new_footer_area .footer_bottom {
-  padding-top: 5px;
-  padding-bottom: 50px;
+  padding-top: 8px;
+  padding-bottom: 10px;
 }
 
 .footer_bottom {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 300;
-  line-height: 20px;
+  line-height: 18px;
   color: #7f88a6;
-  padding: 27px 0px;
+  padding: 10px 0px;
 }
 
 .footer_bottom_row {
@@ -66,6 +66,20 @@ body {
 
 .footer_bottom_right {
   text-align: right;
+}
+
+.footer_bottom p {
+  margin: 0;
+}
+
+.footer_cloudi_link {
+  color: #ff4fa3;
+  font-weight: 600;
+}
+
+.footer_cloudi_link:hover,
+.footer_cloudi_link:focus {
+  color: #e6388d;
 }
 
 .new_footer_top .company_widget p {

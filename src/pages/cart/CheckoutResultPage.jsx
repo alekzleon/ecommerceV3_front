@@ -8,8 +8,8 @@ import {
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import "./checkout.css"
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
-const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "pidefacil_stripe_success_return"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
+const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "ecommerce_stripe_success_return"
 
 function CheckoutResultPage({ type = "success" }) {
   const navigate = useNavigate()

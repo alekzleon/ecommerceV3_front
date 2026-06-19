@@ -1,5 +1,5 @@
 import HeroBanner from "../../components/home/HeroBanner/HeroBanner"
-import HomeHighlights from "../../components/home/HomeHighlights/HomeHighlights"
+import BrandBanners from "../../components/home/BrandBanners/BrandBanners"
 import LatestPurchases from "../../components/home/LatestPurchases/LatestPurchases"
 import MonthlyPromotions from "../../components/home/MonthlyPromotions/MonthlyPromotions"
 import OffersSection from "../../components/home/OffersSection/OffersSection"
@@ -9,7 +9,7 @@ function HomePage() {
   return (
     <>
       <HeroBanner />
-      <HomeHighlights />
+      <BrandBanners />
       <LatestPurchases />
       <MonthlyPromotions />
       <OffersSection />

@@ -26,7 +26,6 @@ function AdminLayout({ currentUser, menu = [], onLogout }) {
         <AdminSidebar
           menu={menu}
           currentUser={currentUser}
-          onLogout={onLogout}
           isOpen={sidebarOpen}
           onClose={handleCloseSidebar}
         />
@@ -46,6 +45,7 @@ function AdminLayout({ currentUser, menu = [], onLogout }) {
             subtitle={pageMeta?.subtitle || "Resumen general del sistema."}
             currentUser={currentUser}
             onToggleSidebar={handleToggleSidebar}
+            onLogout={onLogout}
           />
 
           <section className="admin-v2-content">

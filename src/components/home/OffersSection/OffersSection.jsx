@@ -10,7 +10,7 @@ import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import "./offerssection.css"
 
 const PROMOTION_IMAGE_PLACEHOLDER = "https://monocromia.com.mx/cdn/shop/files/Monocromia-04_6366367b-3cd5-4942-89f0-62fac4475a07_2048x.jpg?v=1742501692"
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 
 function OffersSection() {
   const navigate = useNavigate()
@@ -97,6 +97,11 @@ function OffersSection() {
       return
     }
 
+    if (isOfferOutOfStock(offer)) {
+      notifyError(offer.stockMessage || "Producto sin inventario.")
+      return
+    }
+
     try {
       setAddingOfferId(offer.id)
       const response = await addCartItem({
@@ -136,6 +141,10 @@ function OffersSection() {
             {loading ? (
               <OfferSkeleton compact />
             ) : dailyOffer ? (
+              (() => {
+                const isOutOfStock = isOfferOutOfStock(dailyOffer)
+
+                return (
               <>
                 <div className="daily-offer-card__image-wrap">
                   <img
@@ -160,13 +169,19 @@ function OffersSection() {
                       type="button"
                       className="offer-action offer-action--primary"
                       onClick={() => handleAddOfferToCart(dailyOffer)}
-                      disabled={addingOfferId === dailyOffer.id}
+                      disabled={addingOfferId === dailyOffer.id || isOutOfStock}
                     >
-                      {addingOfferId === dailyOffer.id ? "Agregando..." : "Agregar al carrito"}
+                      {addingOfferId === dailyOffer.id
+                        ? "Agregando..."
+                        : isOutOfStock
+                        ? "Producto sin inventario"
+                        : "Agregar al carrito"}
                     </button>
                   </div>
                 </div>
               </>
+                )
+              })()
             ) : (
               <div className="daily-offer-card__empty">Sin oferta disponible.</div>
             )}
@@ -211,7 +226,10 @@ function OffersSection() {
                 ? Array.from({ length: visibleCount }).map((_, index) => (
                   <OfferSkeleton key={index} />
                 ))
-                : visibleOffers.map((offer) => (
+                : visibleOffers.map((offer) => {
+                  const isOutOfStock = isOfferOutOfStock(offer)
+
+                  return (
                   <article className="offer-item-card" key={offer.id}>
                     <div className="offer-item-card__image-wrap">
                       <img
@@ -240,14 +258,19 @@ function OffersSection() {
                           type="button"
                           className="offer-action offer-action--primary"
                           onClick={() => handleAddOfferToCart(offer)}
-                          disabled={addingOfferId === offer.id}
+                          disabled={addingOfferId === offer.id || isOutOfStock}
                         >
-                          {addingOfferId === offer.id ? "..." : "Agregar"}
+                          {addingOfferId === offer.id
+                            ? "..."
+                            : isOutOfStock
+                            ? "Producto sin inventario"
+                            : "Agregar"}
                         </button>
                       </div>
                     </div>
                   </article>
-                ))}
+                  )
+                })}
             </div>
           </div>
         </div>
@@ -292,6 +315,9 @@ function normalizePromotion(item = {}) {
     productId: getPromotionProductId(item),
     productName: getPromotionProductName(item),
     productSlug: getPromotionProductSlug(item),
+    stock: getPromotionProductStock(item),
+    stockStatus: getPromotionProductStockStatus(item),
+    stockMessage: getPromotionProductStockMessage(item),
     productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
     products: Array.isArray(item?.products) ? item.products : [],
   }
@@ -329,6 +355,41 @@ function getPromotionProductSlug(item = {}) {
 
 function getPromotionProductName(item = {}) {
   return item?.product?.name || item?.products?.[0]?.name || ""
+}
+
+function getPromotionProductStock(item = {}) {
+  return item?.stock ?? item?.product?.stock ?? item?.products?.[0]?.stock ?? null
+}
+
+function getPromotionProductStockStatus(item = {}) {
+  return (
+    item?.stock_status ||
+    item?.stockStatus ||
+    item?.product?.stock_status ||
+    item?.product?.stockStatus ||
+    item?.products?.[0]?.stock_status ||
+    item?.products?.[0]?.stockStatus ||
+    "untracked"
+  )
+}
+
+function getPromotionProductStockMessage(item = {}) {
+  return (
+    item?.stock_message ||
+    item?.stockMessage ||
+    item?.product?.stock_message ||
+    item?.product?.stockMessage ||
+    item?.products?.[0]?.stock_message ||
+    item?.products?.[0]?.stockMessage ||
+    ""
+  )
+}
+
+function isOfferOutOfStock(offer = {}) {
+  const stockStatus = offer?.stockStatus || offer?.stock_status || "untracked"
+  const hasNoStockValue = offer?.stock === null || offer?.stock === undefined || offer?.stock === ""
+
+  return stockStatus === "out_of_stock" || hasNoStockValue || Number(offer.stock) <= 0
 }
 
 function normalizePromotionImage(value) {

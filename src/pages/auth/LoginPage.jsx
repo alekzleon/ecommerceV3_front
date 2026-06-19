@@ -1,39 +1,53 @@
+import { Link } from "react-router-dom"
 import LoginForm from "../../components/auth/LoginForm/LoginForm"
+import { useSettings } from "../../context/SettingsContext"
+import loginBusiness from "../../assets/images/auth/login-business.png"
 import "./loginpage.css"
 
 function LoginPage() {
+  const { brandName, logoUrl } = useSettings()
+
   return (
     <section className="login-page">
-      <div className="container-main">
-        <div className="login-page__wrapper">
-          <div className="login-page__panel">
-            <div className="login-page__brand">
-              <img
-                src="https://www.pidefacilraul.com/cms/wp-content/uploads/2020/09/CC-175-PIDEFaCIL-LOGO-HORIZONTAL-e1724443779289.png"
-                alt="PideFácil Raúl"
-                className="login-page__logo"
-              />
+      <div className="login-page__content">
+        <div className="login-page__left">
+          <div className="login-page__inner">
+            <Link to="/" className="login-page__brand" aria-label="Ir al inicio">
+              {logoUrl ? (
+                <img src={logoUrl} alt={brandName} className="login-page__logo" />
+              ) : (
+                <span className="login-page__brand-name">{brandName}</span>
+              )}
+            </Link>
 
-
+            <div className="login-page__copy">
               <h1 className="login-page__title">
-                Entra a tu cuenta y continúa con tus compras
+                Entra a tu cuenta y continúa comprando para tu negocio
               </h1>
-
               <p className="login-page__text">
-                Consulta tus pedidos, vuelve a comprar tus productos frecuentes y
-                administra tu cuenta desde un solo lugar.
+                Bienvenido de vuelta. Inicia sesión para revisar tus pedidos,
+                favoritos y compras frecuentes.
               </p>
-
-              <ul className="login-page__benefits">
-                <li>Compra más rápido</li>
-                <li>Revisa tus compras</li>
-                <li>Guarda tus productos favoritos</li>
-              </ul>
             </div>
 
-            <div className="login-page__form-card">
-              <LoginForm />
-            </div>
+            <LoginForm />
+          </div>
+        </div>
+
+        <div className="login-page__right">
+          <nav className="login-page__nav" aria-label="Navegación de login">
+            <Link to="/" className="is-active">Inicio</Link>
+            <Link to="/productos">Productos</Link>
+            <Link to="/ofertas">Ofertas</Link>
+            <Link to="/registro">Registrarse</Link>
+          </nav>
+
+          <div className="login-page__illustration-wrap">
+            <img
+              src={loginBusiness}
+              alt="Persona feliz en su negocio"
+              className="login-page__illustration"
+            />
           </div>
         </div>
       </div>

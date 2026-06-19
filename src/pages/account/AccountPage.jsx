@@ -12,9 +12,9 @@ import "./account.css";
 const userMock = {
   id: 27,
   customerNumber: "CLI-000027",
-  name: "Raúl González",
-  email: "raul@pidefacilraul.com",
-  company: "Abarrotes Raúl",
+  name: "Cliente Demo",
+  email: "cliente.com",
+  company: "Tienda de negocio",
 };
 
 const initialAddresses = [
@@ -22,7 +22,7 @@ const initialAddresses = [
     id: 1,
     title: "Sucursal Matriz",
     type: "Fiscal",
-    receiver: "Raúl González",
+    receiver: "Cliente Demo",
     phone: "33 1234 5678",
     address:
       "Av. Vallarta 2450, Col. Arcos Vallarta, Guadalajara, Jalisco, CP 44130",
@@ -32,7 +32,7 @@ const initialAddresses = [
     id: 2,
     title: "Bodega Norte",
     type: "Entrega",
-    receiver: "Raúl González",
+    receiver: "Cliente Demo",
     phone: "33 8888 2244",
     address:
       "Calle Industria 180, Parque Industrial Norte, Zapopan, Jalisco, CP 45130",
@@ -42,7 +42,7 @@ const initialAddresses = [
     id: 3,
     title: "Sucursal Centro",
     type: "Entrega",
-    receiver: "Raúl González",
+    receiver: "Cliente Demo",
     phone: "33 4567 8901",
     address:
       "Av. Juárez 1020, Col. Centro, Guadalajara, Jalisco, CP 44100",

@@ -122,6 +122,7 @@ function ProductDetailPanel({
   onGalleryAdd,
   onGalleryItemChange,
   onGalleryItemToggle,
+  onGalleryDelete,
   onGalleryMove,
   onVariantOptionFormChange,
   onVariantOptionAdd,
@@ -133,7 +134,6 @@ function ProductDetailPanel({
   onSubmit,
 }) {
   const isCreate = mode === "create"
-  const isEditLocked = !isCreate
   const galleryBusy = galleryLoading || gallerySaving || saving
   const variantsBusy = variantsLoading || variantsSaving || saving
   const [selectedGalleryItemId, setSelectedGalleryItemId] = useState(null)
@@ -175,15 +175,15 @@ function ProductDetailPanel({
         type="submit"
         form="product-detail-form"
         className="btn btn-primary"
-        disabled={saving || (isEditLocked && !form.image)}
+        disabled={saving}
       >
         {saving
           ? isCreate
             ? "Creando..."
-            : "Actualizando imagen..."
+            : "Actualizando..."
           : isCreate
           ? "Crear producto"
-          : "Actualizar imagen principal"}
+          : "Actualizar producto"}
       </button>
     </div>
   ) : null
@@ -201,7 +201,14 @@ function ProductDetailPanel({
         <div className="product-page__panel-loading">Cargando detalle del producto...</div>
       ) : (
         <form id="product-detail-form" onSubmit={onSubmit} className="product-detail">
-          <fieldset className="product-detail__section product-detail__locked-section" disabled={isEditLocked}>
+          <fieldset className="product-detail__section product-detail__locked-section">
+            <div className="product-detail__section-head">
+              <div>
+                <h4 className="product-detail__section-title">Información del producto</h4>
+                <p className="product-detail__section-subtitle">Nombre y descripciones visibles en tienda.</p>
+              </div>
+            </div>
+
             <div className="product-detail__field">
               <label className="form-label">
                 Título <RequiredMark />
@@ -222,7 +229,7 @@ function ProductDetailPanel({
               <RichTextEditor
                 value={form.description}
                 onChange={handleDescriptionChange}
-                disabled={saving || isEditLocked}
+                disabled={saving}
               />
             </div>
 
@@ -241,7 +248,12 @@ function ProductDetailPanel({
 
           <section className="product-detail__section">
             <div className="product-detail__section-head">
-              <h4 className="product-detail__section-title">Multimedia</h4>
+              <div>
+                <h4 className="product-detail__section-title">Multimedia</h4>
+                <p className="product-detail__section-subtitle">
+                  Imagen principal y recursos adicionales del producto.
+                </p>
+              </div>
               <button
                 type="button"
                 className={`btn btn-sm ${galleryEnabled ? "btn-primary" : "btn-outline-primary"}`}
@@ -252,6 +264,11 @@ function ProductDetailPanel({
             </div>
 
             <div className={`product-detail__media-box ${form.image_url ? "has-preview" : ""}`}>
+              <div className="product-detail__media-copy">
+                <strong>Imagen principal</strong>
+                <span>Será la primera imagen del producto en listados y detalle.</span>
+              </div>
+
               <div className="product-detail__media-actions">
                 <label className="btn btn-outline-secondary product-detail__upload-button">
                   Subir nuevo
@@ -279,36 +296,33 @@ function ProductDetailPanel({
 
           {galleryEnabled ? (
             <section className="product-detail__section">
-              <h4 className="product-detail__section-title">Galería</h4>
+              <div className="product-detail__section-head">
+                <div>
+                  <h4 className="product-detail__section-title">Galería</h4>
+                  <p className="product-detail__section-subtitle">
+                    Agrega varias imágenes o videos, revisa su preview y acomódalos en el orden correcto.
+                  </p>
+                </div>
+              </div>
 
               <div className="product-detail__media-box product-detail__gallery-upload">
                 <div className="product-detail__media-actions">
                   <label className="btn btn-outline-secondary product-detail__upload-button">
-                    Agregar archivo
+                    Agregar archivos
                     <input
                       type="file"
                       name="media"
                       accept=".jpg,.jpeg,.png,.mp4,.webm,.mov,image/jpeg,image/png,video/mp4,video/webm,video/quicktime"
-                      multiple={isCreate}
+                      multiple
                       onChange={onGalleryFormChange}
                     />
                   </label>
                 </div>
 
-                {galleryForm.preview_url ? (
-                  <div className="product-detail__media-preview">
-                    {galleryForm.media_type === "video" ? (
-                      <video src={galleryForm.preview_url} controls />
-                    ) : (
-                      <img src={galleryForm.preview_url} alt="Vista previa de galería" />
-                    )}
-                  </div>
-                ) : null}
-
-                <p>Acepta JPG, PNG, MP4, WEBM o MOV. Máximo 50 MB.</p>
+                <p>Acepta JPG, PNG, MP4, WEBM o MOV. Puedes seleccionar varios archivos a la vez.</p>
               </div>
 
-              {!isCreate ? (
+              {!isCreate && galleryForm.media ? (
                 <>
                   <div className="product-detail__grid product-detail__grid--two">
                     <div className="product-detail__field">
@@ -320,7 +334,7 @@ function ProductDetailPanel({
                         value={galleryForm.title}
                         onChange={onGalleryFormChange}
                         placeholder="Vista frontal"
-                        disabled={isEditLocked}
+                        disabled={galleryBusy}
                       />
                     </div>
 
@@ -333,7 +347,7 @@ function ProductDetailPanel({
                         value={galleryForm.sort_order}
                         onChange={onGalleryFormChange}
                         placeholder={String(galleryItems.length + 1)}
-                        disabled={isEditLocked}
+                        disabled={galleryBusy}
                       />
                     </div>
 
@@ -346,7 +360,7 @@ function ProductDetailPanel({
                         value={galleryForm.description}
                         onChange={onGalleryFormChange}
                         placeholder="Imagen principal del empaque"
-                        disabled={isEditLocked}
+                        disabled={galleryBusy}
                       />
                     </div>
                   </div>
@@ -357,7 +371,7 @@ function ProductDetailPanel({
                       name="is_active"
                       checked={galleryForm.is_active}
                       onChange={onGalleryFormChange}
-                      disabled={isEditLocked}
+                      disabled={galleryBusy}
                     />
                     Activo
                   </label>
@@ -373,11 +387,7 @@ function ProductDetailPanel({
                     </button>
                   </div>
                 </>
-              ) : (
-                <div className="product-detail__gallery-empty">
-                  Selecciona todos los archivos necesarios. El orden, estado y datos se guardarán por default.
-                </div>
-              )}
+              ) : null}
 
               <div className="product-detail__gallery-list">
                 {galleryLoading ? (
@@ -386,26 +396,59 @@ function ProductDetailPanel({
                   <div className="product-detail__gallery-empty">Sin archivos en galería.</div>
                 ) : (
                   galleryItems.map((item, index) => (
-                    <button
-                      type="button"
-                      className={`product-detail__gallery-tile ${
-                        selectedGalleryItemId === item.id ? "is-selected" : ""
-                      }`}
-                      key={item.id}
-                      onClick={() => {
-                        if (!isCreate) setSelectedGalleryItemId(item.id)
-                      }}
-                    >
-                      <div className="product-detail__gallery-thumb">
-                        {item.media_type === "video" ? (
-                          <video src={item.media_url} />
-                        ) : (
-                          <img src={item.media_url} alt={item.title || "Archivo de galería"} />
-                        )}
+                    <article className="product-detail__gallery-card" key={item.id}>
+                      <button
+                        type="button"
+                        className={`product-detail__gallery-tile ${
+                          selectedGalleryItemId === item.id ? "is-selected" : ""
+                        }`}
+                        onClick={() => {
+                          if (!isCreate && !item.pending) setSelectedGalleryItemId(item.id)
+                        }}
+                      >
+                        <div className="product-detail__gallery-thumb">
+                          {item.media_type === "video" ? (
+                            <video src={item.media_url} />
+                          ) : (
+                            <img src={item.media_url} alt={item.title || "Archivo de galería"} />
+                          )}
+                        </div>
+
+                        <span>{item.sort_order || index + 1}</span>
+                      </button>
+
+                      <div className="product-detail__gallery-card-body">
+                        <strong>{item.title || item.media?.name || `Archivo ${index + 1}`}</strong>
+                        <span>{item.pending ? "Pendiente de guardar" : item.is_active ? "Activo" : "Inactivo"}</span>
                       </div>
 
-                      <span>{item.sort_order || index + 1}</span>
-                    </button>
+                      <div className="product-detail__gallery-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => onGalleryMove(item.id, -1)}
+                          disabled={galleryBusy || index === 0}
+                        >
+                          Subir
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => onGalleryMove(item.id, 1)}
+                          disabled={galleryBusy || index === galleryItems.length - 1}
+                        >
+                          Bajar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => onGalleryDelete(item.id)}
+                          disabled={galleryBusy}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </article>
                   ))
                 )}
               </div>
@@ -418,8 +461,100 @@ function ProductDetailPanel({
             </section>
           ) : null}
 
-          <fieldset className="product-detail__section product-detail__locked-section" disabled={isEditLocked}>
-            <h4 className="product-detail__section-title">Variantes</h4>
+          <fieldset className="product-detail__section product-detail__locked-section">
+            <div className="product-detail__section-head">
+              <div>
+                <h4 className="product-detail__section-title">Precio e inventario</h4>
+                <p className="product-detail__section-subtitle">Datos operativos principales del producto.</p>
+              </div>
+            </div>
+
+            <div className="product-detail__grid product-detail__grid--two">
+              <div className="product-detail__field">
+                <label className="form-label">
+                  Precio <RequiredMark />
+                </label>
+                <div className="product-detail__money-input">
+                  <span>$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    name="default_price"
+                    className="form-control"
+                    value={form.default_price}
+                    onChange={onChange}
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="product-detail__field">
+                <label className="form-label">
+                  SKU <RequiredMark />
+                </label>
+                <input
+                  type="text"
+                  name="sku"
+                  className="form-control"
+                  value={form.sku}
+                  onChange={onChange}
+                  placeholder="SKU-PRUEBA-001"
+                  required
+                />
+              </div>
+
+              <div className="product-detail__field">
+                <label className="form-label">Stock</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="stock"
+                  className="form-control"
+                  value={form.stock}
+                  onChange={onChange}
+                  placeholder="Vacío = no controlar"
+                />
+                <small className="product-detail__help">Déjalo vacío para no controlar inventario.</small>
+              </div>
+
+              <div className="product-detail__field">
+                <label className="form-label">Estatus</label>
+                <select
+                  name="is_active"
+                  className="form-select"
+                  value={form.is_active ? "1" : "0"}
+                  onChange={(event) => handleBooleanSelect("is_active", event.target.value)}
+                >
+                  <option value="1">Activo</option>
+                  <option value="0">Inactivo</option>
+                </select>
+              </div>
+
+              <div className="product-detail__field">
+                <label className="form-label">Procesado</label>
+                <select
+                  name="processed"
+                  className="form-select"
+                  value={form.processed ? "1" : "0"}
+                  onChange={(event) => handleBooleanSelect("processed", event.target.value)}
+                >
+                  <option value="0">No</option>
+                  <option value="1">Sí</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset className="product-detail__section product-detail__locked-section">
+            <div className="product-detail__section-head">
+              <div>
+                <h4 className="product-detail__section-title">Variantes</h4>
+                <p className="product-detail__section-subtitle">Opciones, SKU, precios y stock por variante.</p>
+              </div>
+            </div>
 
             <div className="product-detail__variant-options">
               {variantAttributes.length === 0 ? (
@@ -669,75 +804,13 @@ function ProductDetailPanel({
             </div>
           </fieldset>
 
-          <fieldset className="product-detail__section product-detail__locked-section" disabled={isEditLocked}>
-            <h4 className="product-detail__section-title">Precio e inventario</h4>
-
-            <div className="product-detail__grid product-detail__grid--two">
-              <div className="product-detail__field">
-                <label className="form-label">
-                  Precio <RequiredMark />
-                </label>
-                <div className="product-detail__money-input">
-                  <span>$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    name="default_price"
-                    className="form-control"
-                    value={form.default_price}
-                    onChange={onChange}
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="product-detail__field">
-                <label className="form-label">
-                  SKU <RequiredMark />
-                </label>
-                <input
-                  type="text"
-                  name="sku"
-                  className="form-control"
-                  value={form.sku}
-                  onChange={onChange}
-                  placeholder="SKU-PRUEBA-001"
-                  required
-                />
-              </div>
-
-              <div className="product-detail__field">
-                <label className="form-label">Estatus</label>
-                <select
-                  name="is_active"
-                  className="form-select"
-                  value={form.is_active ? "1" : "0"}
-                  onChange={(event) => handleBooleanSelect("is_active", event.target.value)}
-                >
-                  <option value="1">Activo</option>
-                  <option value="0">Inactivo</option>
-                </select>
-              </div>
-
-              <div className="product-detail__field">
-                <label className="form-label">Procesado</label>
-                <select
-                  name="processed"
-                  className="form-select"
-                  value={form.processed ? "1" : "0"}
-                  onChange={(event) => handleBooleanSelect("processed", event.target.value)}
-                >
-                  <option value="0">No</option>
-                  <option value="1">Sí</option>
-                </select>
+          <fieldset className="product-detail__section product-detail__locked-section">
+            <div className="product-detail__section-head">
+              <div>
+                <h4 className="product-detail__section-title">Categoría</h4>
+                <p className="product-detail__section-subtitle">Clasificación para filtros y búsqueda.</p>
               </div>
             </div>
-          </fieldset>
-
-          <fieldset className="product-detail__section product-detail__locked-section" disabled={isEditLocked}>
-            <h4 className="product-detail__section-title">Categoría</h4>
 
             <div className="product-detail__grid product-detail__grid--two">
               <EntityAutocomplete
@@ -751,7 +824,7 @@ function ProductDetailPanel({
                 type="category"
                 onSelect={onEntitySelect}
                 onCreate={onEntityCreate}
-                disabled={isEditLocked}
+                disabled={saving}
               />
 
               <EntityAutocomplete
@@ -764,7 +837,7 @@ function ProductDetailPanel({
                 type="family"
                 onSelect={onEntitySelect}
                 onCreate={onEntityCreate}
-                disabled={isEditLocked}
+                disabled={saving}
               />
             </div>
 
@@ -773,8 +846,13 @@ function ProductDetailPanel({
             </p>
           </fieldset>
 
-          <fieldset className="product-detail__section product-detail__locked-section" disabled={isEditLocked}>
-            <h4 className="product-detail__section-title">Organización</h4>
+          <fieldset className="product-detail__section product-detail__locked-section">
+            <div className="product-detail__section-head">
+              <div>
+                <h4 className="product-detail__section-title">Organización</h4>
+                <p className="product-detail__section-subtitle">Marca, URL y palabras clave internas.</p>
+              </div>
+            </div>
 
             <div className="product-detail__grid product-detail__grid--two">
               <div className="product-detail__field">
@@ -797,17 +875,6 @@ function ProductDetailPanel({
                   value={form.slug}
                   onChange={onChange}
                   placeholder="Se puede dejar vacío"
-                />
-              </div>
-
-              <div className="product-detail__field">
-                <label className="form-label">Microsip ID</label>
-                <input
-                  type="number"
-                  name="microsip_id"
-                  className="form-control"
-                  value={form.microsip_id}
-                  onChange={onChange}
                 />
               </div>
 
@@ -872,7 +939,7 @@ function ProductDetailPanel({
                         onGalleryItemChange(selectedGalleryItem.id, "title", event.target.value)
                       }
                       placeholder="Vista frontal"
-                      disabled={isEditLocked}
+                      disabled={galleryBusy}
                     />
                   </div>
 
@@ -889,7 +956,7 @@ function ProductDetailPanel({
                           event.target.value
                         )
                       }
-                      disabled={isEditLocked}
+                      disabled={galleryBusy}
                     />
                   </div>
 
@@ -913,7 +980,7 @@ function ProductDetailPanel({
                           event.target.value
                         )
                       }
-                      disabled={isEditLocked}
+                      disabled={galleryBusy}
                     />
                   </div>
                 </div>
@@ -924,7 +991,6 @@ function ProductDetailPanel({
                     className="btn btn-outline-secondary"
                     onClick={() => onGalleryMove(selectedGalleryItem.id, -1)}
                     disabled={
-                      isEditLocked ||
                       galleryBusy ||
                       galleryItems.findIndex((item) => item.id === selectedGalleryItem.id) === 0
                     }
@@ -936,7 +1002,6 @@ function ProductDetailPanel({
                     className="btn btn-outline-secondary"
                     onClick={() => onGalleryMove(selectedGalleryItem.id, 1)}
                     disabled={
-                      isEditLocked ||
                       galleryBusy ||
                       galleryItems.findIndex((item) => item.id === selectedGalleryItem.id) ===
                         galleryItems.length - 1
@@ -948,9 +1013,20 @@ function ProductDetailPanel({
                     type="button"
                     className={`btn ${selectedGalleryItem.is_active ? "btn-warning" : "btn-success"}`}
                     onClick={() => onGalleryItemToggle(selectedGalleryItem.id)}
-                    disabled={isEditLocked || galleryBusy}
+                    disabled={galleryBusy}
                   >
                     {selectedGalleryItem.is_active ? "Desactivar" : "Activar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-danger"
+                    onClick={() => {
+                      onGalleryDelete(selectedGalleryItem.id)
+                      setSelectedGalleryItemId(null)
+                    }}
+                    disabled={galleryBusy}
+                  >
+                    Eliminar
                   </button>
                 </div>
               </div>

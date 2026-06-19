@@ -15,6 +15,7 @@ import {
   getAccountAddresses,
 } from "../../services/api/accountService.js"
 import AdminSidePanel from "../../components/AdminSidePanel/AdminSidePanel.jsx"
+import { useSettings } from "../../context/SettingsContext.jsx"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import "./checkout.css"
 
@@ -61,14 +62,20 @@ const emptyCheckout = {
     gift_accounting_total: 0,
     total: 0,
     amount_due: 0,
+    coupon: null,
   },
+  coupon: null,
+  loyalty: null,
 }
 
-const CART_SUMMARY_STORAGE_KEY = "pidefacil_cart_summary"
-const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "pidefacil_stripe_success_return"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
+const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "ecommerce_stripe_success_return"
 const DEBUG_RECOVERABLE_CART = true
+const DELIVERY_NOTE_MAX_LENGTH = 200
+const DOCUMENT_NOTE_MAX_LENGTH = 200
 
 function CheckoutPage() {
+  const { brandName, logoUrl } = useSettings()
   const [checkout, setCheckout] = useState(emptyCheckout)
   const [loading, setLoading] = useState(true)
   const [addressPanelOpen, setAddressPanelOpen] = useState(false)
@@ -77,9 +84,9 @@ function CheckoutPage() {
   const [addressSaving, setAddressSaving] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressForm, setAddressForm] = useState(emptyAddressForm)
-  const [purchaseOrderFile, setPurchaseOrderFile] = useState(null)
   const [processingPayment, setProcessingPayment] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [documentNotes, setDocumentNotes] = useState("")
   const restoringRecoverableRef = useRef(false)
 
   useEffect(() => {
@@ -235,9 +242,6 @@ function CheckoutPage() {
     return addresses.find((address) => address.id === selectedAddressId) || null
   }, [addresses, selectedAddressId])
 
-  const selectedDirCliId = selectedAddress?.dir_cli_id ?? null
-  const hasSelectedDirCliId = Boolean(selectedDirCliId)
-
   const hasPendingGiftSelection = useMemo(() => {
     return checkout.promotions_applied.some((promotion) => {
       if (promotion.type !== "brand_amount_choose_gift_item") return false
@@ -246,10 +250,20 @@ function CheckoutPage() {
       return !getSelectedGiftItem(promotion)
     })
   }, [checkout.promotions_applied])
+  const invalidStockItems = useMemo(() => {
+    return checkout.items.filter(isCheckoutItemStockInvalid)
+  }, [checkout.items])
+  const insufficientStockBlockers = useMemo(() => {
+    return getActionableBlockers(checkout.blockers, invalidStockItems).filter((blocker) => {
+      const code = typeof blocker === "string" ? blocker : blocker?.code || blocker?.reason
+      return code === "insufficient_stock"
+    })
+  }, [checkout.blockers, invalidStockItems])
+  const actionableBlockers = useMemo(() => {
+    return getActionableBlockers(checkout.blockers, invalidStockItems)
+  }, [checkout.blockers, invalidStockItems])
 
-  const purchaseOrderName = String(purchaseOrderFile?.name || "").trim()
-  const hasPurchaseOrder = Boolean(purchaseOrderName)
-  const canContinue = Boolean(selectedAddress) && hasSelectedDirCliId && hasPurchaseOrder && !hasPendingGiftSelection
+  const canContinue = Boolean(selectedAddress) && !hasPendingGiftSelection && insufficientStockBlockers.length === 0 && invalidStockItems.length === 0
   const canPay = canContinue && acceptedTerms
 
   async function handleStartStripeCheckout() {
@@ -264,19 +278,13 @@ function CheckoutPage() {
       return
     }
 
-    if (!hasSelectedDirCliId) {
-      notifyWarning("La dirección seleccionada no tiene ID Microsip. Elige otra dirección o solicita su sincronización.")
-      handleOpenAddressPanel()
-      return
-    }
-
-    if (!purchaseOrderFile) {
-      notifyWarning("Adjunta la orden de compra en PDF para continuar con el pago.")
-      return
-    }
-
     if (hasPendingGiftSelection) {
       notifyWarning("Debes elegir tu regalo antes de continuar con el pago.")
+      return
+    }
+
+    if (insufficientStockBlockers.length || invalidStockItems.length) {
+      notifyWarning("Ajusta los productos sin inventario suficiente antes de pagar.")
       return
     }
 
@@ -284,7 +292,7 @@ function CheckoutPage() {
       setProcessingPayment(true)
 
       const validationResponse = await validateCheckout(
-        buildCheckoutAddressSelection(selectedAddress)
+        buildCheckoutPayload(selectedAddress, documentNotes)
       )
       if (DEBUG_RECOVERABLE_CART) {
         console.log("[recoverable-cart][checkout] validate before Stripe response:", validationResponse)
@@ -315,15 +323,15 @@ function CheckoutPage() {
         totals: hasTotals(nextCheckout.totals) ? nextCheckout.totals : prev.totals,
       }))
 
-      if (!nextCheckout.can_checkout) {
-        notifyWarning(getBlockerMessage(nextCheckout.blockers))
+      const nextInvalidStockItems = nextCheckout.items.filter(isCheckoutItemStockInvalid)
+      const nextActionableBlockers = getActionableBlockers(nextCheckout.blockers, nextInvalidStockItems)
+
+      if (!nextCheckout.can_checkout && nextActionableBlockers.length) {
+        notifyWarning(getBlockerMessage(nextActionableBlockers))
         return
       }
 
-      const orderResponse = await createCheckoutOrder({
-        ...buildCheckoutAddressSelection(selectedAddress),
-        orden_compra: purchaseOrderName,
-      })
+      const orderResponse = await createCheckoutOrder(buildCheckoutPayload(selectedAddress, documentNotes))
       const order = orderResponse?.data
 
       if (!order?.id) {
@@ -382,10 +390,17 @@ function CheckoutPage() {
 
   function handleAddressFormChange(event) {
     const { name, value, type, checked } = event.target
+    const nextValue =
+      name === "delivery_note" ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH) : value
+
     setAddressForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : nextValue,
     }))
+  }
+
+  function handleDocumentNotesChange(event) {
+    setDocumentNotes(event.target.value.slice(0, DOCUMENT_NOTE_MAX_LENGTH))
   }
 
   async function fetchAddresses() {
@@ -419,11 +434,6 @@ function CheckoutPage() {
 
   async function handleSelectAddress(address) {
     setSelectedAddressId(address.id)
-
-    if (!address?.dir_cli_id) {
-      notifyWarning("Esta dirección no tiene ID Microsip. No podrá usarse para checkout.")
-      return
-    }
 
     try {
       const response = await getCheckoutPreview(buildCheckoutAddressSelection(address))
@@ -472,29 +482,18 @@ function CheckoutPage() {
       return
     }
 
-    printWindow.document.write(buildPreviewPdfHtml(checkout, totals, selectedAddress))
+    printWindow.document.write(
+      buildPreviewPdfHtml(checkout, totals, selectedAddress, {
+        brandName,
+        logoUrl,
+        documentNotes,
+      }),
+    )
     printWindow.document.close()
     printWindow.focus()
     setTimeout(() => {
       printWindow.print()
     }, 350)
-  }
-
-  function handlePurchaseOrderChange(event) {
-    const file = event.target.files?.[0]
-
-    if (!file) return
-
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-
-    if (!isPdf) {
-      notifyWarning("Sube un archivo PDF para la orden de compra.")
-      event.target.value = ""
-      return
-    }
-
-    setPurchaseOrderFile(file)
-    event.target.value = ""
   }
 
   if (loading) {
@@ -525,9 +524,9 @@ function CheckoutPage() {
           </div>
 
           {selectedAddress ? (
-            <div className={`checkout_status ${hasSelectedDirCliId ? "is-ready" : "is-warning"}`}>
-              <i className={`bi ${hasSelectedDirCliId ? "bi-check-circle-fill" : "bi-exclamation-triangle-fill"}`} aria-hidden="true" />
-              {hasSelectedDirCliId ? "Dirección lista" : "Falta ID Microsip"}
+            <div className="checkout_status is-ready">
+              <i className="bi bi-check-circle-fill" aria-hidden="true" />
+              Dirección lista
             </div>
           ) : (
             <button
@@ -580,13 +579,6 @@ function CheckoutPage() {
                         </button>
                       </div>
                       <small>{formatAddress(selectedAddress)}</small>
-                      {selectedAddress.dir_cli_id ? (
-                        <small>ID Microsip: {selectedAddress.dir_cli_id}</small>
-                      ) : (
-                        <small className="checkout_address_warning">
-                          Esta dirección no tiene ID Microsip y no puede usarse para checkout.
-                        </small>
-                      )}
                       <button
                         type="button"
                         className="checkout_address_change"
@@ -603,50 +595,21 @@ function CheckoutPage() {
                   )}
                 </div>
 
-                <div className={`checkout_meta_card checkout_purchase_order_card ${purchaseOrderFile ? "is-loaded" : ""}`}>
-                  {purchaseOrderFile ? (
-                    <span className="checkout_purchase_order_check" aria-label="Orden de compra cargada">
-                      <i className="bi bi-check-lg" aria-hidden="true" />
-                    </span>
-                  ) : null}
-
-                  <span>Documento</span>
-
-                  {purchaseOrderFile ? (
-                    <>
-                      <div className="checkout_purchase_order_file">
-                        <i className="bi bi-file-earmark-pdf-fill" aria-hidden="true" />
-                        <strong>{purchaseOrderFile.name}</strong>
-                      </div>
-                      <small className="checkout_purchase_order_loaded">Orden de compra cargada</small>
-                    </>
-                  ) : (
-                    <>
-                      <strong>Orden de compra</strong>
-                      <small>Sube un archivo PDF para continuar con tu pedido.</small>
-                    </>
-                  )}
-
-                  <label className="checkout_purchase_order_action">
-                    {purchaseOrderFile ? "Cambiar archivo" : "Subir PDF"}
-                    <input
-                      type="file"
-                      accept="application/pdf,.pdf"
-                      onChange={handlePurchaseOrderChange}
-                    />
-                  </label>
-
-                </div>
               </div>
 
-              {checkout.blockers.length > 0 ? (
+              {actionableBlockers.length > 0 ? (
                 <div className="checkout_blockers">
-                  <h2>Bloqueos</h2>
+                  <h2>Pendientes para completar tu pedido</h2>
                   <ul>
-                    {checkout.blockers.map((blocker, index) => (
+                    {actionableBlockers.map((blocker, index) => (
                       <li key={`${String(blocker)}-${index}`}>{formatBlocker(blocker)}</li>
                     ))}
                   </ul>
+                  {insufficientStockBlockers.length || invalidStockItems.length ? (
+                    <Link to="/carrito" className="btn btn_secondary checkout_stock_link">
+                      Ajustar cantidades en carrito
+                    </Link>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -688,6 +651,9 @@ function CheckoutPage() {
                                   {item.promotion.name ||
                                     formatPromotionType(item.promotion.type)}
                                 </small>
+                              ) : null}
+                              {formatScaleSnapshot(item.promotion?.snapshot) ? (
+                                <small>{formatScaleSnapshot(item.promotion.snapshot)}</small>
                               ) : null}
                               {(() => {
                                 const selectedGiftItem = getSelectedGiftItem(
@@ -810,19 +776,33 @@ function CheckoutPage() {
                   <div className="checkout_invoice_card_head">
                     <div>
                       <h2>Notas del documento</h2>
-                      <p>Consideraciones contables y operativas</p>
+                      <p>Agrega una nota breve para este pedido</p>
                     </div>
                   </div>
 
+                  <div className="checkout_document_notes">
+                    <textarea
+                      value={documentNotes}
+                      onChange={handleDocumentNotesChange}
+                      maxLength={DOCUMENT_NOTE_MAX_LENGTH}
+                      rows="4"
+                      placeholder="Escribe notas para el documento o pedido."
+                    />
+                    <span className="checkout_field_counter">
+                      {documentNotes.length}/{DOCUMENT_NOTE_MAX_LENGTH}
+                    </span>
+                  </div>
+
                   {checkout.invoice_preview?.notes?.length ? (
-                    <ul className="checkout_notes">
-                      {checkout.invoice_preview.notes.map((note, index) => (
-                        <li key={`${note}-${index}`}>{note}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="checkout_muted">Sin notas adicionales.</p>
-                  )}
+                    <div className="checkout_system_notes">
+                      <strong>Notas del sistema</strong>
+                      <ul className="checkout_notes">
+                        {checkout.invoice_preview.notes.map((note, index) => (
+                          <li key={`${note}-${index}`}>{note}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </section>
               </div>
             </section>
@@ -837,9 +817,12 @@ function CheckoutPage() {
                 onConfigureAddress={handleOpenAddressPanel}
                 onDownloadPreview={handleDownloadPreview}
                 hasAddress={Boolean(selectedAddress)}
-                hasPurchaseOrder={hasPurchaseOrder}
                 acceptedTerms={acceptedTerms}
                 onAcceptedTermsChange={setAcceptedTerms}
+                loyalty={checkout.loyalty}
+                coupon={checkout.coupon || totals.coupon}
+                insufficientStockBlockers={insufficientStockBlockers}
+                invalidStockItems={invalidStockItems}
               />
             </aside>
           </div>
@@ -926,7 +909,6 @@ function CheckoutPage() {
                       <small>{address.contact_name || "Sin contacto"} · {address.phone || "Sin teléfono"}</small>
                       <span>{formatAddress(address)}</span>
                       {address.is_default ? <em>Predeterminada</em> : null}
-                      {address.dir_cli_id ? <em>ID Microsip: {address.dir_cli_id}</em> : <em className="is-warning">Sin ID Microsip</em>}
                       {address.delivery_note ? <em>{address.delivery_note}</em> : null}
                     </span>
                   </button>
@@ -976,7 +958,17 @@ function CheckoutPage() {
               </label>
               <label className="checkout_address_form_full">
                 Instrucciones de entrega
-                <textarea name="delivery_note" value={addressForm.delivery_note} onChange={handleAddressFormChange} rows="3" placeholder="Tocar el timbre negro. Entregar en recepción." />
+                <textarea
+                  name="delivery_note"
+                  value={addressForm.delivery_note}
+                  onChange={handleAddressFormChange}
+                  rows="3"
+                  maxLength={DELIVERY_NOTE_MAX_LENGTH}
+                  placeholder="Tocar el timbre negro. Entregar en recepción."
+                />
+                <span className="checkout_field_counter">
+                  {addressForm.delivery_note.length}/{DELIVERY_NOTE_MAX_LENGTH}
+                </span>
               </label>
               <label className="checkout_address_form_full checkout_address_default_check">
                 <input type="checkbox" name="is_default" checked={addressForm.is_default} onChange={handleAddressFormChange} />
@@ -1004,9 +996,12 @@ function InvoiceSummary({
   onConfigureAddress,
   onDownloadPreview,
   hasAddress,
-  hasPurchaseOrder,
   acceptedTerms,
   onAcceptedTermsChange,
+  loyalty,
+  coupon,
+  insufficientStockBlockers = [],
+  invalidStockItems = [],
 }) {
   return (
     <div className="summary_card">
@@ -1022,6 +1017,13 @@ function InvoiceSummary({
           <div className="summary_row">
             <span>Descuento</span>
             <span className="summary_discount">-{formatMoney(totals.discount)}</span>
+          </div>
+        ) : null}
+
+        {coupon?.code ? (
+          <div className={`summary_row checkout_coupon_row ${coupon.is_valid === false ? "is-invalid" : ""}`}>
+            <span>Cupón {coupon.code}</span>
+            <span className="summary_discount">-{formatMoney(coupon.discount_amount)}</span>
           </div>
         ) : null}
 
@@ -1047,15 +1049,17 @@ function InvoiceSummary({
         <strong>{formatMoney(totals.amount_due)}</strong>
       </div>
 
+      <CheckoutLoyaltySummary loyalty={loyalty} />
+
       {hasPendingGiftSelection ? (
         <p className="checkout_muted">
           Debes elegir el regalo pendiente para poder continuar.
         </p>
       ) : null}
 
-      {!hasPurchaseOrder ? (
+      {insufficientStockBlockers.length || invalidStockItems.length ? (
         <p className="checkout_muted checkout_muted--warning">
-          Adjunta la orden de compra en PDF para poder pagar.
+          Hay productos sin inventario suficiente. Ajusta cantidades en carrito.
         </p>
       ) : null}
 
@@ -1107,6 +1111,48 @@ function InvoiceSummary({
   )
 }
 
+function CheckoutLoyaltySummary({ loyalty }) {
+  if (!loyalty) return null
+
+  const firstPurchase = loyalty.firstPurchaseDiscount
+  const cashback = loyalty.cashback
+  const hasFirstPurchase = firstPurchase?.eligible && firstPurchase?.amount > 0
+  const hasCashbackApplied = cashback?.appliedAmount > 0
+  const hasCashbackEarn = cashback?.earn?.amount > 0
+
+  if (!hasFirstPurchase && !hasCashbackApplied && !hasCashbackEarn) return null
+
+  return (
+    <div className="checkout_loyalty_summary">
+      <div className="checkout_loyalty_summary_head">
+        <i className="bi bi-stars" aria-hidden="true" />
+        <strong>Fidelidad</strong>
+      </div>
+
+      {hasFirstPurchase ? (
+        <div>
+          <span>Primera compra · {firstPurchase.percentage}%</span>
+          <strong>-{formatMoney(firstPurchase.amount)}</strong>
+        </div>
+      ) : null}
+
+      {hasCashbackApplied ? (
+        <div>
+          <span>Cashback usado</span>
+          <strong>-{formatMoney(cashback.appliedAmount)}</strong>
+        </div>
+      ) : null}
+
+      {hasCashbackEarn ? (
+        <div>
+          <span>Cashback a ganar · {cashback.earn.percentage}%</span>
+          <strong>{formatMoney(cashback.earn.amount)}</strong>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function normalizeCheckout(response) {
   const data = response?.data || response || emptyCheckout
 
@@ -1115,26 +1161,7 @@ function normalizeCheckout(response) {
     ...data,
     blockers: Array.isArray(data.blockers) ? data.blockers : [],
     items: Array.isArray(data.items)
-      ? data.items.map((item) => ({
-          ...item,
-          gift_item_units: Number(
-            item.gift_item_units ??
-              item.promotion?.snapshot?.gift_item_units ??
-              0
-          ),
-          gift_items: normalizeGiftItems(
-            item.gift_items ?? item.promotion?.snapshot?.gift_items
-          ),
-          taxable_base: Number(item.taxable_base ?? 0),
-          tax: Number(item.tax ?? item.tax_amount ?? 0),
-          taxes: normalizeTaxes(item.taxes),
-          promotion: item.promotion
-            ? {
-                ...item.promotion,
-                snapshot: item.promotion.snapshot ?? {},
-              }
-            : null,
-        }))
+      ? data.items.map(normalizeCheckoutItem)
       : [],
     promotions_applied: Array.isArray(data.promotions_applied)
       ? data.promotions_applied.map((promotion) => ({
@@ -1166,6 +1193,154 @@ function normalizeCheckout(response) {
       tax_breakdown: normalizeTaxBreakdown(
         data.totals?.tax_breakdown ?? data.invoice_preview?.totals?.tax_breakdown
       ),
+      coupon: normalizeCheckoutCoupon(data.totals?.coupon ?? data.coupon),
+    },
+    coupon: normalizeCheckoutCoupon(data.coupon ?? data.totals?.coupon),
+    loyalty: normalizeCheckoutLoyalty(data.loyalty),
+  }
+}
+
+function normalizeCheckoutCoupon(coupon) {
+  if (!coupon || typeof coupon !== "object") return null
+
+  return {
+    ...coupon,
+    discount_amount: Number(coupon.discount_amount ?? 0),
+    is_valid: coupon.is_valid !== false,
+  }
+}
+
+function normalizeCheckoutItem(item = {}) {
+  const quantity = Number(item.quantity ?? 0)
+  const unitPrice = Number(item.unit_price ?? item.base_unit_price ?? 0)
+  const discount = Number(item.discount ?? item.line_discount ?? 0)
+  const total = Number(item.total ?? item.line_subtotal ?? unitPrice * quantity - discount)
+  const regularUnits = Number(item.regular_units ?? quantity)
+
+  return {
+    ...item,
+    quantity,
+    unit_price: unitPrice,
+    discount,
+    total,
+    regular_units: regularUnits,
+    regular_line_total: Number(item.regular_line_total ?? unitPrice * regularUnits),
+    gift_item_units: Number(
+      item.gift_item_units ??
+        item.promotion?.snapshot?.gift_item_units ??
+        0
+    ),
+    gift_items: normalizeGiftItems(
+      item.gift_items ?? item.promotion?.snapshot?.gift_items
+    ),
+    taxable_base: Number(item.taxable_base ?? 0),
+    tax: Number(item.tax ?? item.tax_amount ?? 0),
+    taxes: normalizeTaxes(item.taxes),
+    stock: normalizeCheckoutItemStock(item),
+    promotion: item.promotion
+      ? {
+          ...item.promotion,
+          snapshot: item.promotion.snapshot ?? {},
+        }
+      : null,
+  }
+}
+
+function normalizeCheckoutItemStock(item = {}) {
+  const stock = item.stock
+
+  if (stock && typeof stock === "object") {
+    const rawAvailableStock =
+      stock.available_stock ??
+      stock.availableStock ??
+      item.available_stock ??
+      item.stock_available ??
+      item.product?.stock ??
+      null
+    const hasAvailableStockValue =
+      rawAvailableStock !== null && rawAvailableStock !== undefined && rawAvailableStock !== ""
+    const availableStock = hasAvailableStockValue ? Number(rawAvailableStock) : null
+    const requestedQuantity = Number(stock.requested_quantity ?? item.quantity ?? 0)
+    const isValid =
+      stock.is_valid === false
+        ? false
+        : hasAvailableStockValue
+        ? Number.isFinite(availableStock) && availableStock > 0 && requestedQuantity <= availableStock
+        : true
+
+    return {
+      is_tracked: true,
+      is_valid: isValid,
+      available_stock: Number.isFinite(availableStock) ? availableStock : null,
+      requested_quantity: requestedQuantity,
+      message:
+        stock.message ||
+        item.stock_message ||
+        item.product?.stock_message ||
+        (Number(availableStock || 0) <= 0
+          ? "Producto sin inventario disponible."
+          : `Solo hay ${availableStock} pieza(s) disponibles.`),
+    }
+  }
+
+  const rawAvailableStock =
+    stock ??
+    item.available_stock ??
+    item.stock_available ??
+    item.product?.stock ??
+    null
+
+  if (rawAvailableStock === null || rawAvailableStock === undefined || rawAvailableStock === "") {
+    return null
+  }
+
+  const availableStock =
+    Number(rawAvailableStock)
+  const requestedQuantity = Number(item.quantity ?? 0)
+
+  return {
+    is_tracked: true,
+    is_valid: Number.isFinite(availableStock) && availableStock > 0 && requestedQuantity <= availableStock,
+    available_stock: Number.isFinite(availableStock) ? availableStock : 0,
+    requested_quantity: requestedQuantity,
+    message:
+      item.stock_message ||
+      item.product?.stock_message ||
+      (availableStock <= 0
+        ? "Producto sin inventario disponible."
+        : `Solo hay ${availableStock} pieza(s) disponibles.`),
+  }
+}
+
+function isCheckoutItemStockInvalid(item = {}) {
+  if (item.stock?.is_valid === false) return true
+
+  const stockStatus =
+    item.stock_status ||
+    item.stockStatus ||
+    item.product?.stock_status ||
+    item.product?.stockStatus ||
+    ""
+
+  return stockStatus === "out_of_stock"
+}
+
+function normalizeCheckoutLoyalty(loyalty) {
+  if (!loyalty || typeof loyalty !== "object") return null
+
+  return {
+    firstPurchaseDiscount: {
+      eligible: Boolean(loyalty.first_purchase_discount?.eligible),
+      percentage: Number(loyalty.first_purchase_discount?.percentage ?? 0),
+      amount: Number(loyalty.first_purchase_discount?.amount ?? 0),
+    },
+    cashback: {
+      availableBalance: Number(loyalty.cashback?.available_balance ?? 0),
+      appliedAmount: Number(loyalty.cashback?.applied_amount ?? 0),
+      earn: {
+        percentage: Number(loyalty.cashback?.earn?.percentage ?? 0),
+        amount: Number(loyalty.cashback?.earn?.amount ?? 0),
+      },
     },
   }
 }
@@ -1259,15 +1434,13 @@ function normalizeShippingAddresses(shipping) {
 function normalizeAddress(address) {
   if (!address) return null
 
-  const dirCliId = address.dir_cli_id ?? null
-  const id = address.id ?? (dirCliId ? `dir_cli:${dirCliId}` : null)
+  const id = address.id ?? address.address_id ?? null
 
   if (!id) return null
 
   return {
     ...address,
     id,
-    dir_cli_id: dirCliId,
     alias: address.alias || (address.is_default ? "Dirección predeterminada" : "Dirección de envío"),
     is_default: Boolean(address.is_default),
   }
@@ -1281,7 +1454,7 @@ function buildAddressPayload(form, checkout) {
     zip_code: form.zip_code.trim(),
     neighborhood: form.neighborhood.trim(),
     state: form.state.trim(),
-    delivery_note: form.delivery_note.trim(),
+    delivery_note: form.delivery_note.trim().slice(0, DELIVERY_NOTE_MAX_LENGTH),
     contact_name: form.contact_name.trim() || checkout.customer?.name || "",
     phone: form.phone.trim(),
     is_default: Boolean(form.is_default),
@@ -1289,16 +1462,59 @@ function buildAddressPayload(form, checkout) {
 }
 
 function buildCheckoutAddressSelection(address) {
-  if (!address?.dir_cli_id) return {}
+  if (!address?.id) return {}
 
   return {
-    dir_cli_id: address.dir_cli_id,
+    address_id: address.id,
+  }
+}
+
+function buildCheckoutPayload(address, documentNotes = "") {
+  const notes = String(documentNotes || "").trim().slice(0, DOCUMENT_NOTE_MAX_LENGTH)
+
+  return {
+    ...buildCheckoutAddressSelection(address),
+    ...(notes ? { notes } : {}),
   }
 }
 
 function getBlockerMessage(blockers = []) {
   if (!blockers.length) return "El checkout no puede continuar por el momento."
   return blockers.map(formatBlocker).join(" ")
+}
+
+function getActionableBlockers(blockers = [], invalidStockItems = []) {
+  if (!Array.isArray(blockers)) return []
+
+  return blockers.filter((blocker) => {
+    const code = typeof blocker === "string" ? blocker : blocker?.code || blocker?.reason
+
+    if (code === "missing_dir_cli_id") return false
+
+    if (code !== "insufficient_stock") return true
+
+    if (invalidStockItems.length > 0) return true
+
+    const rawAvailableStock =
+      typeof blocker === "object"
+        ? blocker.available_stock ?? blocker.availableStock ?? blocker.stock ?? null
+        : null
+    const rawRequestedQuantity =
+      typeof blocker === "object"
+        ? blocker.requested_quantity ?? blocker.requestedQuantity ?? blocker.quantity ?? null
+        : null
+
+    if (rawAvailableStock === null || rawAvailableStock === undefined || rawAvailableStock === "") {
+      return false
+    }
+
+    const availableStock = Number(rawAvailableStock)
+    const requestedQuantity = Number(rawRequestedQuantity ?? 1)
+
+    return Number.isFinite(availableStock) && availableStock > 0
+      ? requestedQuantity > availableStock
+      : true
+  })
 }
 
 function hasInvoiceDetail(invoicePreview) {
@@ -1323,11 +1539,11 @@ function hasTotals(totals) {
 function formatBlocker(blocker) {
   const blockerCode = typeof blocker === "string" ? blocker : blocker?.code || blocker?.reason
   if (blockerCode === "missing_dir_cli_id") {
-    return "La dirección de envío no tiene ID Microsip. Elige otra dirección o solicita su sincronización."
+    return "Selecciona una dirección de envío para continuar."
   }
 
   if (typeof blocker === "string") return blocker
-  return blocker?.message || blocker?.reason || "Hay un bloqueo pendiente de resolver."
+  return blocker?.message || blocker?.reason || "Hay un pendiente por resolver."
 }
 
 function formatPromotionType(type) {
@@ -1340,6 +1556,7 @@ function formatPromotionType(type) {
     buy_x_get_discount: "Compra X y obtén % OFF",
     direct_percentage: "Descuento directo",
     strikethrough_price: "Precio tachado",
+    price_scale_percentage: "Escalas por volumen",
   }
 
   if (labels[type]) return labels[type]
@@ -1347,6 +1564,28 @@ function formatPromotionType(type) {
   return String(type || "Promoción")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatScaleSnapshot(snapshot = {}) {
+  const scale = snapshot.scale || snapshot.current_scale || snapshot
+  const discount = Number(scale?.discount_percentage ?? 0)
+  const fromQuantity = Number(scale?.from_quantity ?? 0)
+  const rawToQuantity = scale?.to_quantity
+  const toQuantity =
+    rawToQuantity === null || rawToQuantity === undefined || rawToQuantity === ""
+      ? null
+      : Number(rawToQuantity)
+
+  if (!discount || !fromQuantity) return ""
+
+  const discountText = Number.isInteger(discount) ? String(discount) : discount.toFixed(2)
+  const rangeText = toQuantity
+    ? fromQuantity === toQuantity
+      ? `${fromQuantity} pieza(s)`
+      : `de ${fromQuantity} a ${toQuantity} pieza(s)`
+    : `desde ${fromQuantity} pieza(s)`
+
+  return `${discountText}% de descuento ${rangeText}`
 }
 
 function getSelectedGiftItem(source) {
@@ -1395,7 +1634,6 @@ function normalizeTaxBreakdown(taxBreakdown) {
     items: items.filter(Boolean).map((item) => ({
       cart_item_id: item.cart_item_id ?? item.id ?? null,
       product_id: item.product_id ?? null,
-      microsip_id: item.microsip_id ?? "",
       taxable_base: Number(item.taxable_base ?? 0),
       tax_amount: Number(item.tax_amount ?? item.tax ?? 0),
       taxes: normalizeTaxes(item.taxes),
@@ -1431,8 +1669,11 @@ function formatAddress(address) {
   ].filter(Boolean).join(", ")
 }
 
-function buildPreviewPdfHtml(checkout, totals, selectedAddress) {
-  const logoUrl = `${window.location.origin}/favicon.svg`
+function buildPreviewPdfHtml(checkout, totals, selectedAddress, settings = {}) {
+  const brandName = settings.brandName || "Tienda en línea"
+  const logoUrl = settings.logoUrl || ""
+  const documentNotes = String(settings.documentNotes || "").trim()
+  const printableLogoUrl = logoUrl || `${window.location.origin}/favicon.svg`
   const rows = checkout.items.map((item) => `
     <tr>
       <td>${escapeHtml(item.line_number)}</td>
@@ -1440,6 +1681,7 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress) {
         <strong>${escapeHtml(item.name)}</strong>
         <span>SKU ${escapeHtml(item.sku || "-")} · Producto #${escapeHtml(item.product_id)}</span>
         ${item.promotion ? `<em>${escapeHtml(item.promotion.name || formatPromotionType(item.promotion.type))}</em>` : ""}
+        ${formatScaleSnapshot(item.promotion?.snapshot) ? `<em>${escapeHtml(formatScaleSnapshot(item.promotion.snapshot))}</em>` : ""}
         ${(() => {
           const selectedGiftItem = getSelectedGiftItem(item.promotion ?? item)
 
@@ -1521,13 +1763,21 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress) {
     `).join("")
     : "<li>Sin promociones aplicadas.</li>"
 
-  const notes = checkout.invoice_preview?.notes?.length
+  const systemNotes = checkout.invoice_preview?.notes?.length
     ? checkout.invoice_preview.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")
-    : "<li>Sin notas adicionales.</li>"
+    : ""
+  const notes = [
+    documentNotes ? `<li>${escapeHtml(documentNotes)}</li>` : "",
+    systemNotes,
+  ].filter(Boolean).join("") || "<li>Sin notas adicionales.</li>"
   const discountSummaryRow =
     Number(totals.discount || 0) > 0
       ? `<div><span>Descuento</span><strong>${escapeHtml(formatMoney(totals.discount))}</strong></div>`
       : ""
+  const coupon = normalizeCheckoutCoupon(checkout.coupon ?? totals.coupon)
+  const couponSummaryRow = coupon?.code
+    ? `<div><span>Cupón ${escapeHtml(coupon.code)}</span><strong>${escapeHtml(formatMoney(coupon.discount_amount))}</strong></div>`
+    : ""
 
   return `
     <!doctype html>
@@ -1570,9 +1820,9 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress) {
       <body>
         <header class="head">
           <div class="brand">
-            <img src="${escapeHtml(logoUrl)}" alt="Abarrotes Raúl" />
+            <img src="${escapeHtml(printableLogoUrl)}" alt="${escapeHtml(brandName)}" />
             <div>
-              <strong>Abarrotes Raúl</strong>
+              <strong>${escapeHtml(brandName)}</strong>
               <span>Previa de pedido para validación</span>
             </div>
           </div>
@@ -1625,6 +1875,7 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress) {
           <aside class="summary">
             <div><span>Subtotal</span><strong>${escapeHtml(formatMoney(totals.subtotal))}</strong></div>
             ${discountSummaryRow}
+            ${couponSummaryRow}
             <div><span>Regalos facturados</span><strong>${escapeHtml(formatMoney(totals.gift_accounting_total))}</strong></div>
             <div><span>Impuestos</span><strong>${escapeHtml(formatMoney(totals.tax))}</strong></div>
             <div class="due"><span>Importe a pagar</span><strong>${escapeHtml(formatMoney(totals.amount_due))}</strong></div>

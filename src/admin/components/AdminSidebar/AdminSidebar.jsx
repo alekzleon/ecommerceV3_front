@@ -1,15 +1,21 @@
 import { NavLink } from "react-router-dom"
+import { useSettings } from "../../../context/SettingsContext"
 import "./AdminSidebar.css"
 
-function AdminSidebar({ menu = [], currentUser, onLogout, isOpen = false, onClose }) {
+function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
+  const { brandName, logoUrl } = useSettings()
+  const brandInitial = brandName?.charAt(0)?.toUpperCase() || "T"
+
   return (
     <aside className={`admin-sidebar ${isOpen ? "admin-sidebar--open" : ""}`}>
       <div className="admin-sidebar__top">
         <div className="admin-sidebar__brand">
-          <div className="admin-sidebar__brand-logo">P</div>
+          <div className="admin-sidebar__brand-logo">
+            {logoUrl ? <img src={logoUrl} alt={brandName} /> : brandInitial}
+          </div>
 
           <div className="admin-sidebar__brand-copy">
-            <h2 className="admin-sidebar__brand-title">PideFácil</h2>
+            <h2 className="admin-sidebar__brand-title">{brandName}</h2>
             <p className="admin-sidebar__brand-subtitle">Admin Suite</p>
           </div>
         </div>
@@ -72,16 +78,6 @@ function AdminSidebar({ menu = [], currentUser, onLogout, isOpen = false, onClos
               {currentUser?.email || currentUser?.role?.display_name || "Sin rol"}
             </p>
           </div>
-
-          <button
-            type="button"
-            className="admin-sidebar__logout-icon"
-            onClick={onLogout}
-            title="Cerrar sesión"
-            aria-label="Cerrar sesión"
-          >
-            ⎋
-          </button>
         </div>
       </div>
     </aside>
@@ -100,6 +96,7 @@ function renderSidebarIcon(moduleName) {
     cobranza: "◔",
     marketing: "✦",
     promociones: "✧",
+    cupones: "%",
     logs: "☰",
     sincronizacion: "↻",
     configuracion_ecommerce: "⚙",
