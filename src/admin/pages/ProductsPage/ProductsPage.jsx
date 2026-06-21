@@ -19,12 +19,18 @@ import {
   updateAdminProductGalleryItem,
 } from "../../../services/api/adminProductGalleryService.js"
 import {
+  createAdminVariantAttributeCatalog,
   createAdminProductVariant,
   createAdminProductVariantAttribute,
   createAdminProductVariantAttributeValue,
+  deleteAdminProductVariant,
+  deleteAdminProductVariantAttribute,
+  deleteAdminProductVariantAttributeValue,
+  getAdminVariantAttributeCatalog,
   getAdminProductVariants,
   getAdminProductVariantAttributes,
   updateAdminProductVariant,
+  updateAdminProductVariantAttributeValue,
   updateAdminProductVariantStatus,
 } from "../../../services/api/adminProductVariantService.js"
 import {
@@ -71,6 +77,8 @@ const GALLERY_MEDIA_TYPES = [
   "video/quicktime",
 ]
 const GALLERY_MEDIA_MAX_SIZE = 50 * 1024 * 1024
+const VARIANT_COLOR_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/svg+xml"]
+const VARIANT_COLOR_IMAGE_MAX_SIZE = 5 * 1024 * 1024
 const INITIAL_GALLERY_FORM = {
   media: null,
   preview_url: "",
@@ -97,6 +105,12 @@ const INITIAL_VARIANT_FORM = {
   attribute_value_ids: [],
   metadata_barcode: "",
   metadata_supplier_code: "",
+}
+const INITIAL_VARIANT_CATALOG_FORM = {
+  catalog_attribute_id: "",
+  value_ids: [],
+  custom_attribute_name: "",
+  custom_values: "",
 }
 
 const INITIAL_PRICE_SCALE_FORM = {
@@ -145,11 +159,16 @@ function ProductsPage() {
   const [gallerySaving, setGallerySaving] = useState(false)
   const [galleryForm, setGalleryForm] = useState(INITIAL_GALLERY_FORM)
   const [variantAttributes, setVariantAttributes] = useState([])
+  const [activeVariantAttributeId, setActiveVariantAttributeId] = useState("")
+  const [variantCatalog, setVariantCatalog] = useState([])
+  const [variantCatalogLoading, setVariantCatalogLoading] = useState(false)
   const [variants, setVariants] = useState([])
   const [variantsLoading, setVariantsLoading] = useState(false)
   const [variantsSaving, setVariantsSaving] = useState(false)
   const [variantOptionForm, setVariantOptionForm] = useState(INITIAL_VARIANT_OPTION_FORM)
+  const [variantValueDrafts, setVariantValueDrafts] = useState({})
   const [variantForm, setVariantForm] = useState(INITIAL_VARIANT_FORM)
+  const [variantCatalogForm, setVariantCatalogForm] = useState(INITIAL_VARIANT_CATALOG_FORM)
   const [priceScalePanelOpen, setPriceScalePanelOpen] = useState(false)
   const [priceScaleLoading, setPriceScaleLoading] = useState(false)
   const [priceScaleSaving, setPriceScaleSaving] = useState(false)
@@ -181,10 +200,46 @@ function ProductsPage() {
     return buildEntityOptions(products, "family", panelForm.family)
   }, [products, panelForm.family])
 
+  const missingVariantCombinationCount = useMemo(() => {
+    return buildMissingVariantCombinations(variantAttributes, variants).length
+  }, [variantAttributes, variants])
+
+  const activeVariantAttribute = useMemo(() => {
+    return (
+      variantAttributes.find((attribute) => {
+        return String(attribute.id) === String(activeVariantAttributeId)
+      }) || null
+    )
+  }, [activeVariantAttributeId, variantAttributes])
+
+  const selectedVariantValues = useMemo(() => {
+    return getSelectedVariantValues(variantAttributes, variantForm.attribute_value_ids)
+  }, [variantAttributes, variantForm.attribute_value_ids])
+
+  const generatedVariantSku = useMemo(() => {
+    return buildVariantSku(panelForm, selectedVariantValues)
+  }, [panelForm, selectedVariantValues])
+
+  const variantFormIncomplete = useMemo(() => {
+    if (!activeVariantAttribute && !variantAttributes.length) return false
+
+    return (
+      selectedVariantValues.length === 0 ||
+      variantForm.price === "" ||
+      variantForm.stock === ""
+    )
+  }, [activeVariantAttribute, selectedVariantValues.length, variantAttributes.length, variantForm.price, variantForm.stock])
+
   useEffect(() => {
     fetchProducts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.page, filters.per_page, filters.is_active])
+
+  useEffect(() => {
+    if (!panelOpen) return
+
+    fetchVariantCatalog()
+  }, [panelOpen])
 
   async function fetchProducts(customSearch = null) {
     try {
@@ -234,11 +289,31 @@ function ProductsPage() {
     try {
       const response = await getAdminProductVariantAttributes(productId)
       const items = Array.isArray(response?.data) ? response.data : []
+      const sortedItems = sortVariantAttributes(items)
 
-      setVariantAttributes(sortVariantAttributes(items))
+      setVariantAttributes(sortedItems)
+      setActiveVariantAttributeId((prev) => {
+        if (prev && sortedItems.some((attribute) => String(attribute.id) === String(prev))) return prev
+        return sortedItems[0]?.id || ""
+      })
     } catch (error) {
       console.error("Error al cargar atributos de variantes:", error)
       setVariantAttributes([])
+    }
+  }
+
+  async function fetchVariantCatalog() {
+    try {
+      setVariantCatalogLoading(true)
+      const response = await getAdminVariantAttributeCatalog({ is_active: true })
+      const items = Array.isArray(response?.data) ? response.data : []
+
+      setVariantCatalog(sortVariantAttributes(items))
+    } catch (error) {
+      console.error("Error al cargar catálogo de variantes:", error)
+      setVariantCatalog([])
+    } finally {
+      setVariantCatalogLoading(false)
     }
   }
 
@@ -324,6 +399,7 @@ function ProductsPage() {
       setGalleryItems(loadedGallery)
       setVariants(loadedVariants)
       setVariantAttributes(loadedVariantAttributes)
+      setActiveVariantAttributeId(loadedVariantAttributes[0]?.id || "")
       resetVariantForms()
       resetGalleryForm()
 
@@ -350,6 +426,7 @@ function ProductsPage() {
     setGalleryItems([])
     setVariants([])
     setVariantAttributes([])
+    setActiveVariantAttributeId("")
     resetVariantForms()
     resetGalleryForm()
     setPanelOpen(true)
@@ -368,6 +445,8 @@ function ProductsPage() {
     setGalleryItems([])
     setVariants([])
     setVariantAttributes([])
+    setActiveVariantAttributeId("")
+    setVariantCatalogForm(INITIAL_VARIANT_CATALOG_FORM)
     resetVariantForms()
     resetGalleryForm()
     setPanelMode("edit")
@@ -394,7 +473,9 @@ function ProductsPage() {
 
   function resetVariantForms() {
     setVariantOptionForm(INITIAL_VARIANT_OPTION_FORM)
+    setVariantValueDrafts({})
     setVariantForm(INITIAL_VARIANT_FORM)
+    setVariantCatalogForm(INITIAL_VARIANT_CATALOG_FORM)
   }
 
   function clearGallerySaveTimers() {
@@ -960,6 +1041,437 @@ function ProductsPage() {
     }
   }
 
+  function handleVariantValueDraftChange(attributeId, field, value) {
+    setVariantValueDrafts((prev) => ({
+      ...prev,
+      [attributeId]: {
+        ...(typeof prev[attributeId] === "object" ? prev[attributeId] : { value: prev[attributeId] || "" }),
+        [field]: value,
+      },
+    }))
+  }
+
+  async function handleVariantAttributeValueAdd(attribute) {
+    const draft =
+      typeof variantValueDrafts[attribute.id] === "object"
+        ? variantValueDrafts[attribute.id]
+        : { value: variantValueDrafts[attribute.id] || "" }
+    const valueName = (draft.value || "").trim()
+    const isColor = isColorVariantAttribute(attribute)
+
+    if (isColor && draft.image && !isValidVariantColorImage(draft.image)) {
+      notifyError("La imagen del color debe ser JPG, PNG, WEBP, GIF o SVG y pesar máximo 5 MB.")
+      return
+    }
+
+    if (!attribute?.name || !valueName) {
+      notifyError("Escribe al menos un valor.")
+      return
+    }
+
+    const valueNames = valueName
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    if (!valueNames.length) {
+      notifyError("Escribe al menos un valor.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+
+      if (!selectedProductId || attribute.pending) {
+        setVariantAttributes((prev) =>
+          prev.map((item) =>
+            item.id === attribute.id
+              ? {
+                  ...item,
+                  values: [
+                    ...(item.values || []),
+                    ...valueNames.map((value, index) => ({
+                      id: `pending-value-${Date.now()}-${index}`,
+                      pending: true,
+                      value,
+                      slug: slugify(value),
+                      sort_order: (item.values?.length || 0) + index + 1,
+                      is_active: true,
+                      metadata: isColor && draft.hex ? { hex: draft.hex } : {},
+                      color_image: isColor && draft.preview_url ? { url: draft.preview_url } : null,
+                      image_file: isColor ? draft.image || null : null,
+                    })),
+                  ],
+                }
+              : item
+          )
+        )
+        setVariantValueDrafts((prev) => ({ ...prev, [attribute.id]: {} }))
+        notifySuccess("Valores agregados. Se guardarán al crear el producto.")
+        return
+      }
+
+      await Promise.all(
+        valueNames.map((item, index) =>
+          createAdminProductVariantAttributeValue(
+            selectedProductId,
+            attribute.id,
+            buildVariantAttributeValuePayload(attribute, {
+              value: item,
+              slug: slugify(item),
+              sort_order: (attribute.values?.length || 0) + index + 1,
+              is_active: true,
+              hex: draft.hex,
+              image: index === 0 ? draft.image : null,
+            })
+          )
+        )
+      )
+
+      await fetchVariantAttributes(selectedProductId)
+      setVariantValueDrafts((prev) => ({ ...prev, [attribute.id]: {} }))
+      notifySuccess("Valores agregados.")
+    } catch (error) {
+      console.error("Error al agregar valores de variante:", error)
+      notifyError(getVariantAttributeValueErrorMessage(error, "No fue posible agregar los valores."))
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleVariantAttributeValueDelete(attribute, value) {
+    if (!attribute?.id || !value?.id) return
+
+    if (
+      !window.confirm(
+        `¿Eliminar "${value.value}" de ${attribute.name}? Las variantes que usen este valor podrían verse afectadas.`
+      )
+    ) {
+      return
+    }
+
+    if (!selectedProductId || attribute.pending || value.pending) {
+      setVariantAttributes((prev) =>
+        prev.map((item) =>
+          item.id === attribute.id
+            ? {
+                ...item,
+                values: (item.values || []).filter((attributeValue) => {
+                  return String(attributeValue.id) !== String(value.id)
+                }),
+              }
+            : item
+        )
+      )
+      setVariantForm((prev) => ({
+        ...prev,
+        attribute_value_ids: prev.attribute_value_ids.filter((selectedValueId) => {
+          return Number(selectedValueId) !== Number(value.id)
+        }),
+      }))
+      notifySuccess("Valor eliminado.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      await deleteAdminProductVariantAttributeValue(selectedProductId, attribute.id, value.id)
+      await fetchVariantAttributes(selectedProductId)
+      setVariantForm((prev) => ({
+        ...prev,
+        attribute_value_ids: prev.attribute_value_ids.filter((selectedValueId) => {
+          return Number(selectedValueId) !== Number(value.id)
+        }),
+      }))
+      notifySuccess("Valor eliminado.")
+    } catch (error) {
+      console.error("Error al eliminar valor de variante:", error)
+      notifyError(error?.response?.data?.message || "No fue posible eliminar el valor.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleVariantAttributeValueImageUpdate(attribute, value, file) {
+    if (!selectedProductId || !attribute?.id || !value?.id || !isColorVariantAttribute(attribute)) return
+
+    if (!isValidVariantColorImage(file)) {
+      notifyError("La imagen del color debe ser JPG, PNG, WEBP, GIF o SVG y pesar máximo 5 MB.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      await updateAdminProductVariantAttributeValue(
+        selectedProductId,
+        attribute.id,
+        value.id,
+        buildVariantAttributeValuePayload(attribute, {
+          value: value.value,
+          slug: value.slug || slugify(value.value),
+          sort_order: value.sort_order || 1,
+          is_active: Boolean(value.is_active ?? true),
+          hex: value.metadata?.hex || "",
+          image: file,
+        })
+      )
+      await fetchVariantAttributes(selectedProductId)
+      notifySuccess("Imagen de color actualizada.")
+    } catch (error) {
+      console.error("Error al actualizar imagen de color:", error)
+      notifyError(getVariantAttributeValueErrorMessage(error, "No fue posible actualizar la imagen."))
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleVariantAttributeValueImageRemove(attribute, value) {
+    if (!selectedProductId || !attribute?.id || !value?.id || !isColorVariantAttribute(attribute)) return
+
+    try {
+      setVariantsSaving(true)
+      await updateAdminProductVariantAttributeValue(
+        selectedProductId,
+        attribute.id,
+        value.id,
+        buildVariantAttributeValuePayload(attribute, {
+          value: value.value,
+          slug: value.slug || slugify(value.value),
+          sort_order: value.sort_order || 1,
+          is_active: Boolean(value.is_active ?? true),
+          hex: value.metadata?.hex || "",
+          remove_image: true,
+        })
+      )
+      await fetchVariantAttributes(selectedProductId)
+      notifySuccess("Imagen de color eliminada.")
+    } catch (error) {
+      console.error("Error al quitar imagen de color:", error)
+      notifyError(getVariantAttributeValueErrorMessage(error, "No fue posible quitar la imagen."))
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  function handleVariantCatalogFormChange(event) {
+    const { name, value } = event.target
+
+    setVariantCatalogForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  function handleVariantCatalogAttributeChange(event) {
+    const attributeId = event.target.value
+    if (attributeId === "custom") {
+      setVariantCatalogForm((prev) => ({
+        ...prev,
+        catalog_attribute_id: attributeId,
+        value_ids: [],
+      }))
+      return
+    }
+
+    const attribute = variantCatalog.find((item) => Number(item.id) === Number(attributeId))
+
+    setVariantCatalogForm((prev) => ({
+      ...prev,
+      catalog_attribute_id: attributeId,
+      value_ids: attribute?.values?.length === 1 ? [Number(attribute.values[0].id)] : [],
+    }))
+  }
+
+  function handleVariantCatalogValueToggle(valueId) {
+    setVariantCatalogForm((prev) => {
+      const normalizedValueId = Number(valueId)
+      const alreadySelected = prev.value_ids.some((selectedValueId) => {
+        return Number(selectedValueId) === normalizedValueId
+      })
+
+      return {
+        ...prev,
+        value_ids: alreadySelected
+          ? prev.value_ids.filter((selectedValueId) => Number(selectedValueId) !== normalizedValueId)
+          : [...prev.value_ids, normalizedValueId],
+      }
+    })
+  }
+
+  async function handleVariantCatalogCreateAttribute() {
+    const attributeName = variantCatalogForm.custom_attribute_name.trim()
+
+    if (!attributeName) {
+      notifyError("Escribe el nombre del atributo personalizado.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      const response = await createAdminVariantAttributeCatalog({
+        name: attributeName,
+        slug: slugify(attributeName),
+        sort_order: variantCatalog.length + 1,
+        is_active: true,
+      })
+      const createdAttribute = response?.data
+
+      if (!createdAttribute?.id) {
+        throw new Error("No fue posible crear el atributo personalizado.")
+      }
+
+      await fetchVariantCatalog()
+      setVariantCatalogForm((prev) => ({
+        ...prev,
+        catalog_attribute_id: String(createdAttribute.id),
+        value_ids: [],
+        custom_attribute_name: "",
+        custom_values: "",
+      }))
+      await handleVariantCatalogImport(createdAttribute)
+      notifySuccess("Atributo personalizado creado.")
+    } catch (error) {
+      console.error("Error al crear atributo personalizado:", error)
+      notifyError(error?.response?.data?.message || "No fue posible crear el atributo personalizado.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleVariantCatalogImport(forcedAttribute = null) {
+    const catalogAttributeId = Number(variantCatalogForm.catalog_attribute_id)
+    const selectedAttribute =
+      forcedAttribute || variantCatalog.find((item) => Number(item.id) === catalogAttributeId)
+
+    if (!selectedAttribute?.id) {
+      notifyError("Elige un atributo del catálogo.")
+      return
+    }
+
+    const existingAttribute = findVariantAttributeByName(variantAttributes, selectedAttribute.name)
+
+    if (existingAttribute?.id) {
+      setActiveVariantAttributeId(existingAttribute.id)
+      notifySuccess("Atributo seleccionado.")
+      return
+    }
+
+    if (!selectedProductId) {
+      const pendingAttribute = {
+        id: `pending-attribute-${Date.now()}`,
+        pending: true,
+        name: selectedAttribute.name,
+        slug: selectedAttribute.slug || slugify(selectedAttribute.name),
+        sort_order: variantAttributes.length + 1,
+        is_active: true,
+        values: [],
+      }
+
+      setVariantAttributes((prev) => [...prev, pendingAttribute])
+      setActiveVariantAttributeId(pendingAttribute.id)
+      setVariantCatalogForm((prev) => ({ ...prev, value_ids: [] }))
+      notifySuccess("Atributo seleccionado. Se guardará al crear el producto.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      const response = await createAdminProductVariantAttribute(selectedProductId, {
+        name: selectedAttribute.name,
+        slug: selectedAttribute.slug || slugify(selectedAttribute.name),
+        sort_order: variantAttributes.length + 1,
+        is_active: true,
+      })
+      const createdAttribute = response?.data
+
+      await fetchVariantAttributes(selectedProductId)
+      setActiveVariantAttributeId(createdAttribute?.id || "")
+      setVariantCatalogForm((prev) => ({ ...prev, value_ids: [] }))
+      notifySuccess("Atributo seleccionado.")
+    } catch (error) {
+      console.error("Error al importar atributo del catálogo:", error)
+      notifyError(error?.response?.data?.message || "No fue posible seleccionar el atributo.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleVariantAttributeDelete(attribute) {
+    if (!attribute?.id) return
+
+    if (
+      !window.confirm(
+        `¿Eliminar el atributo "${attribute.name}"? También se eliminarán sus valores y variantes relacionadas.`
+      )
+    ) {
+      return
+    }
+
+    if (!selectedProductId || attribute.pending) {
+      setVariantAttributes((prev) =>
+        prev.filter((item) => String(item.id) !== String(attribute.id))
+      )
+      setActiveVariantAttributeId("")
+      setVariantForm(INITIAL_VARIANT_FORM)
+      notifySuccess("Atributo eliminado.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      const response = await deleteAdminProductVariantAttribute(selectedProductId, attribute.id)
+      const deletedValuesCount = Number(response?.data?.deleted_values_count || 0)
+      const deletedVariantsCount = Number(response?.data?.deleted_variants_count || 0)
+
+      await Promise.all([
+        fetchVariantAttributes(selectedProductId),
+        fetchVariants(selectedProductId),
+      ])
+      setVariantForm(INITIAL_VARIANT_FORM)
+      notifySuccess(
+        `Atributo eliminado. Se quitaron ${deletedValuesCount} valor(es) y ${deletedVariantsCount} variante(s).`
+      )
+    } catch (error) {
+      console.error("Error al eliminar atributo de variante:", error)
+      notifyError(error?.response?.data?.message || "No fue posible eliminar el atributo.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
+  async function handleGenerateVariantCombinations() {
+    if (!selectedProductId) {
+      notifyError("Primero guarda el producto. Después podrás generar variantes.")
+      return
+    }
+
+    const combinations = buildMissingVariantCombinations(variantAttributes, variants)
+
+    if (!combinations.length) {
+      notifyError("No hay combinaciones nuevas por generar.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      await Promise.all(
+        combinations.map((combination, index) =>
+          createAdminProductVariant(
+            selectedProductId,
+            buildGeneratedVariantPayload(combination, panelForm, variants.length + index + 1)
+          )
+        )
+      )
+      await fetchVariants(selectedProductId)
+      notifySuccess(`${combinations.length} variante${combinations.length === 1 ? "" : "s"} generada${combinations.length === 1 ? "" : "s"}.`)
+    } catch (error) {
+      console.error("Error al generar combinaciones de variantes:", error)
+      notifyError(error?.response?.data?.message || "No fue posible generar las variantes.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
   function handleVariantFormChange(event) {
     const { name, value, type, checked } = event.target
 
@@ -990,8 +1502,18 @@ function ProductsPage() {
   }
 
   async function handleVariantSave() {
-    if (!variantForm.sku.trim()) {
-      notifyError("El SKU de la variante es obligatorio.")
+    if (!variantForm.attribute_value_ids.length) {
+      notifyError("Selecciona al menos un valor del producto para guardar la variante.")
+      return
+    }
+
+    if (variantForm.price === "" || Number(variantForm.price) < 0) {
+      notifyError("Agrega un precio válido para la variante.")
+      return
+    }
+
+    if (variantForm.stock === "" || Number(variantForm.stock) < 0) {
+      notifyError("Agrega un stock válido para la variante.")
       return
     }
 
@@ -1000,7 +1522,18 @@ function ProductsPage() {
       return
     }
 
-    const payload = buildVariantPayload(variantForm, variants.length + 1)
+    const payload = buildVariantPayload(
+      {
+        ...variantForm,
+        sku: generatedVariantSku,
+        name: "",
+        compare_price: "",
+        sort_order: "",
+        metadata_barcode: "",
+        metadata_supplier_code: "",
+      },
+      variants.length + 1
+    )
 
     try {
       setVariantsSaving(true)
@@ -1064,6 +1597,30 @@ function ProductsPage() {
     }
   }
 
+  async function handleVariantDelete(variant) {
+    if (!variant?.id) return
+
+    if (!window.confirm(`¿Eliminar la variante "${variant.sku || variant.name}"?`)) return
+
+    if (!selectedProductId || variant.pending) {
+      setVariants((prev) => prev.filter((item) => String(item.id) !== String(variant.id)))
+      notifySuccess("Variante eliminada.")
+      return
+    }
+
+    try {
+      setVariantsSaving(true)
+      await deleteAdminProductVariant(selectedProductId, variant.id)
+      await fetchVariants(selectedProductId)
+      notifySuccess("Variante eliminada.")
+    } catch (error) {
+      console.error("Error al eliminar variante:", error)
+      notifyError(error?.response?.data?.message || "No fue posible eliminar la variante.")
+    } finally {
+      setVariantsSaving(false)
+    }
+  }
+
   async function uploadPendingVariants(productId) {
     const pendingVariants = variants.filter((variant) => variant.pending)
 
@@ -1099,13 +1656,18 @@ function ProductsPage() {
 
         await Promise.all(
           pendingValues.map((value, index) =>
-            createAdminProductVariantAttributeValue(productId, attribute.id, {
-              value: value.value,
-              slug: value.slug || slugify(value.value),
-              sort_order: value.sort_order || (attribute.values?.length || 0) + index + 1,
-              is_active: Boolean(value.is_active ?? true),
-              metadata: value.metadata || {},
-            })
+            createAdminProductVariantAttributeValue(
+              productId,
+              attribute.id,
+              buildVariantAttributeValuePayload(attribute, {
+                value: value.value,
+                slug: value.slug || slugify(value.value),
+                sort_order: value.sort_order || (attribute.values?.length || 0) + index + 1,
+                is_active: Boolean(value.is_active ?? true),
+                hex: value.metadata?.hex || "",
+                image: value.image_file || null,
+              })
+            )
           )
         )
       })
@@ -1125,13 +1687,25 @@ function ProductsPage() {
 
         await Promise.all(
           (attribute.values || []).map((value, index) =>
-            createAdminProductVariantAttributeValue(productId, createdAttribute.id, {
-              value: value.value,
-              slug: value.slug || slugify(value.value),
-              sort_order: value.sort_order || index + 1,
-              is_active: Boolean(value.is_active ?? true),
-              metadata: value.metadata || {},
-            })
+            createAdminProductVariantAttributeValue(
+              productId,
+              createdAttribute.id,
+              buildVariantAttributeValuePayload(
+                {
+                  ...createdAttribute,
+                  slug: createdAttribute.slug || attribute.slug,
+                  name: createdAttribute.name || attribute.name,
+                },
+                {
+                  value: value.value,
+                  slug: value.slug || slugify(value.value),
+                  sort_order: value.sort_order || index + 1,
+                  is_active: Boolean(value.is_active ?? true),
+                  hex: value.metadata?.hex || "",
+                  image: value.image_file || null,
+                }
+              )
+            )
           )
         )
       })
@@ -1389,7 +1963,7 @@ function ProductsPage() {
     try {
       const response = await getAdminProductPriceScales(product.id)
       const data = response?.data || response || {}
-      setPriceScaleForm(mapPriceScaleResponseToForm(data, product))
+      setPriceScaleForm(mapPriceScaleResponseToForm(data))
     } catch (error) {
       console.error("Error al cargar escalas:", error?.response?.data || error)
       setPriceScaleForm(INITIAL_PRICE_SCALE_FORM)
@@ -1467,7 +2041,7 @@ function ProductsPage() {
       setPriceScaleSaving(true)
       const response = await updateAdminProductPriceScales(priceScaleProduct.id, payload)
       notifySuccess(response?.message || "Escalas de precio actualizadas correctamente.")
-      setPriceScaleForm(mapPriceScaleResponseToForm(response?.data || response, priceScaleProduct))
+      setPriceScaleForm(mapPriceScaleResponseToForm(response?.data || response))
     } catch (error) {
       console.error("Error al guardar escalas:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible guardar las escalas.")
@@ -1832,11 +2406,19 @@ function ProductsPage() {
         gallerySaving={gallerySaving}
         galleryForm={galleryForm}
         variantAttributes={variantAttributes}
+        activeVariantAttribute={activeVariantAttribute}
+        variantCatalog={variantCatalog}
+        variantCatalogLoading={variantCatalogLoading}
         variants={variants}
         variantsLoading={variantsLoading}
         variantsSaving={variantsSaving}
         variantOptionForm={variantOptionForm}
+        variantValueDrafts={variantValueDrafts}
         variantForm={variantForm}
+        generatedVariantSku={generatedVariantSku}
+        variantFormIncomplete={variantFormIncomplete}
+        variantCatalogForm={variantCatalogForm}
+        missingVariantCombinationCount={missingVariantCombinationCount}
         onClose={handleClosePanel}
         onChange={handlePanelChange}
         onEntitySelect={handleEntitySelect}
@@ -1850,11 +2432,24 @@ function ProductsPage() {
         onGalleryMove={handleGalleryMove}
         onVariantOptionFormChange={handleVariantOptionFormChange}
         onVariantOptionAdd={handleVariantOptionAdd}
+        onVariantValueDraftChange={handleVariantValueDraftChange}
+        onVariantAttributeValueAdd={handleVariantAttributeValueAdd}
+        onVariantAttributeValueDelete={handleVariantAttributeValueDelete}
+        onVariantAttributeValueImageUpdate={handleVariantAttributeValueImageUpdate}
+        onVariantAttributeValueImageRemove={handleVariantAttributeValueImageRemove}
+        onVariantAttributeDelete={handleVariantAttributeDelete}
+        onVariantCatalogFormChange={handleVariantCatalogFormChange}
+        onVariantCatalogAttributeChange={handleVariantCatalogAttributeChange}
+        onVariantCatalogValueToggle={handleVariantCatalogValueToggle}
+        onVariantCatalogCreateAttribute={handleVariantCatalogCreateAttribute}
+        onVariantCatalogImport={handleVariantCatalogImport}
+        onGenerateVariantCombinations={handleGenerateVariantCombinations}
         onVariantFormChange={handleVariantFormChange}
         onVariantValueToggle={handleVariantValueToggle}
         onVariantSave={handleVariantSave}
         onVariantEdit={handleVariantEdit}
         onVariantStatusChange={handleVariantStatusChange}
+        onVariantDelete={handleVariantDelete}
         onSubmit={handlePanelSubmit}
       />
 
@@ -2109,7 +2704,7 @@ function formatAdminStock(product = {}) {
   return labels[status] || "Sin control"
 }
 
-function mapPriceScaleResponseToForm(data = {}, product = {}) {
+function mapPriceScaleResponseToForm(data = {}) {
   const scales = Array.isArray(data.scales) && data.scales.length
     ? data.scales.map((scale) => ({
         from_quantity: scale.from_quantity ?? "",
@@ -2219,6 +2814,170 @@ function buildVariantPayload(form, defaultSortOrder = 1) {
     attribute_value_ids: (form.attribute_value_ids || []).map(Number),
     metadata,
   }
+}
+
+function buildVariantAttributeValuePayload(attribute = {}, value = {}) {
+  const isColor = isColorVariantAttribute(attribute)
+  const hasImage = isColor && value.image instanceof File
+  const payload = hasImage ? new FormData() : {}
+
+  function append(key, fieldValue) {
+    if (fieldValue === undefined || fieldValue === null || fieldValue === "") return
+
+    if (hasImage) {
+      payload.append(key, fieldValue)
+      return
+    }
+
+    payload[key] = fieldValue
+  }
+
+  append("value", value.value)
+  append("slug", value.slug)
+  append("sort_order", value.sort_order)
+  append("is_active", value.is_active)
+
+  if (isColor && value.hex) {
+    append("metadata[hex]", value.hex)
+  }
+
+  if (hasImage) {
+    payload.append("image", value.image)
+  }
+
+  if (isColor && value.remove_image) {
+    append("remove_image", true)
+  }
+
+  return payload
+}
+
+function isValidVariantColorImage(file) {
+  if (!(file instanceof File)) return false
+
+  return VARIANT_COLOR_IMAGE_TYPES.includes(file.type) && file.size <= VARIANT_COLOR_IMAGE_MAX_SIZE
+}
+
+function getVariantAttributeValueErrorMessage(error, fallback) {
+  const message = error?.response?.data?.message || ""
+  const errors = error?.response?.data?.errors || {}
+  const imageErrors = Array.isArray(errors.image) ? errors.image.join(" ") : ""
+  const fullMessage = `${message} ${imageErrors}`.trim()
+
+  if (/image field must be an image/i.test(fullMessage)) {
+    return "La imagen del color debe ser un archivo de imagen válido."
+  }
+
+  if (/image.*must not be greater|image.*may not be greater/i.test(fullMessage)) {
+    return "La imagen del color no debe superar 5 MB."
+  }
+
+  if (/image/i.test(fullMessage)) {
+    return "No fue posible guardar la imagen del color. Verifica que sea JPG, PNG, WEBP, GIF o SVG."
+  }
+
+  return message || fallback
+}
+
+function isColorVariantAttribute(attribute = {}) {
+  const normalized = `${attribute.slug || ""} ${attribute.name || ""}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+
+  return normalized.includes("color")
+}
+
+function buildGeneratedVariantPayload(combination, productForm = {}, defaultSortOrder = 1) {
+  const suffix = combination.values
+    .map((value) => value.slug || slugify(value.value || value.id))
+    .filter(Boolean)
+    .join("-")
+  const baseSku = productForm.sku?.trim() || "VAR"
+  const combinationName = combination.values.map((value) => value.value).filter(Boolean).join(" / ")
+
+  return {
+    sku: `${baseSku}-${suffix || defaultSortOrder}`.toUpperCase(),
+    name: [productForm.name, combinationName].filter(Boolean).join(" - "),
+    price: productForm.default_price === "" ? null : Number(productForm.default_price || 0),
+    compare_price: null,
+    stock: 0,
+    sort_order: defaultSortOrder,
+    is_active: true,
+    applies_promotions: true,
+    attribute_value_ids: combination.values.map((value) => Number(value.id)),
+    metadata: {},
+  }
+}
+
+function buildMissingVariantCombinations(attributes = [], variants = []) {
+  const usableAttributes = attributes
+    .map((attribute) => ({
+      ...attribute,
+      values: (attribute.values || []).filter((value) => value?.id && !value.pending),
+    }))
+    .filter((attribute) => attribute.values.length > 0)
+
+  if (!usableAttributes.length || usableAttributes.length !== attributes.length) return []
+
+  const existingKeys = new Set(
+    variants
+      .map((variant) => buildVariantCombinationKey(getVariantValueIds(variant)))
+      .filter(Boolean)
+  )
+
+  return buildCombinationMatrix(usableAttributes).filter((combination) => {
+    const key = buildVariantCombinationKey(combination.values.map((value) => value.id))
+    return key && !existingKeys.has(key)
+  })
+}
+
+function buildCombinationMatrix(attributes = [], index = 0, selectedValues = []) {
+  const attribute = attributes[index]
+
+  if (!attribute) {
+    return [{ values: selectedValues }]
+  }
+
+  return attribute.values.flatMap((value) => {
+    return buildCombinationMatrix(attributes, index + 1, [...selectedValues, value])
+  })
+}
+
+function getVariantValueIds(variant = {}) {
+  if (Array.isArray(variant.attribute_value_ids)) {
+    return variant.attribute_value_ids
+  }
+
+  if (Array.isArray(variant.attribute_values)) {
+    return variant.attribute_values.map((value) => value.id)
+  }
+
+  return []
+}
+
+function getSelectedVariantValues(attributes = [], selectedValueIds = []) {
+  const selectedIds = new Set(selectedValueIds.map(Number).filter(Boolean))
+
+  return attributes.flatMap((attribute) => {
+    return (attribute.values || []).filter((value) => selectedIds.has(Number(value.id)))
+  })
+}
+
+function buildVariantSku(productForm = {}, selectedValues = []) {
+  const baseSku = productForm.sku?.trim() || "VAR"
+  const suffix = selectedValues
+    .map((value) => value.slug || slugify(value.value || value.id))
+    .filter(Boolean)
+    .join("-")
+
+  return suffix ? `${baseSku}-${suffix}`.toUpperCase() : ""
+}
+
+function buildVariantCombinationKey(valueIds = []) {
+  const normalizedIds = valueIds.map(Number).filter(Boolean).sort((a, b) => a - b)
+
+  return normalizedIds.length ? normalizedIds.join(":") : ""
 }
 
 function slugify(value = "") {

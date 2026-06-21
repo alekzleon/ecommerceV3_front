@@ -1,16 +1,80 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useAuth } from "../../../context/AuthContext"
 import { useSettings } from "../../../context/SettingsContext"
 import { sendContactLead } from "../../../services/api/contactService"
+import {
+  getPublicHomeBenefits,
+  updateAdminHomeBenefit,
+} from "../../../services/api/settingsService"
+import { normalizeMediaUrl } from "../../../utils/mediaUrl"
+import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import "./footer.css"
+
+const DEFAULT_HOME_BENEFITS = [
+  {
+    benefit: 1,
+    title: "Paga con tarjetas de crédito / débito",
+    text: "Puedes pagar con cualquier tarjeta de débito, meses sin intereses y comprar las 24 horas, los 7 días de la semana.",
+    icon_url: "",
+    fallbackIcon: "bi-credit-card-2-front",
+  },
+  {
+    benefit: 2,
+    title: "Envío gratis en la compra de $2500",
+    text: "Al llegar a esta cantidad aprovecha el envío gratis.",
+    icon_url: "",
+    fallbackIcon: "bi-truck",
+  },
+  {
+    benefit: 3,
+    title: "Compra segura siempre",
+    text: "Protegemos tus datos y tu compra en cada paso para que puedas comprar con confianza.",
+    icon_url: "",
+    fallbackIcon: "bi-shield-check",
+  },
+]
 
 function Footer() {
   const { settings, brandName, logoUrl } = useSettings()
+  const { isAuthenticated, isInternal, modules } = useAuth()
   const [submittingLead, setSubmittingLead] = useState(false)
   const [leadStatus, setLeadStatus] = useState(null)
+  const [homeBenefits, setHomeBenefits] = useState(DEFAULT_HOME_BENEFITS)
+  const [homeBenefitsLoading, setHomeBenefitsLoading] = useState(true)
   const contactNumbers = Array.isArray(settings.contact_numbers)
     ? settings.contact_numbers.filter(Boolean)
     : []
   const socialLinks = settings.social_links || {}
+  const canEditHomeBenefits =
+    isAuthenticated && isInternal && hasModule(modules, "configuracion_ecommerce")
+
+  useEffect(() => {
+    loadHomeBenefits()
+  }, [])
+
+  async function loadHomeBenefits() {
+    try {
+      setHomeBenefitsLoading(true)
+      const response = await getPublicHomeBenefits()
+      setHomeBenefits(normalizeHomeBenefitsResponse(response))
+    } catch (error) {
+      console.error("Error loading home benefits:", error?.response?.data || error)
+      setHomeBenefits(DEFAULT_HOME_BENEFITS)
+    } finally {
+      setHomeBenefitsLoading(false)
+    }
+  }
+
+  async function handleSaveHomeBenefit(benefitId, payload, options = {}) {
+    const response = await updateAdminHomeBenefit(benefitId, payload, options)
+    const benefit = normalizeHomeBenefitResponse(response)
+
+    setHomeBenefits((prev) =>
+      prev.map((item) => (item.benefit === benefitId ? benefit : item))
+    )
+
+    notifySuccess("Beneficio actualizado correctamente.")
+  }
 
   const handleLeadSubmit = async (event) => {
     event.preventDefault()
@@ -48,6 +112,25 @@ function Footer() {
 
   return (
     <footer className="new_footer_area bg_color">
+      <section className="footer_benefits" aria-label="Beneficios de compra">
+        <div className="footer_container">
+          <div className="footer_benefits_grid">
+            {homeBenefitsLoading
+              ? DEFAULT_HOME_BENEFITS.map((benefit) => (
+                  <HomeBenefitSkeleton key={benefit.benefit} />
+                ))
+              : homeBenefits.map((benefit) => (
+                  <HomeBenefitCard
+                    key={benefit.benefit}
+                    benefit={benefit}
+                    canEdit={canEditHomeBenefits}
+                    onSave={handleSaveHomeBenefit}
+                  />
+                ))}
+          </div>
+        </div>
+      </section>
+
       <div className="new_footer_top">
         <div className="footer_container">
           <div className="footer_row">
@@ -248,6 +331,231 @@ function Footer() {
       </div>
     </footer>
   )
+}
+
+function HomeBenefitSkeleton() {
+  return (
+    <article className="footer_benefit footer_benefit--skeleton" aria-hidden="true">
+      <span className="footer_benefit_skeleton_icon" />
+      <span className="footer_benefit_skeleton_line is-title" />
+      <span className="footer_benefit_skeleton_line" />
+      <span className="footer_benefit_skeleton_line is-short" />
+    </article>
+  )
+}
+
+function HomeBenefitCard({ benefit, canEdit, onSave }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [draft, setDraft] = useState(() => getBenefitDraft(benefit))
+
+  useEffect(() => {
+    if (!editing) setDraft(getBenefitDraft(benefit))
+  }, [benefit, editing])
+
+  function handleChange(event) {
+    const { name, value, type, checked, files } = event.target
+
+    setDraft((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : type === "file" ? files?.[0] || null : value,
+    }))
+  }
+
+  function handleCancel() {
+    setDraft(getBenefitDraft(benefit))
+    setEditing(false)
+  }
+
+  async function handleSave() {
+    const title = draft.title.trim()
+    const text = draft.text.trim()
+
+    if (title.length > 120) {
+      notifyWarning("El título debe tener máximo 120 caracteres.")
+      return
+    }
+
+    if (text.length > 300) {
+      notifyWarning("El texto debe tener máximo 300 caracteres.")
+      return
+    }
+
+    try {
+      setSaving(true)
+      const hasFile = draft.icon instanceof File
+      const payload = hasFile
+        ? buildHomeBenefitFormData({ title, text, icon: draft.icon, removeIcon: draft.remove_icon })
+        : {
+            titulo: title,
+            texto: text,
+            ...(draft.remove_icon ? { remove_icon: true } : {}),
+          }
+
+      await onSave(benefit.benefit, payload, { hasFile })
+      setEditing(false)
+    } catch (error) {
+      console.error("Error updating home benefit:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible actualizar el beneficio.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <article className={`footer_benefit ${editing ? "is-editing" : ""}`}>
+      <span className="footer_benefit_icon" aria-hidden="true">
+        {benefit.icon_url && !draft.remove_icon ? (
+          <img src={benefit.icon_url} alt="" />
+        ) : (
+          <i className={`bi ${benefit.fallbackIcon}`} />
+        )}
+      </span>
+
+      {editing ? (
+        <div className="footer_benefit_editor">
+          <label>
+            <span>Título</span>
+            <input
+              type="text"
+              name="title"
+              value={draft.title}
+              onChange={handleChange}
+              maxLength="120"
+              disabled={saving}
+            />
+          </label>
+
+          <label>
+            <span>Texto</span>
+            <textarea
+              name="text"
+              value={draft.text}
+              onChange={handleChange}
+              maxLength="300"
+              disabled={saving}
+            />
+          </label>
+
+          <label>
+            <span>Ícono</span>
+            <input
+              type="file"
+              name="icon"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+              onChange={handleChange}
+              disabled={saving}
+            />
+          </label>
+
+          {benefit.icon_url ? (
+            <label className="footer_benefit_remove">
+              <input
+                type="checkbox"
+                name="remove_icon"
+                checked={draft.remove_icon}
+                onChange={handleChange}
+                disabled={saving}
+              />
+              <span>Quitar ícono actual</span>
+            </label>
+          ) : null}
+
+          <div className="footer_benefit_actions">
+            <button type="button" onClick={handleCancel} disabled={saving}>
+              Cancelar
+            </button>
+            <button type="button" className="is-primary" onClick={handleSave} disabled={saving}>
+              {saving ? "Guardando..." : "Confirmar"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <h3>{benefit.title}</h3>
+          <p>{benefit.text}</p>
+
+          {canEdit ? (
+            <button
+              type="button"
+              className="footer_benefit_edit"
+              onClick={() => setEditing(true)}
+              aria-label={`Editar beneficio ${benefit.benefit}`}
+              title="Editar beneficio"
+            >
+              <i className="bi bi-pencil-square" aria-hidden="true" />
+            </button>
+          ) : null}
+        </>
+      )}
+    </article>
+  )
+}
+
+function buildHomeBenefitFormData({ title, text, icon, removeIcon }) {
+  const payload = new FormData()
+  payload.append("titulo", title)
+  payload.append("texto", text)
+  if (icon instanceof File) payload.append("icono", icon)
+  if (removeIcon) payload.append("remove_icon", "true")
+
+  return payload
+}
+
+function getBenefitDraft(benefit) {
+  return {
+    title: benefit.title || "",
+    text: benefit.text || "",
+    icon: null,
+    remove_icon: false,
+  }
+}
+
+function normalizeHomeBenefitsResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const payload = data.value || data
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+    ? payload.items
+    : Object.values(payload || {})
+
+  return DEFAULT_HOME_BENEFITS.map((fallback) => {
+    const match = items.find((item) => {
+      const value = item?.value || item
+      return Number(value?.benefit ?? item?.benefit) === fallback.benefit
+    })
+
+    return normalizeHomeBenefitValue(match?.value || match, fallback)
+  })
+}
+
+function normalizeHomeBenefitResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+  const fallback = DEFAULT_HOME_BENEFITS.find((item) => item.benefit === Number(value.benefit)) ||
+    DEFAULT_HOME_BENEFITS[0]
+
+  return normalizeHomeBenefitValue(value, fallback)
+}
+
+function normalizeHomeBenefitValue(value = {}, fallback) {
+  return {
+    ...fallback,
+    benefit: Number(value.benefit || fallback.benefit),
+    title: value.title || fallback.title,
+    text: value.text || fallback.text,
+    icon_disk: value.icon_disk || "",
+    icon_path: value.icon_path || null,
+    icon_url: normalizeMediaUrl(value.icon_url || value.icon_path || ""),
+  }
+}
+
+function hasModule(modules = [], moduleName) {
+  return Array.isArray(modules) && modules.some((module) => {
+    if (typeof module === "string") return module === moduleName
+    return module?.name === moduleName || module?.module === moduleName
+  })
 }
 
 export default Footer

@@ -301,12 +301,6 @@ function Header() {
               Ofertas
             </Link>
 
-            {isAuthenticated ? (
-              <Link to="/frecuentes" onClick={closeMobileMenu}>
-                Frecuentes
-              </Link>
-            ) : null}
-
           </div>
 
           <div className="header-user">

@@ -107,12 +107,17 @@ function ProductDetailPanel({
   galleryLoading,
   gallerySaving,
   galleryForm,
-  variantAttributes = [],
+  activeVariantAttribute = null,
+  variantCatalog = [],
+  variantCatalogLoading = false,
   variants = [],
   variantsLoading,
   variantsSaving,
-  variantOptionForm,
+  variantValueDrafts = {},
   variantForm,
+  variantCatalogForm,
+  generatedVariantSku = "",
+  variantFormIncomplete = false,
   onClose,
   onChange,
   onEntitySelect,
@@ -124,13 +129,22 @@ function ProductDetailPanel({
   onGalleryItemToggle,
   onGalleryDelete,
   onGalleryMove,
-  onVariantOptionFormChange,
-  onVariantOptionAdd,
+  onVariantValueDraftChange,
+  onVariantAttributeValueAdd,
+  onVariantAttributeValueDelete,
+  onVariantAttributeValueImageUpdate,
+  onVariantAttributeValueImageRemove,
+  onVariantAttributeDelete,
+  onVariantCatalogFormChange,
+  onVariantCatalogAttributeChange,
+  onVariantCatalogCreateAttribute,
+  onVariantCatalogImport,
   onVariantFormChange,
   onVariantValueToggle,
   onVariantSave,
   onVariantEdit,
   onVariantStatusChange,
+  onVariantDelete,
   onSubmit,
 }) {
   const isCreate = mode === "create"
@@ -138,6 +152,8 @@ function ProductDetailPanel({
   const variantsBusy = variantsLoading || variantsSaving || saving
   const [selectedGalleryItemId, setSelectedGalleryItemId] = useState(null)
   const selectedGalleryItem = galleryItems.find((item) => item.id === selectedGalleryItemId) || null
+  const showCustomAttributeForm = variantCatalogForm?.catalog_attribute_id === "custom"
+  const activeAttributeIsColor = isColorVariantAttribute(activeVariantAttribute)
 
   function handleBooleanSelect(name, value) {
     onChange({
@@ -556,112 +572,290 @@ function ProductDetailPanel({
               </div>
             </div>
 
-            <div className="product-detail__variant-options">
-              {variantAttributes.length === 0 ? (
-                <div className="product-detail__gallery-empty">
-                  Agrega opciones como Color, Talla, Tamaño, Sabor o cualquier atributo personalizado.
+            <div className="product-detail__variant-builder">
+              {isCreate ? (
+                <div className="product-detail__variant-notice">
+                  Guarda el producto para importar atributos del catálogo y generar combinaciones.
                 </div>
-              ) : (
-                variantAttributes.map((attribute) => (
-                  <div className="product-detail__variant-option" key={attribute.id}>
-                    <div className="product-detail__variant-option-handle">
-                      <i className="bi bi-grip-vertical" aria-hidden="true" />
-                    </div>
-                    <div>
-                      <strong>{attribute.name}</strong>
-                      <div className="product-detail__variant-chips">
-                        {(attribute.values || []).map((value) => (
-                          <button
-                            type="button"
-                            key={value.id}
-                            className={`product-detail__variant-chip ${
-                              variantForm.attribute_value_ids?.some(
-                                (selectedValueId) => Number(selectedValueId) === Number(value.id)
-                              )
-                                ? "is-selected"
-                                : ""
-                            }`}
-                            onClick={() => onVariantValueToggle(attribute.id, value.id)}
-                          >
-                            {value.metadata?.hex ? (
-                              <span
-                                className="product-detail__variant-swatch"
-                                style={{ backgroundColor: value.metadata.hex }}
-                              />
-                            ) : null}
-                            {value.value}
-                          </button>
-                        ))}
+              ) : null}
+
+              <div className="product-detail__variant-step">
+                <div className="product-detail__variant-step-head">
+                  <span>1</span>
+                  <div>
+                    <strong>Elige atributos del catálogo</strong>
+                    <p>Selecciona el atributo que tendrá este producto. Los valores se capturan en el paso 2.</p>
+                  </div>
+                </div>
+
+                <div
+                  className={`product-detail__variant-catalog ${
+                    showCustomAttributeForm ? "is-custom" : ""
+                  }`}
+                >
+                  <div className="product-detail__field">
+                    <label className="form-label">Atributo</label>
+                    <select
+                      className="form-select"
+                      value={variantCatalogForm?.catalog_attribute_id || ""}
+                      onChange={onVariantCatalogAttributeChange}
+                      disabled={variantsBusy || variantCatalogLoading}
+                    >
+                      <option value="">
+                        {variantCatalogLoading ? "Cargando catálogo..." : "Selecciona un atributo"}
+                      </option>
+                      {variantCatalog.map((attribute) => (
+                        <option key={attribute.id} value={attribute.id}>
+                          {attribute.name}
+                          {attribute.scope === "custom" ? " · personalizado" : ""}
+                        </option>
+                      ))}
+                      <option value="custom">Atributo personalizado</option>
+                    </select>
+                  </div>
+
+                  {!showCustomAttributeForm ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => onVariantCatalogImport()}
+                      disabled={
+                        variantsBusy ||
+                        !variantCatalogForm?.catalog_attribute_id
+                      }
+                    >
+                      Usar atributo
+                    </button>
+                  ) : null}
+                </div>
+
+                {showCustomAttributeForm ? (
+                  <div className="product-detail__variant-custom">
+                    <div className="product-detail__grid">
+                      <div className="product-detail__field">
+                        <label className="form-label">Atributo personalizado</label>
+                        <input
+                          type="text"
+                          name="custom_attribute_name"
+                          className="form-control"
+                          value={variantCatalogForm?.custom_attribute_name || ""}
+                          onChange={onVariantCatalogFormChange}
+                          placeholder="Origen, Aroma, Presentación..."
+                          disabled={variantsBusy}
+                        />
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      onClick={onVariantCatalogCreateAttribute}
+                      disabled={variantsBusy || !variantCatalogForm?.custom_attribute_name?.trim()}
+                    >
+                      Crear atributo personalizado
+                    </button>
                   </div>
-                ))
-              )}
+                ) : null}
+              </div>
 
-              <div className="product-detail__variant-add">
-                <div className="product-detail__grid product-detail__grid--two">
-                  <div className="product-detail__field">
-                    <label className="form-label">Opción</label>
-                    <input
-                      type="text"
-                      name="name"
-                      className="form-control"
-                      value={variantOptionForm.name}
-                      onChange={onVariantOptionFormChange}
-                      placeholder="Color, Talla, Tipo de suela..."
-                    />
-                  </div>
-                  <div className="product-detail__field">
-                    <label className="form-label">Valores</label>
-                    <input
-                      type="text"
-                      name="value"
-                      className="form-control"
-                      value={variantOptionForm.value}
-                      onChange={onVariantOptionFormChange}
-                      placeholder="Rojo, Azul, M, 600ml..."
-                    />
+              <div className="product-detail__variant-step">
+                <div className="product-detail__variant-step-head">
+                  <span>2</span>
+                  <div>
+                    <strong>Valores del producto</strong>
+                    <p>Estos valores se usan para armar cada variante vendible.</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-outline-primary"
-                  onClick={onVariantOptionAdd}
-                  disabled={variantsBusy}
-                >
-                  <i className="bi bi-plus-lg" aria-hidden="true" /> Agregar otra opción
-                </button>
+
+                <div className="product-detail__variant-options">
+                  {!activeVariantAttribute ? (
+                    <div className="product-detail__gallery-empty is-incomplete">
+                      Primero selecciona un atributo en el paso 1.
+                    </div>
+                  ) : (
+                      <div className="product-detail__variant-option" key={activeVariantAttribute.id}>
+                        <div className="product-detail__variant-option-handle">
+                          <i className="bi bi-grip-vertical" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <div className="product-detail__variant-option-title">
+                            <strong>{activeVariantAttribute.name}</strong>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => onVariantAttributeDelete(activeVariantAttribute)}
+                              disabled={variantsBusy}
+                            >
+                              Eliminar atributo
+                            </button>
+                          </div>
+                          <div className="product-detail__variant-chips">
+                            {(activeVariantAttribute.values || []).map((value) => (
+                              <span
+                                key={value.id}
+                                className="product-detail__variant-chip-group"
+                              >
+                                <button
+                                  type="button"
+                                  className={`product-detail__variant-chip ${
+                                    variantForm.attribute_value_ids?.some(
+                                      (selectedValueId) => Number(selectedValueId) === Number(value.id)
+                                    )
+                                      ? "is-selected"
+                                      : ""
+                                  }`}
+                                  onClick={() => onVariantValueToggle(activeVariantAttribute.id, value.id)}
+                                >
+                                  {getVariantColorImageUrl(value) ? (
+                                    <span className="product-detail__variant-swatch product-detail__variant-swatch--image">
+                                      <img src={getVariantColorImageUrl(value)} alt={value.value} />
+                                    </span>
+                                  ) : value.metadata?.hex ? (
+                                    <span
+                                      className="product-detail__variant-swatch"
+                                      style={{ backgroundColor: value.metadata.hex }}
+                                    />
+                                  ) : null}
+                                  {value.value}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="product-detail__variant-chip-remove"
+                                  onClick={() => onVariantAttributeValueDelete(activeVariantAttribute, value)}
+                                  disabled={variantsBusy}
+                                  title={`Eliminar ${value.value}`}
+                                  aria-label={`Eliminar ${value.value}`}
+                                >
+                                  <i className="bi bi-x-lg" aria-hidden="true" />
+                                </button>
+                                {activeAttributeIsColor ? (
+                                  <span className="product-detail__variant-chip-image-actions">
+                                    <label
+                                      className="product-detail__variant-chip-image-button"
+                                      title={`Subir imagen para ${value.value}`}
+                                    >
+                                      <i className="bi bi-image" aria-hidden="true" />
+                                      <input
+                                        type="file"
+                                        accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                                        onChange={(event) => {
+                                          const file = event.target.files?.[0] || null
+                                          if (file) onVariantAttributeValueImageUpdate(activeVariantAttribute, value, file)
+                                          event.target.value = ""
+                                        }}
+                                        disabled={variantsBusy || value.pending}
+                                      />
+                                    </label>
+                                    {getVariantColorImageUrl(value) ? (
+                                      <button
+                                        type="button"
+                                        className="product-detail__variant-chip-image-button"
+                                        onClick={() => onVariantAttributeValueImageRemove(activeVariantAttribute, value)}
+                                        disabled={variantsBusy || value.pending}
+                                        title={`Quitar imagen de ${value.value}`}
+                                      >
+                                        <i className="bi bi-image-alt" aria-hidden="true" />
+                                      </button>
+                                    ) : null}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="product-detail__variant-value-add">
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).value}
+                              onChange={(event) =>
+                                onVariantValueDraftChange(activeVariantAttribute.id, "value", event.target.value)
+                              }
+                              placeholder={`Agregar valores para ${activeVariantAttribute.name}`}
+                            />
+                            {activeAttributeIsColor ? (
+                              <>
+                                <input
+                                  type="color"
+                                  className="form-control form-control-color product-detail__variant-color-input"
+                                  value={getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).hex || "#000000"}
+                                  onChange={(event) =>
+                                    onVariantValueDraftChange(activeVariantAttribute.id, "hex", event.target.value)
+                                  }
+                                  title="Color"
+                                />
+                                <label className="btn btn-outline-secondary product-detail__variant-image-upload">
+                                  Imagen
+                                  <input
+                                    type="file"
+                                    accept=".jpg,.jpeg,.png,.webp,.gif,.svg,image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+                                    onChange={(event) => {
+                                      const file = event.target.files?.[0] || null
+                                      if (!file) return
+                                      onVariantValueDraftChange(activeVariantAttribute.id, "image", file)
+                                      onVariantValueDraftChange(
+                                        activeVariantAttribute.id,
+                                        "preview_url",
+                                        URL.createObjectURL(file)
+                                      )
+                                    }}
+                                  />
+                                </label>
+                                {getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).preview_url ? (
+                                  <span className="product-detail__variant-draft-preview">
+                                    <img
+                                      src={getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).preview_url}
+                                      alt="Preview color"
+                                    />
+                                  </span>
+                                ) : null}
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-outline-primary"
+                              onClick={() => onVariantAttributeValueAdd(activeVariantAttribute)}
+                              disabled={
+                                variantsBusy ||
+                                !getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).value?.trim()
+                              }
+                            >
+                              Agregar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="product-detail__variant-step product-detail__variant-step--generate">
+                <div className="product-detail__variant-step-head">
+                  <span>3</span>
+                  <div>
+                    <strong>Configura la variante</strong>
+                    <p>
+                      Selecciona un valor arriba, agrega precio y stock, y guarda la variante.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="product-detail__variant-form">
+            <div className={`product-detail__variant-form ${variantFormIncomplete ? "is-incomplete" : ""}`}>
               <div className="product-detail__grid product-detail__grid--two">
                 <div className="product-detail__field">
+                  <label className="form-label">SKU calculado</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={generatedVariantSku || "Selecciona un valor para calcular SKU"}
+                    readOnly
+                  />
+                </div>
+                <div className="product-detail__field">
                   <label className="form-label">
-                    SKU variante <RequiredMark />
+                    Precio <RequiredMark />
                   </label>
-                  <input
-                    type="text"
-                    name="sku"
-                    className="form-control"
-                    value={variantForm.sku}
-                    onChange={onVariantFormChange}
-                    placeholder="PLAYERA-ROJA-M"
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Nombre</label>
-                  <input
-                    type="text"
-                    name="name"
-                    className="form-control"
-                    value={variantForm.name}
-                    onChange={onVariantFormChange}
-                    placeholder="Playera Roja M"
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Precio</label>
                   <input
                     type="number"
                     step="0.01"
@@ -673,55 +867,15 @@ function ProductDetailPanel({
                   />
                 </div>
                 <div className="product-detail__field">
-                  <label className="form-label">Precio comparación</label>
+                  <label className="form-label">
+                    Stock <RequiredMark />
+                  </label>
                   <input
                     type="number"
-                    step="0.01"
                     min="0"
-                    name="compare_price"
-                    className="form-control"
-                    value={variantForm.compare_price}
-                    onChange={onVariantFormChange}
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Stock</label>
-                  <input
-                    type="number"
                     name="stock"
                     className="form-control"
                     value={variantForm.stock}
-                    onChange={onVariantFormChange}
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Orden</label>
-                  <input
-                    type="number"
-                    name="sort_order"
-                    className="form-control"
-                    value={variantForm.sort_order}
-                    onChange={onVariantFormChange}
-                    placeholder={String(variants.length + 1)}
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Código de barras</label>
-                  <input
-                    type="text"
-                    name="metadata_barcode"
-                    className="form-control"
-                    value={variantForm.metadata_barcode}
-                    onChange={onVariantFormChange}
-                  />
-                </div>
-                <div className="product-detail__field">
-                  <label className="form-label">Código proveedor</label>
-                  <input
-                    type="text"
-                    name="metadata_supplier_code"
-                    className="form-control"
-                    value={variantForm.metadata_supplier_code}
                     onChange={onVariantFormChange}
                   />
                 </div>
@@ -796,6 +950,14 @@ function ProductDetailPanel({
                         disabled={variantsBusy}
                       >
                         {variant.is_active ? "Desactivar" : "Activar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => onVariantDelete(variant)}
+                        disabled={variantsBusy}
+                      >
+                        Eliminar
                       </button>
                     </div>
                   </div>
@@ -1039,3 +1201,41 @@ function ProductDetailPanel({
 }
 
 export default ProductDetailPanel
+
+function getVariantValueDraft(drafts = {}, attributeId) {
+  const draft = drafts[attributeId]
+
+  if (!draft) return { value: "", hex: "", image: null, preview_url: "" }
+  if (typeof draft === "string") return { value: draft, hex: "", image: null, preview_url: "" }
+
+  return {
+    value: draft.value || "",
+    hex: draft.hex || "",
+    image: draft.image || null,
+    preview_url: draft.preview_url || "",
+  }
+}
+
+function isColorVariantAttribute(attribute = {}) {
+  const normalized = `${attribute?.slug || ""} ${attribute?.name || ""}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+
+  return normalized.includes("color")
+}
+
+function getVariantColorImageUrl(value = {}) {
+  return (
+    value.color_image?.url ||
+    value.image_url ||
+    value.image_path ||
+    value.thumbnail_url ||
+    value.thumbnail_path ||
+    value.media_url ||
+    value.media_path ||
+    value.metadata?.image_url ||
+    value.metadata?.image_path ||
+    ""
+  )
+}

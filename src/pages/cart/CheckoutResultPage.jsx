@@ -6,6 +6,7 @@ import {
   restoreCheckoutOrderCart,
 } from "../../services/api/checkoutService.js"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
+import { trackMetaPurchase } from "../../utils/metaPixel"
 import "./checkout.css"
 
 const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
@@ -49,6 +50,7 @@ function CheckoutResultPage({ type = "success" }) {
             if (confirmedOrder) {
               setOrder(confirmedOrder)
               clearCartSummary()
+              trackMetaPurchase(confirmedOrder)
             }
 
             notifySuccess(response?.message || "Pago confirmado correctamente.")
@@ -105,7 +107,11 @@ function CheckoutResultPage({ type = "success" }) {
       try {
         setLoading(true)
         const response = await getCheckoutOrder(orderId)
-        setOrder(response?.data || null)
+        const nextOrder = response?.data || null
+        setOrder(nextOrder)
+        if (type === "success" && nextOrder) {
+          trackMetaPurchase(nextOrder)
+        }
       } catch (error) {
         console.error("Error al consultar pedido:", error?.response?.data || error)
         notifyError(error?.response?.data?.message || "No fue posible consultar el pedido.")

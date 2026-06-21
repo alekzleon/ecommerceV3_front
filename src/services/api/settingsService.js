@@ -31,6 +31,26 @@ export async function getPublicContactMapUrl() {
   return data
 }
 
+export async function getPublicMetaPixel() {
+  const { data } = await api.get("/ecommerce-settings/meta-pixel")
+  return data
+}
+
+export async function getPublicAbandonedCartSettings() {
+  const { data } = await api.get("/ecommerce-settings/abandoned-cart")
+  return data
+}
+
+export async function getPublicHomeBenefits() {
+  const { data } = await api.get("/ecommerce-settings/home-benefits")
+  return data
+}
+
+export async function getPublicHomeBenefit(benefitId) {
+  const { data } = await api.get(`/ecommerce-settings/home-benefits/${benefitId}`)
+  return data
+}
+
 export async function getAdminSettings() {
   const { data } = await api.get("/admin/settings")
   return data
@@ -53,6 +73,26 @@ export async function getAdminContactFaqImage() {
 
 export async function getAdminContactMapUrl() {
   const { data } = await api.get("/admin/ecommerce-settings/contact-map-url")
+  return data
+}
+
+export async function getAdminMetaPixel() {
+  const { data } = await api.get("/admin/ecommerce-settings/meta-pixel")
+  return data
+}
+
+export async function getAdminAbandonedCartSettings() {
+  const { data } = await api.get("/admin/ecommerce-settings/abandoned-cart")
+  return data
+}
+
+export async function getAdminHomeBenefits() {
+  const { data } = await api.get("/admin/ecommerce-settings/home-benefits")
+  return data
+}
+
+export async function getAdminHomeBenefit(benefitId) {
+  const { data } = await api.get(`/admin/ecommerce-settings/home-benefits/${benefitId}`)
   return data
 }
 
@@ -105,6 +145,28 @@ export async function updateAdminContactFaqImage(file) {
 
 export async function updateAdminContactMapUrl(url) {
   const { data } = await api.patch("/admin/ecommerce-settings/contact-map-url", { url })
+  return data
+}
+
+export async function updateAdminMetaPixel(pixelId) {
+  const { data } = await api.patch("/admin/ecommerce-settings/meta-pixel", {
+    pixel_id: pixelId || null,
+  })
+  return data
+}
+
+export async function updateAdminAbandonedCartSettings(payload) {
+  const { data } = await api.patch("/admin/ecommerce-settings/abandoned-cart", payload)
+  return data
+}
+
+export async function updateAdminHomeBenefit(benefitId, payload, options = {}) {
+  const method = options.hasFile ? "post" : "patch"
+  const { data } = await api[method](
+    `/admin/ecommerce-settings/home-benefits/${benefitId}`,
+    payload,
+    multipartConfig(payload)
+  )
   return data
 }
 

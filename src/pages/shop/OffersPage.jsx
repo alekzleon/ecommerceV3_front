@@ -5,6 +5,7 @@ import { addCartItem } from "../../services/api/cartService"
 import { getAllPromotions } from "../../services/api/promotionsService"
 import { useAuth } from "../../context/AuthContext"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
+import { trackMetaAddToCart } from "../../utils/metaPixel"
 import "./offerspage.css"
 
 const OFFERS_PER_PAGE = 24
@@ -118,6 +119,11 @@ function OffersPage() {
         syncCartSummary(cartSummary)
       }
 
+      trackMetaAddToCart({
+        id: offer.productId,
+        name: offer.productName || offer.title,
+        price: offer.price || 0,
+      }, 1)
       notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
     } catch (error) {
       notifyError(error?.response?.data?.message || "No fue posible agregar el producto al carrito.")
@@ -250,6 +256,7 @@ function normalizePromotions(items = []) {
     productId: getPromotionProductId(item),
     productName: getPromotionProductName(item),
     productSlug: getPromotionProductSlug(item),
+    price: getPromotionProductPrice(item),
     stock: getPromotionProductStock(item),
     stockStatus: getPromotionProductStockStatus(item),
     stockMessage: getPromotionProductStockMessage(item),
@@ -290,6 +297,18 @@ function getPromotionProductSlug(item = {}) {
 
 function getPromotionProductName(item = {}) {
   return item?.product?.name || item?.products?.[0]?.name || ""
+}
+
+function getPromotionProductPrice(item = {}) {
+  return Number(
+    item?.product?.final_price ||
+      item?.product?.default_price ||
+      item?.products?.[0]?.final_price ||
+      item?.products?.[0]?.default_price ||
+      item?.final_price ||
+      item?.default_price ||
+      0
+  )
 }
 
 function getPromotionProductStock(item = {}) {

@@ -23,6 +23,15 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
+    if (config.data instanceof FormData) {
+      if (typeof config.headers?.delete === "function") {
+        config.headers.delete("Content-Type")
+      } else if (config.headers) {
+        delete config.headers["Content-Type"]
+        delete config.headers["content-type"]
+      }
+    }
+
     return config
   },
   (error) => Promise.reject(error)

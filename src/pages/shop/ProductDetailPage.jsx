@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useParams, Link, useNavigate } from "react-router-dom"
 import { getProductDetail } from "../../services/api/productService"
 import { addCartItem } from "../../services/api/cartService"
@@ -6,6 +6,8 @@ import { toggleAccountFavorite } from "../../services/api/accountService"
 import { useAuth } from "../../context/AuthContext"
 import { notifySuccess, notifyError } from "../../utils/toast"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
+import { trackMetaAddToCart, trackMetaViewContent } from "../../utils/metaPixel"
+import WishlistModal from "../../components/wishlist/WishlistModal"
 import "./productdetailpage.css"
 
 const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
@@ -21,6 +23,8 @@ function ProductDetailPage() {
   const [addingToCart, setAddingToCart] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
   const [togglingFavorite, setTogglingFavorite] = useState(false)
+  const [wishlistOpen, setWishlistOpen] = useState(false)
+  const wishlistButtonRef = useRef(null)
   const [selectedVariantId, setSelectedVariantId] = useState(null)
   const [selectedAttributeValueIds, setSelectedAttributeValueIds] = useState({})
 
@@ -135,6 +139,7 @@ function ProductDetailPage() {
   const [zoomPosition, setZoomPosition] = useState({ x: 50, y: 50 })
   const [isLightboxOpen, setIsLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [selectedColorPreviewUrl, setSelectedColorPreviewUrl] = useState("")
   const selectedVariant = useMemo(() => {
     if (!product?.variants?.length) return null
 
@@ -147,6 +152,11 @@ function ProductDetailPage() {
   const canShowPrices = sessionReady && isAuthenticated
   const hasAvailablePrice =
     displayPrice > 0 && product?.priceInfo?.source !== PRICE_UNAVAILABLE_SOURCE
+  const hasVariantAttributes = Boolean(product?.variantOptions?.length)
+  const hasSelectedAllVariantAttributes =
+    !hasVariantAttributes ||
+    product.variantOptions.every((option) => selectedAttributeValueIds[option.attribute.id])
+  const missingVariantSelection = hasVariantAttributes && !hasSelectedAllVariantAttributes
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -171,6 +181,7 @@ function ProductDetailPage() {
     if (product?.mediaItems?.length) {
       setActiveMediaIndex(0)
       setLightboxIndex(0)
+      setSelectedColorPreviewUrl("")
     }
   }, [product])
 
@@ -181,15 +192,21 @@ function ProductDetailPage() {
       return
     }
 
-    const firstVariant = product.variants[0]
-    setSelectedVariantId(firstVariant.id)
-    setSelectedAttributeValueIds(buildSelectedMapFromVariant(firstVariant))
+    setSelectedVariantId(null)
+    setSelectedAttributeValueIds({})
+  }, [product])
+
+  useEffect(() => {
+    if (product?.id) {
+      trackMetaViewContent(product)
+    }
   }, [product])
 
   const hasNoStockValue = product?.stock === null || product?.stock === undefined || product?.stock === ""
   const isOutOfStock = product?.stockStatus === "out_of_stock" || hasNoStockValue || Number(product?.stock) <= 0
   const effectiveStockStatus = isOutOfStock ? "out_of_stock" : product?.stockStatus
   const isSelectedVariantOutOfStock =
+    !hasVariantAttributes &&
     Boolean(selectedVariant) &&
     (!selectedVariantHasTrackedStock || Number(selectedVariantStock) <= 0)
   const hasInvalidStockQuantity =
@@ -231,6 +248,11 @@ function ProductDetailPage() {
       return
     }
 
+    if (missingVariantSelection) {
+      notifyError("Selecciona los atributos del producto antes de agregarlo al carrito.")
+      return
+    }
+
     if (isOutOfStock || isSelectedVariantOutOfStock) {
       notifyError(product.stockMessage || "Producto sin inventario.")
       return
@@ -246,7 +268,9 @@ function ProductDetailPage() {
       const payload = {
         product_id: product.id,
         quantity,
-        ...(selectedVariant?.id ? { product_variant_id: selectedVariant.id } : {}),
+        ...(hasVariantAttributes
+          ? { attribute_value_ids: Object.values(selectedAttributeValueIds).map(Number).filter(Boolean) }
+          : {}),
       }
       const response = await addCartItem(payload)
       const cartSummary =
@@ -260,6 +284,7 @@ function ProductDetailPage() {
         syncCartSummary(cartSummary)
       }
 
+      trackMetaAddToCart(product, quantity)
       notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
     } catch (error) {
       notifyError(
@@ -271,13 +296,24 @@ function ProductDetailPage() {
   }
 
   const handleVariantOptionSelect = (attributeId, valueId) => {
+    if (!valueId) {
+      const nextSelected = { ...selectedAttributeValueIds }
+      delete nextSelected[attributeId]
+      setSelectedAttributeValueIds(nextSelected)
+      setSelectedVariantId(null)
+      syncColorPreview(attributeId, "")
+      return
+    }
+
     const nextSelected = {
       ...selectedAttributeValueIds,
       [attributeId]: valueId,
     }
-    const nextVariant = findVariantForSelection(product.variants, Object.values(nextSelected))
+    const selectedIds = Object.values(nextSelected)
+    const nextVariant = findVariantForSelection(product.variants, selectedIds)
 
     setSelectedAttributeValueIds(nextSelected)
+    syncColorPreview(attributeId, valueId)
 
     if (nextVariant) {
       setSelectedVariantId(nextVariant.id)
@@ -285,6 +321,45 @@ function ProductDetailPage() {
     } else {
       setSelectedVariantId(null)
     }
+  }
+
+  const syncColorPreview = (attributeId, valueId) => {
+    const option = product?.variantOptions?.find((item) => {
+      return Number(item.attribute.id) === Number(attributeId)
+    })
+
+    if (!option || !isColorAttribute(option.attribute)) return
+
+    if (!valueId) {
+      setSelectedColorPreviewUrl("")
+      return
+    }
+
+    const value = option.values.find((item) => Number(item.id) === Number(valueId))
+    const imageUrl = getVariantValueImage(value, product.variants, "")
+
+    if (!imageUrl) {
+      setSelectedColorPreviewUrl("")
+      return
+    }
+    setSelectedColorPreviewUrl(imageUrl)
+
+    const mediaIndex = product.mediaItems.findIndex((media) => media.url === imageUrl)
+
+    if (mediaIndex >= 0) {
+      setActiveMediaIndex(mediaIndex)
+      setLightboxIndex(mediaIndex)
+      return
+    }
+
+    setActiveMediaIndex(0)
+    setLightboxIndex(0)
+  }
+
+  const handleMediaSelect = (index) => {
+    setSelectedColorPreviewUrl("")
+    setActiveMediaIndex(index)
+    setLightboxIndex(index)
   }
 
   const handleToggleFavorite = async () => {
@@ -316,6 +391,18 @@ function ProductDetailPage() {
     } finally {
       setTogglingFavorite(false)
     }
+  }
+
+  const handleOpenWishlist = (event) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+
+    if (!isAuthenticated) {
+      navigate("/login")
+      return
+    }
+
+    setWishlistOpen((prev) => !prev)
   }
 
   const handleMouseMove = (e) => {
@@ -377,7 +464,14 @@ function ProductDetailPage() {
     )
   }
 
-  const activeMedia = product.mediaItems[activeMediaIndex] || product.mediaItems[0]
+  const activeMedia = selectedColorPreviewUrl
+    ? {
+        id: "selected-color-preview",
+        type: "image",
+        url: selectedColorPreviewUrl,
+        title: product.name,
+      }
+    : product.mediaItems[activeMediaIndex] || product.mediaItems[0]
 
   return (
     <section className="product-detail-page">
@@ -397,10 +491,7 @@ function ProductDetailPage() {
                     className={`product-detail__thumb ${
                       activeMediaIndex === index ? "is-active" : ""
                     }`}
-                    onClick={() => {
-                      setActiveMediaIndex(index)
-                      setLightboxIndex(index)
-                    }}
+                    onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
                       <>
@@ -546,47 +637,109 @@ function ProductDetailPage() {
 
             {product.variantOptions.length ? (
               <div className="product-detail__variants-box">
-                <h3 className="product-detail__box-title">Presentación</h3>
-                {product.variantOptions.map((option) => (
-                  <div className="product-detail__variant-option" key={option.attribute.id}>
-                    <div className="product-detail__variant-option-title">
-                      {option.attribute.name}
-                    </div>
-                    <div className="product-detail__variant-values">
-                      {option.values.map((value) => {
-                        const selected = Number(selectedAttributeValueIds[option.attribute.id]) === Number(value.id)
-                        const available = isVariantValueAvailable(
-                          product.variants,
-                          selectedAttributeValueIds,
-                          option.attribute.id,
-                          value.id
-                        )
+                <h3 className="product-detail__box-title">Atributos</h3>
+                {product.variantOptions.map((option) => {
+                  const isColor = isColorAttribute(option.attribute)
+                  const selectedValueId = selectedAttributeValueIds[option.attribute.id] || ""
+                  const selectedValue = option.values.find((value) => {
+                    return Number(value.id) === Number(selectedValueId)
+                  })
 
-                        return (
-                          <button
-                            type="button"
-                            key={value.id}
-                            className={`product-detail__variant-value ${selected ? "is-selected" : ""}`}
-                            onClick={() => handleVariantOptionSelect(option.attribute.id, value.id)}
-                            disabled={!available}
+                  return (
+                    <div
+                      className={`product-detail__variant-option ${
+                        isColor ? "is-color" : "is-select"
+                      }`}
+                      key={option.attribute.id}
+                    >
+                      {isColor ? (
+                        <>
+                          <div className="product-detail__variant-option-title">
+                            <span>{option.attribute.name}:</span>{" "}
+                            <strong>{selectedValue?.value || "Elige"}</strong>
+                          </div>
+                          <div className="product-detail__variant-color-list">
+                            {option.values.map((value) => {
+                              const selected = Number(selectedValueId) === Number(value.id)
+                              const available = isVariantValueAvailable(
+                                option.values,
+                                value.id
+                              )
+                              const imageUrl = getVariantValueImage(value, product.variants, product.image)
+
+                              return (
+                                <button
+                                  type="button"
+                                  key={value.id}
+                                  className={`product-detail__variant-color ${
+                                    selected ? "is-selected" : ""
+                                  }`}
+                                  onClick={() => handleVariantOptionSelect(option.attribute.id, value.id)}
+                                  disabled={!available}
+                                  title={value.value}
+                                  aria-label={`${option.attribute.name}: ${value.value}`}
+                                >
+                                  {imageUrl ? (
+                                    <img
+                                      src={imageUrl}
+                                      alt={value.value}
+                                      onError={(event) => {
+                                        event.currentTarget.style.display = "none"
+                                      }}
+                                    />
+                                  ) : value.metadata?.hex ? (
+                                    <span
+                                      className="product-detail__variant-color-swatch"
+                                      style={{ backgroundColor: value.metadata.hex }}
+                                    />
+                                  ) : (
+                                    <span className="product-detail__variant-color-empty" />
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <label
+                            className="product-detail__variant-option-title"
+                            htmlFor={`variant-option-${option.attribute.id}`}
                           >
-                            {value.metadata?.hex ? (
-                              <span
-                                className="product-detail__variant-swatch"
-                                style={{ backgroundColor: value.metadata.hex }}
-                              />
-                            ) : null}
-                            {value.value}
-                          </button>
-                        )
-                      })}
+                            <span>{option.attribute.name}:</span>{" "}
+                            <strong>{selectedValue?.value || "Elige"}</strong>
+                          </label>
+                          <select
+                            id={`variant-option-${option.attribute.id}`}
+                            className="product-detail__variant-select"
+                            value={selectedValueId}
+                            onChange={(event) =>
+                              handleVariantOptionSelect(option.attribute.id, event.target.value)
+                            }
+                          >
+                            <option value="">Elige</option>
+                            {option.values.map((value) => {
+                              const available = isVariantValueAvailable(
+                                option.values,
+                                value.id
+                              )
+
+                              return (
+                                <option key={value.id} value={value.id} disabled={!available}>
+                                  {value.value}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             ) : product.variants.length ? (
               <div className="product-detail__variants-box">
-                <h3 className="product-detail__box-title">Presentación</h3>
+                <h3 className="product-detail__box-title">Atributos</h3>
                 <div className="product-detail__variant-card-list">
                   {product.variants.map((variant) => (
                     <button
@@ -642,11 +795,14 @@ function ProductDetailPage() {
                       isOutOfStock ||
                       isSelectedVariantOutOfStock ||
                       hasInvalidStockQuantity ||
-                      (product.variants.length > 0 && !selectedVariant)
+                      missingVariantSelection ||
+                      (!hasVariantAttributes && product.variants.length > 0 && !selectedVariant)
                     }
                   >
                     {addingToCart
                       ? "Agregando..."
+                      : missingVariantSelection
+                      ? "Selecciona atributos"
                       : isOutOfStock || isSelectedVariantOutOfStock
                       ? "Producto sin inventario"
                       : hasAvailablePrice
@@ -663,7 +819,13 @@ function ProductDetailPage() {
                   </button>
                 )}
 
-                <button type="button" className="product-detail__secondary-btn">
+                <button
+                  ref={wishlistButtonRef}
+                  type="button"
+                  className="product-detail__secondary-btn"
+                  onClick={handleOpenWishlist}
+                  disabled={!sessionReady}
+                >
                   Agregar a una lista
                 </button>
               </div>
@@ -702,10 +864,6 @@ function ProductDetailPage() {
                 <div className="product-detail__spec-row">
                   <span>Promociones activas</span>
                   <strong>{product.hasActivePromotions ? product.activePromotionsCount : 0}</strong>
-                </div>
-                <div className="product-detail__spec-row">
-                  <span>Variante seleccionada</span>
-                  <strong>{selectedVariant ? selectedVariant.name || selectedVariant.sku : "Producto base"}</strong>
                 </div>
                 <div className="product-detail__spec-row">
                   <span>Aplica promociones</span>
@@ -800,7 +958,7 @@ function ProductDetailPage() {
                     className={`product-lightbox__thumb ${
                       lightboxIndex === index ? "is-active" : ""
                     }`}
-                    onClick={() => setLightboxIndex(index)}
+                    onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
                       <video src={media.url} muted />
@@ -814,6 +972,12 @@ function ProductDetailPage() {
           </div>
         </div>
       )}
+      <WishlistModal
+        isOpen={wishlistOpen}
+        product={product}
+        triggerRef={wishlistButtonRef}
+        onClose={() => setWishlistOpen(false)}
+      />
     </section>
   )
 }
@@ -959,29 +1123,73 @@ function findVariantForSelection(variants = [], selectedValueIds = []) {
   const selectedIds = selectedValueIds.map(Number).filter(Boolean)
 
   return variants.find((variant) => {
-    const variantIds = Array.isArray(variant.attribute_value_ids)
-      ? variant.attribute_value_ids.map(Number)
-      : []
+    const variantIds = getVariantAttributeValueIds(variant)
 
     return selectedIds.every((valueId) => variantIds.includes(valueId))
   })
 }
 
-function isVariantValueAvailable(variants = [], selectedMap = {}, attributeId, valueId) {
-  const nextSelectedIds = Object.entries({
-    ...selectedMap,
-    [attributeId]: valueId,
-  })
-    .map(([, selectedValueId]) => Number(selectedValueId))
-    .filter(Boolean)
+function isVariantValueAvailable(values = [], valueId) {
+  const value = values.find((item) => Number(item.id) === Number(valueId))
 
-  return variants.some((variant) => {
-    const variantIds = Array.isArray(variant.attribute_value_ids)
-      ? variant.attribute_value_ids.map(Number)
-      : []
+  return Boolean(value?.is_active ?? true)
+}
 
-    return nextSelectedIds.every((selectedValueId) => variantIds.includes(selectedValueId))
+function getVariantAttributeValueIds(variant = {}) {
+  if (Array.isArray(variant.attribute_value_ids) && variant.attribute_value_ids.length) {
+    return variant.attribute_value_ids.map(Number).filter(Boolean)
+  }
+
+  if (Array.isArray(variant.attribute_values)) {
+    return variant.attribute_values.map((value) => Number(value.id)).filter(Boolean)
+  }
+
+  return []
+}
+
+function isColorAttribute(attribute = {}) {
+  const normalizedName = `${attribute.name || ""} ${attribute.slug || ""}`
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+
+  return normalizedName.includes("color")
+}
+
+function getVariantValueImage(value = {}, variants = [], fallbackImage = "") {
+  const directImage = normalizeMediaUrl(
+    value.color_image?.url ||
+      value.color_image?.path ||
+      value.image_url ||
+      value.image_path ||
+      value.thumbnail_url ||
+      value.thumbnail_path ||
+      value.media_url ||
+      value.media_path ||
+      value.metadata?.image_url ||
+      value.metadata?.image_path ||
+      value.metadata?.thumbnail_url ||
+      value.metadata?.thumbnail_path
+  )
+
+  if (directImage) return directImage
+
+  const relatedVariant = variants.find((variant) => {
+    const ids = getVariantAttributeValueIds(variant)
+    return ids.includes(Number(value.id))
   })
+
+  return (
+    normalizeMediaUrl(
+      relatedVariant?.image_url ||
+        relatedVariant?.image_path ||
+        relatedVariant?.media_url ||
+        relatedVariant?.media_path ||
+        relatedVariant?.thumbnail_url ||
+        relatedVariant?.thumbnail_path
+    ) || fallbackImage
+  )
 }
 
 function normalizeVariantAttribute(attributeValue = {}) {

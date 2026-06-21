@@ -17,6 +17,7 @@ import {
 import AdminSidePanel from "../../components/AdminSidePanel/AdminSidePanel.jsx"
 import { useSettings } from "../../context/SettingsContext.jsx"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
+import { trackMetaInitiateCheckout } from "../../utils/metaPixel.js"
 import "./checkout.css"
 
 const emptyAddressForm = {
@@ -88,6 +89,7 @@ function CheckoutPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [documentNotes, setDocumentNotes] = useState("")
   const restoringRecoverableRef = useRef(false)
+  const trackedCheckoutRef = useRef("")
 
   useEffect(() => {
     fetchPreview()
@@ -265,6 +267,24 @@ function CheckoutPage() {
 
   const canContinue = Boolean(selectedAddress) && !hasPendingGiftSelection && insufficientStockBlockers.length === 0 && invalidStockItems.length === 0
   const canPay = canContinue && acceptedTerms
+
+  useEffect(() => {
+    if (!checkout.items.length) return
+
+    const trackingKey = [
+      checkout.cart_id || "cart",
+      checkout.items.map((item) => `${item.product_id || item.id}:${item.quantity}`).join("|"),
+      totals.total || checkout.total || 0,
+    ].join(":")
+
+    if (trackedCheckoutRef.current === trackingKey) return
+
+    trackedCheckoutRef.current = trackingKey
+    trackMetaInitiateCheckout({
+      ...checkout,
+      totals,
+    })
+  }, [checkout, totals])
 
   async function handleStartStripeCheckout() {
     if (!acceptedTerms) {
@@ -645,6 +665,9 @@ function CheckoutPage() {
                               <span>
                                 SKU {item.sku || "-"} · Producto #{item.product_id}
                               </span>
+                              {item.selected_attributes.length ? (
+                                <small>{formatSelectedAttributes(item.selected_attributes)}</small>
+                              ) : null}
                               {item.promotion ? (
                                 <small>
                                   Promo:{" "}
@@ -1237,6 +1260,7 @@ function normalizeCheckoutItem(item = {}) {
     tax: Number(item.tax ?? item.tax_amount ?? 0),
     taxes: normalizeTaxes(item.taxes),
     stock: normalizeCheckoutItemStock(item),
+    selected_attributes: normalizeSelectedAttributes(item.selected_attributes ?? item.metadata?.selected_attributes),
     promotion: item.promotion
       ? {
           ...item.promotion,
@@ -1612,6 +1636,22 @@ function normalizeGiftItems(items) {
       estimatedValue: item.estimated_value ?? item.estimatedValue ?? null,
       unitLabel: item.unit_label ?? item.unitLabel ?? "",
     }))
+}
+
+function normalizeSelectedAttributes(attributes) {
+  if (!Array.isArray(attributes)) return []
+
+  return attributes
+    .filter(Boolean)
+    .map((attribute) => ({
+      attribute: attribute.attribute ?? attribute.name ?? "",
+      value: attribute.value ?? "",
+    }))
+    .filter((attribute) => attribute.attribute && attribute.value)
+}
+
+function formatSelectedAttributes(attributes = []) {
+  return attributes.map((attribute) => `${attribute.attribute}: ${attribute.value}`).join(" / ")
 }
 
 function normalizeTaxes(taxes) {

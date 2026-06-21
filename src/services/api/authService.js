@@ -22,6 +22,24 @@ export async function registerRequest(payload) {
   }
 }
 
+export async function forgotPasswordRequest(payload) {
+  try {
+    const { data } = await api.post("/forgot-password", payload)
+    return data
+  } catch (error) {
+    throwResponseData(error)
+  }
+}
+
+export async function resetPasswordRequest(payload) {
+  try {
+    const { data } = await api.post("/reset-password", payload)
+    return data
+  } catch (error) {
+    throwResponseData(error)
+  }
+}
+
 export async function meRequest(token) {
   try {
     const { data } = await api.get("/me", {

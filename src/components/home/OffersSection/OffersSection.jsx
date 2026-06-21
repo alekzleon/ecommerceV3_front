@@ -7,6 +7,7 @@ import {
 } from "../../../services/api/promotionsService"
 import { useAuth } from "../../../context/AuthContext"
 import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
+import { trackMetaAddToCart } from "../../../utils/metaPixel"
 import "./offerssection.css"
 
 const PROMOTION_IMAGE_PLACEHOLDER = "https://monocromia.com.mx/cdn/shop/files/Monocromia-04_6366367b-3cd5-4942-89f0-62fac4475a07_2048x.jpg?v=1742501692"
@@ -119,6 +120,11 @@ function OffersSection() {
         syncCartSummary(cartSummary)
       }
 
+      trackMetaAddToCart({
+        id: offer.productId,
+        name: offer.productName || offer.title,
+        price: offer.price || 0,
+      }, 1)
       notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
     } catch (error) {
       notifyError(error?.response?.data?.message || "No fue posible agregar el producto al carrito.")
@@ -315,6 +321,7 @@ function normalizePromotion(item = {}) {
     productId: getPromotionProductId(item),
     productName: getPromotionProductName(item),
     productSlug: getPromotionProductSlug(item),
+    price: getPromotionProductPrice(item),
     stock: getPromotionProductStock(item),
     stockStatus: getPromotionProductStockStatus(item),
     stockMessage: getPromotionProductStockMessage(item),
@@ -355,6 +362,18 @@ function getPromotionProductSlug(item = {}) {
 
 function getPromotionProductName(item = {}) {
   return item?.product?.name || item?.products?.[0]?.name || ""
+}
+
+function getPromotionProductPrice(item = {}) {
+  return Number(
+    item?.product?.final_price ||
+      item?.product?.default_price ||
+      item?.products?.[0]?.final_price ||
+      item?.products?.[0]?.default_price ||
+      item?.final_price ||
+      item?.default_price ||
+      0
+  )
 }
 
 function getPromotionProductStock(item = {}) {

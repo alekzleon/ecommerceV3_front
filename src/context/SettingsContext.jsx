@@ -4,10 +4,12 @@ import {
   getPublicContactFaqImage,
   getPublicContactMapUrl,
   getPublicGeneralLogo,
+  getPublicMetaPixel,
   getPublicNavTitle,
   getPublicSettings,
 } from "../services/api/settingsService"
 import { normalizeMediaUrl } from "../utils/mediaUrl"
+import { loadMetaPixel } from "../utils/metaPixel"
 
 const DEFAULT_SETTINGS = {
   site_title: "Tienda en línea",
@@ -41,6 +43,7 @@ const DEFAULT_SETTINGS = {
   },
   google_analytics_pixel: "",
   meta_pixel: "",
+  meta_pixel_id: "",
   og_image_url: "",
   loyalty: {
     first_purchase_discount_enabled: false,
@@ -67,12 +70,14 @@ export function SettingsProvider({ children }) {
         generalLogoResponse,
         contactFaqImageResponse,
         contactMapUrlResponse,
+        metaPixelResponse,
       ] = await Promise.allSettled([
         getPublicSettings(),
         getPublicNavTitle(),
         getPublicGeneralLogo(),
         getPublicContactFaqImage(),
         getPublicContactMapUrl(),
+        getPublicMetaPixel(),
       ])
       const nextSettings = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -89,6 +94,9 @@ export function SettingsProvider({ children }) {
       const contactMapUrl = contactMapUrlResponse.status === "fulfilled"
         ? normalizeContactMapUrlResponse(contactMapUrlResponse.value)
         : nextSettings.contact_map_url
+      const metaPixelId = metaPixelResponse.status === "fulfilled"
+        ? normalizeMetaPixelResponse(metaPixelResponse.value)
+        : nextSettings.meta_pixel_id
 
       setSettings({
         ...nextSettings,
@@ -96,6 +104,8 @@ export function SettingsProvider({ children }) {
         general_logo: generalLogo,
         contact_faq_image: contactFaqImage,
         contact_map_url: contactMapUrl,
+        meta_pixel: metaPixelId,
+        meta_pixel_id: metaPixelId,
         logo_url: generalLogo.logo_url || nextSettings.logo_url,
       })
     } catch (error) {
@@ -174,6 +184,8 @@ function normalizeSettingsResponse(response) {
       keywords: Array.isArray(meta.keywords) ? meta.keywords : [],
     },
     og_image_url: normalizeMediaUrl(data.og_image_url || data.og_image_path),
+    meta_pixel: normalizeMetaPixelValue(data.meta_pixel || data.meta_pixel_id),
+    meta_pixel_id: normalizeMetaPixelValue(data.meta_pixel_id || data.meta_pixel),
     loyalty: {
       ...DEFAULT_SETTINGS.loyalty,
       ...loyalty,
@@ -209,6 +221,18 @@ function normalizeContactMapUrlResponse(response) {
 
   if (typeof value === "string") return value
   if (value && typeof value === "object") return value.url || ""
+
+  return ""
+}
+
+function normalizeMetaPixelResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  return normalizeMetaPixelValue(data.value || data)
+}
+
+function normalizeMetaPixelValue(value) {
+  if (typeof value === "string" || typeof value === "number") return String(value || "").trim()
+  if (value && typeof value === "object") return String(value.pixel_id || value.meta_pixel_id || value.meta_pixel || "").trim()
 
   return ""
 }
@@ -344,23 +368,7 @@ function applyTrackingSettings(settings) {
     document.head.appendChild(gaInline)
   }
 
-  if (settings.meta_pixel) {
-    const metaInline = document.createElement("script")
-    metaInline.dataset.settingsTracking = "meta-pixel"
-    metaInline.textContent = `
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      fbq('init', '${settings.meta_pixel}');
-      fbq('track', 'PageView');
-    `
-    document.head.appendChild(metaInline)
-  }
+  loadMetaPixel(settings.meta_pixel_id || settings.meta_pixel)
 }
 
 function removeManagedTrackingNodes() {

@@ -3,7 +3,11 @@ import AdminCard from "../../components/AdminCard/AdminCard"
 import {
   createAdminSettings,
   deleteAdminSettings,
+  getAdminAbandonedCartSettings,
+  getAdminMetaPixel,
   getAdminSettings,
+  updateAdminAbandonedCartSettings,
+  updateAdminMetaPixel,
 } from "../../../services/api/settingsService"
 import {
   createAdminContactFaq,
@@ -36,7 +40,7 @@ const EMPTY_FORM = {
     keywords: "",
   },
   google_analytics_pixel: "",
-  meta_pixel: "",
+  meta_pixel_id: "",
   loyalty: {
     first_purchase_discount_enabled: false,
     first_purchase_discount_percentage: "",
@@ -44,6 +48,13 @@ const EMPTY_FORM = {
     cashback_earn_percentage: "",
     cashback_redeem_enabled: false,
     cashback_max_redeem_percentage: "100",
+  },
+  abandoned_cart: {
+    enabled: true,
+    abandon_after_minutes: 60,
+    recovery_link_expires_hours: 48,
+    send_email: true,
+    send_whatsapp: true,
   },
   logo: null,
   logo_url: "",
@@ -105,6 +116,18 @@ const SECTIONS = [
     description: "Primera compra, cashback acumulado y uso en carrito.",
   },
   {
+    id: "envios",
+    icon: "bi-truck",
+    title: "Envíos",
+    description: "Opciones de cobertura, tarifas y promociones de entrega.",
+  },
+  {
+    id: "abandoned_cart",
+    icon: "bi-cart-x",
+    title: "Carrito abandonado",
+    description: "Tiempo de abandono, expiración y canales de recuperación.",
+  },
+  {
     id: "contact_faqs",
     icon: "bi-question-circle",
     title: "Preguntas frecuentes",
@@ -119,7 +142,8 @@ function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const isContactFaqsSection = activeSection === "contact_faqs"
+  const canSubmitSection = !["contact_faqs", "envios"].includes(activeSection)
+  const canDeleteSettings = !["contact_faqs", "abandoned_cart", "envios"].includes(activeSection)
 
   const activeSectionMeta = useMemo(() => {
     return SECTIONS.find((section) => section.id === activeSection) || SECTIONS[0]
@@ -132,10 +156,26 @@ function SettingsPage() {
   async function loadSettings() {
     try {
       setLoading(true)
-      const response = await getAdminSettings()
-      const data = normalizeSettingsResponse(response)
+      const [settingsResponse, metaPixelResponse, abandonedCartResponse] = await Promise.allSettled([
+        getAdminSettings(),
+        getAdminMetaPixel(),
+        getAdminAbandonedCartSettings(),
+      ])
+      const data = settingsResponse.status === "fulfilled"
+        ? normalizeSettingsResponse(settingsResponse.value)
+        : {}
+      const metaPixelId = metaPixelResponse.status === "fulfilled"
+        ? normalizeMetaPixelResponse(metaPixelResponse.value)
+        : data.meta_pixel_id
+      const abandonedCart = abandonedCartResponse.status === "fulfilled"
+        ? normalizeAbandonedCartResponse(abandonedCartResponse.value)
+        : EMPTY_FORM.abandoned_cart
 
-      setForm(mapSettingsToForm(data))
+      setForm(mapSettingsToForm({
+        ...data,
+        meta_pixel_id: metaPixelId,
+        abandoned_cart: abandonedCart,
+      }))
     } catch (error) {
       console.error("Error al cargar configuración:", error)
       notifyError(error?.response?.data?.message || "No fue posible cargar la configuración.")
@@ -196,6 +236,18 @@ function SettingsPage() {
       return
     }
 
+    if (name.startsWith("abandoned_cart.")) {
+      const key = name.replace("abandoned_cart.", "")
+      setForm((prev) => ({
+        ...prev,
+        abandoned_cart: {
+          ...prev.abandoned_cart,
+          [key]: type === "checkbox" ? checked : value,
+        },
+      }))
+      return
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -226,12 +278,50 @@ function SettingsPage() {
 
     try {
       setSaving(true)
+
+      if (activeSection === "abandoned_cart") {
+        const payload = buildAbandonedCartPayload(form.abandoned_cart)
+        const validationMessage = validateAbandonedCartPayload(payload)
+
+        if (validationMessage) {
+          notifyWarning(validationMessage)
+          return
+        }
+
+        const response = await updateAdminAbandonedCartSettings(payload)
+        setForm((prev) => ({
+          ...prev,
+          abandoned_cart: normalizeAbandonedCartResponse(response),
+        }))
+        notifySuccess("Configuración de carrito abandonado guardada correctamente.")
+        return
+      }
+
       const payload = buildSettingsPayload(form, activeSection)
-      await createAdminSettings(payload)
+      if (activeSection === "tracking") {
+        const pixelId = String(form.meta_pixel_id || "").trim()
+
+        if (pixelId && !/^\d+$/.test(pixelId)) {
+          notifyWarning("El Meta Pixel ID debe contener solo números.")
+          return
+        }
+
+        await Promise.all([
+          createAdminSettings(payload),
+          updateAdminMetaPixel(pixelId || null),
+        ])
+      } else {
+        await createAdminSettings(payload)
+      }
 
       const freshResponse = await getAdminSettings()
+      const freshMetaPixelResponse = await getAdminMetaPixel()
       const data = normalizeSettingsResponse(freshResponse)
-      setForm(mapSettingsToForm(data))
+      setForm(mapSettingsToForm({
+        ...data,
+        meta_pixel_id: normalizeMetaPixelResponse(freshMetaPixelResponse),
+        abandoned_cart: form.abandoned_cart,
+      }))
       refreshSettings()
       notifySuccess("Configuración guardada correctamente.")
     } catch (error) {
@@ -263,7 +353,7 @@ function SettingsPage() {
     <AdminCard
       title="Configuración"
       subtitle="Administra la información pública, SEO, contacto y medición del ecommerce."
-      right={!isContactFaqsSection ? (
+      right={canSubmitSection ? (
         <button
           type="submit"
           form="settings-form"
@@ -275,24 +365,22 @@ function SettingsPage() {
       ) : null}
     >
       <div className="settings-page">
-        <aside className="settings-page__cards" aria-label="Secciones de configuración">
+        <nav className="settings-page__tabs" aria-label="Secciones de configuración">
           {SECTIONS.map((section) => (
             <button
               key={section.id}
               type="button"
-              className={`settings-page__card ${activeSection === section.id ? "is-active" : ""}`}
+              className={`settings-page__tab ${activeSection === section.id ? "is-active" : ""}`}
               onClick={() => setActiveSection(section.id)}
+              title={section.description}
             >
-              <span className="settings-page__card-icon">
+              <span className="settings-page__tab-icon">
                 <i className={`bi ${section.icon}`} aria-hidden="true" />
               </span>
-              <span className="settings-page__card-copy">
-                <strong>{section.title}</strong>
-                <small>{section.description}</small>
-              </span>
+              <span>{section.title}</span>
             </button>
           ))}
-        </aside>
+        </nav>
 
         <form id="settings-form" className="settings-page__panel" onSubmit={handleSubmit}>
           {loading ? (
@@ -341,17 +429,25 @@ function SettingsPage() {
                 <LoyaltySection form={form} onChange={handleFieldChange} />
               ) : null}
 
+              {activeSection === "envios" ? (
+                <ShippingSection />
+              ) : null}
+
+              {activeSection === "abandoned_cart" ? (
+                <AbandonedCartSection form={form} onChange={handleFieldChange} />
+              ) : null}
+
               {activeSection === "contact_faqs" ? (
                 <ContactFaqsSection />
               ) : null}
 
-              {!isContactFaqsSection ? (
+              {canSubmitSection ? (
               <div className="settings-page__footer">
                 <button type="submit" className="settings-page__save-button" disabled={saving}>
                   {saving ? "Guardando..." : "Guardar cambios"}
                 </button>
 
-                {form.id ? (
+                {form.id && canDeleteSettings ? (
                   <button
                     type="button"
                     className="settings-page__danger-button"
@@ -552,9 +648,9 @@ function TrackingSection({ form, onChange }) {
           placeholder="G-XXXXXXXXXX"
         />
         <Field
-          label="Meta Pixel"
-          name="meta_pixel"
-          value={form.meta_pixel}
+          label="Meta Pixel ID"
+          name="meta_pixel_id"
+          value={form.meta_pixel_id}
           onChange={onChange}
           placeholder="123456789012345"
         />
@@ -619,6 +715,104 @@ function LoyaltySection({ form, onChange }) {
           placeholder="100"
           helpText="100 permite cubrir todo el total permitido por backend."
         />
+      </div>
+    </section>
+  )
+}
+
+function AbandonedCartSection({ form, onChange }) {
+  const settings = form.abandoned_cart || EMPTY_FORM.abandoned_cart
+
+  return (
+    <section className="settings-page__section">
+      <div className="settings-page__abandoned-grid">
+        <ToggleField
+          label="Activar recuperación"
+          name="abandoned_cart.enabled"
+          checked={settings.enabled}
+          onChange={onChange}
+          helpText="Permite que el backend detecte y notifique carritos abandonados."
+        />
+
+        <ToggleField
+          label="Enviar correo"
+          name="abandoned_cart.send_email"
+          checked={settings.send_email}
+          onChange={onChange}
+          helpText="Usa el link de recuperación firmado con expiración configurable."
+        />
+
+        <ToggleField
+          label="Enviar WhatsApp"
+          name="abandoned_cart.send_whatsapp"
+          checked={settings.send_whatsapp}
+          onChange={onChange}
+          helpText="Mantiene el canal WhatsApp activo para pruebas del backend."
+        />
+      </div>
+
+      <div className="settings-page__grid settings-page__grid--two">
+        <Field
+          label="Minutos para considerar abandono"
+          name="abandoned_cart.abandon_after_minutes"
+          type="number"
+          value={settings.abandon_after_minutes}
+          onChange={onChange}
+          min="60"
+          max="10080"
+          step="1"
+          helpText="Mínimo 60 minutos. Máximo 10080 minutos."
+        />
+
+        <Field
+          label="Horas de vigencia del link"
+          name="abandoned_cart.recovery_link_expires_hours"
+          type="number"
+          value={settings.recovery_link_expires_hours}
+          onChange={onChange}
+          min="1"
+          max="720"
+          step="1"
+          helpText="Mínimo 1 hora. Máximo 720 horas."
+        />
+      </div>
+    </section>
+  )
+}
+
+function ShippingSection() {
+  return (
+    <section className="settings-page__section">
+      <div className="settings-shipping__grid">
+        <article className="settings-shipping__item">
+          <span className="settings-shipping__icon">
+            <i className="bi bi-geo-alt" aria-hidden="true" />
+          </span>
+          <div>
+            <h4>Cobertura</h4>
+            <p>Zonas, códigos postales y regiones disponibles para entrega.</p>
+          </div>
+        </article>
+
+        <article className="settings-shipping__item">
+          <span className="settings-shipping__icon">
+            <i className="bi bi-currency-dollar" aria-hidden="true" />
+          </span>
+          <div>
+            <h4>Tarifas</h4>
+            <p>Costos por zona, mínimos de compra y condiciones por pedido.</p>
+          </div>
+        </article>
+
+        <article className="settings-shipping__item">
+          <span className="settings-shipping__icon">
+            <i className="bi bi-box-seam" aria-hidden="true" />
+          </span>
+          <div>
+            <h4>Paqueterías</h4>
+            <p>Opciones de entrega, tiempos estimados y métodos disponibles.</p>
+          </div>
+        </article>
       </div>
     </section>
   )
@@ -909,6 +1103,9 @@ function Field({
   placeholder = "",
   required = false,
   helpText = "",
+  min,
+  max,
+  step,
 }) {
   return (
     <label className="settings-page__field">
@@ -923,6 +1120,9 @@ function Field({
         onChange={onChange}
         placeholder={placeholder}
         required={required}
+        min={min}
+        max={max}
+        step={step}
       />
       {helpText ? <small>{helpText}</small> : null}
     </label>
@@ -1008,7 +1208,7 @@ function mapSettingsToForm(settings) {
       keywords,
     },
     google_analytics_pixel: settings.google_analytics_pixel || "",
-    meta_pixel: settings.meta_pixel || "",
+    meta_pixel_id: settings.meta_pixel_id || settings.meta_pixel || "",
     loyalty: {
       first_purchase_discount_enabled: Boolean(
         settings.loyalty?.first_purchase_discount_enabled
@@ -1021,6 +1221,7 @@ function mapSettingsToForm(settings) {
       cashback_max_redeem_percentage:
         settings.loyalty?.cashback_max_redeem_percentage ?? "100",
     },
+    abandoned_cart: normalizeAbandonedCartValue(settings.abandoned_cart),
     logo: null,
     logo_url: normalizeMediaUrl(settings.logo_url || settings.logo_path),
     favicon: null,
@@ -1028,6 +1229,73 @@ function mapSettingsToForm(settings) {
     og_image: null,
     og_image_url: normalizeMediaUrl(settings.og_image_url || settings.og_image_path),
   }
+}
+
+function normalizeMetaPixelResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  if (typeof value === "string" || typeof value === "number") return String(value || "").trim()
+  if (value && typeof value === "object") return String(value.pixel_id || value.meta_pixel_id || value.meta_pixel || "").trim()
+
+  return ""
+}
+
+function normalizeAbandonedCartResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return normalizeAbandonedCartValue(value)
+}
+
+function normalizeAbandonedCartValue(value = {}) {
+  return {
+    enabled: booleanOrDefault(value.enabled, EMPTY_FORM.abandoned_cart.enabled),
+    abandon_after_minutes: value.abandon_after_minutes ?? EMPTY_FORM.abandoned_cart.abandon_after_minutes,
+    recovery_link_expires_hours:
+      value.recovery_link_expires_hours ?? EMPTY_FORM.abandoned_cart.recovery_link_expires_hours,
+    send_email: booleanOrDefault(value.send_email, EMPTY_FORM.abandoned_cart.send_email),
+    send_whatsapp: booleanOrDefault(value.send_whatsapp, EMPTY_FORM.abandoned_cart.send_whatsapp),
+  }
+}
+
+function booleanOrDefault(value, fallback) {
+  if (value === undefined || value === null) return fallback
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
+  if (typeof value === "string") return ["1", "true", "yes", "on"].includes(value.toLowerCase())
+
+  return Boolean(value)
+}
+
+function buildAbandonedCartPayload(settings) {
+  return {
+    enabled: Boolean(settings.enabled),
+    abandon_after_minutes: Number(settings.abandon_after_minutes),
+    recovery_link_expires_hours: Number(settings.recovery_link_expires_hours),
+    send_email: Boolean(settings.send_email),
+    send_whatsapp: Boolean(settings.send_whatsapp),
+  }
+}
+
+function validateAbandonedCartPayload(payload) {
+  if (!Number.isInteger(payload.abandon_after_minutes)) {
+    return "Los minutos de abandono deben ser un número entero."
+  }
+
+  if (payload.abandon_after_minutes < 60 || payload.abandon_after_minutes > 10080) {
+    return "Los minutos de abandono deben estar entre 60 y 10080."
+  }
+
+  if (!Number.isInteger(payload.recovery_link_expires_hours)) {
+    return "Las horas de vigencia deben ser un número entero."
+  }
+
+  if (payload.recovery_link_expires_hours < 1 || payload.recovery_link_expires_hours > 720) {
+    return "Las horas de vigencia deben estar entre 1 y 720."
+  }
+
+  return ""
 }
 
 function buildSettingsPayload(form, section) {
@@ -1075,7 +1343,6 @@ function buildSettingsPayload(form, section) {
 
     if (section === "tracking") {
       payload.google_analytics_pixel = nullableValue(form.google_analytics_pixel)
-      payload.meta_pixel = nullableValue(form.meta_pixel)
     }
 
     if (section === "loyalty") {
@@ -1122,7 +1389,6 @@ function buildSettingsPayload(form, section) {
 
   if (section === "tracking") {
     appendNullableFormData(payload, "google_analytics_pixel", form.google_analytics_pixel)
-    appendNullableFormData(payload, "meta_pixel", form.meta_pixel)
   }
 
   if (section === "loyalty") {

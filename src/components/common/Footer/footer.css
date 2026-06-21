@@ -10,6 +10,202 @@ body {
   background: #fbfbfd;
 }
 
+.footer_benefits {
+  border-top: 1px solid #eef0f4;
+  border-bottom: 1px solid #eef0f4;
+  background: #ffffff;
+  padding: 54px 0 46px;
+}
+
+.footer_benefits_grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.footer_benefit {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0 34px;
+  text-align: center;
+}
+
+.footer_benefit + .footer_benefit {
+  border-left: 1px solid #e4e7ee;
+}
+
+.footer_benefit_icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  color: #2563eb;
+  font-size: 2.1rem;
+}
+
+.footer_benefit_icon img {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+}
+
+.footer_benefit h3 {
+  margin: 0;
+  color: #4b505e;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.footer_benefit p {
+  max-width: 330px;
+  margin: 0;
+  color: #6a6a6a;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.footer_benefit_edit {
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #13426b;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.footer_benefit_editor {
+  width: min(100%, 330px);
+  display: grid;
+  gap: 0.65rem;
+  text-align: left;
+}
+
+.footer_benefit_editor label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.footer_benefit_editor label span,
+.footer_benefit_remove span {
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.footer_benefit_editor input[type="text"],
+.footer_benefit_editor input[type="file"],
+.footer_benefit_editor textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  font-size: 0.84rem;
+  outline: none;
+  padding: 0.55rem 0.62rem;
+}
+
+.footer_benefit_editor textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.footer_benefit_remove {
+  display: flex !important;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem !important;
+}
+
+.footer_benefit_remove input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #13426b;
+}
+
+.footer_benefit_actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.footer_benefit_actions button {
+  min-height: 34px;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0 0.75rem;
+  cursor: pointer;
+}
+
+.footer_benefit_actions button.is-primary {
+  border-color: #13426b;
+  background: #13426b;
+  color: #ffffff;
+}
+
+.footer_benefit_actions button:disabled,
+.footer_benefit_edit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.footer_benefit_skeleton_icon,
+.footer_benefit_skeleton_line {
+  display: block;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #eef2f7 0%, #f8fafc 45%, #eef2f7 90%);
+  background-size: 220% 100%;
+  animation: footerBenefitSkeleton 1.25s ease-in-out infinite;
+}
+
+.footer_benefit_skeleton_icon {
+  width: 54px;
+  height: 54px;
+}
+
+.footer_benefit_skeleton_line {
+  width: min(100%, 280px);
+  height: 13px;
+}
+
+.footer_benefit_skeleton_line.is-title {
+  width: min(100%, 230px);
+  height: 18px;
+  margin-top: 0.25rem;
+}
+
+.footer_benefit_skeleton_line.is-short {
+  width: min(72%, 210px);
+}
+
+@keyframes footerBenefitSkeleton {
+  0% {
+    background-position: 120% 0;
+  }
+
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 .footer_container {
   width: 100%;
   max-width: 1170px;
@@ -363,6 +559,30 @@ h6 {
 }
 
 @media (max-width: 767px) {
+  .footer_benefits {
+    padding: 38px 0 32px;
+  }
+
+  .footer_benefits_grid {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+
+  .footer_benefit {
+    padding: 0 14px;
+  }
+
+  .footer_benefit_edit {
+    top: 0;
+    right: 20px;
+  }
+
+  .footer_benefit + .footer_benefit {
+    border-left: 0;
+    border-top: 1px solid #e4e7ee;
+    padding-top: 26px;
+  }
+
   .footer_col {
     width: 100%;
   }

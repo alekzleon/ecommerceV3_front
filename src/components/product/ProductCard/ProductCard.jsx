@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import "./productcard.css"
 import { Link, useNavigate } from "react-router-dom"
 import { addCartItem } from "../../../services/api/cartService"
 import { toggleAccountFavorite } from "../../../services/api/accountService"
 import { useAuth } from "../../../context/AuthContext"
 import { notifySuccess, notifyError } from "../../../utils/toast"
+import { trackMetaAddToCart } from "../../../utils/metaPixel"
+import WishlistModal from "../../wishlist/WishlistModal"
 
 const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
@@ -13,6 +15,8 @@ function ProductCard({ product, onFavoriteChange }) {
   const [favorite, setFavorite] = useState(Boolean(product?.isFavorite || product?.is_favorite))
   const [togglingFavorite, setTogglingFavorite] = useState(false)
   const [addingToCart, setAddingToCart] = useState(false)
+  const [wishlistOpen, setWishlistOpen] = useState(false)
+  const wishlistButtonRef = useRef(null)
 
   const navigate = useNavigate()
   const { isAuthenticated, sessionReady } = useAuth()
@@ -98,6 +102,7 @@ function ProductCard({ product, onFavoriteChange }) {
         syncCartSummary(cartSummary)
       }
 
+      trackMetaAddToCart(product, 1)
       notifySuccess(
         response?.message || "Producto agregado al carrito correctamente."
       )
@@ -147,9 +152,32 @@ function ProductCard({ product, onFavoriteChange }) {
     }
   }
 
+  const handleOpenWishlist = (event) => {
+    event?.preventDefault()
+    event?.stopPropagation()
+
+    if (!isAuthenticated) {
+      navigate("/login")
+      return
+    }
+
+    setWishlistOpen((prev) => !prev)
+  }
+
   return (
     <article className="product-card">
       <div className="product-card__media">
+        <button
+          ref={wishlistButtonRef}
+          type="button"
+          className="product-card__wishlist"
+          onClick={handleOpenWishlist}
+          disabled={!sessionReady}
+          aria-label="Agregar a lista"
+        >
+          <i className="bi bi-three-dots-vertical" aria-hidden="true" />
+        </button>
+
         <button
           type="button"
           className={`product-card__favorite ${favorite ? "is-active" : ""}`}
@@ -265,6 +293,12 @@ function ProductCard({ product, onFavoriteChange }) {
           </button>
         )}
       </div>
+      <WishlistModal
+        isOpen={wishlistOpen}
+        product={product}
+        triggerRef={wishlistButtonRef}
+        onClose={() => setWishlistOpen(false)}
+      />
     </article>
   )
 }

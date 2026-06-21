@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { useAuth } from "../../../context/AuthContext"
+import { trackMetaCompleteRegistration } from "../../../utils/metaPixel"
 import "../LoginForm/loginform.css"
 
 const EMPTY_FORM = {
@@ -80,6 +81,7 @@ function RegisterForm() {
         device_name: "react-web",
       })
 
+      trackMetaCompleteRegistration()
       toast.success(response?.message || "Registro exitoso.")
       navigate(resolveRedirect(response), { replace: true })
     } catch (error) {

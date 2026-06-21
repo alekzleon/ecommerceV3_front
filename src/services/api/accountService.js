@@ -65,3 +65,45 @@ export async function toggleAccountFavorite(productId) {
   })
   return response.data
 }
+
+export async function getAccountWishlists() {
+  const response = await api.get("/account/wishlists")
+  return response.data
+}
+
+export async function getAccountWishlistOptions(productId) {
+  const response = await api.get("/account/wishlists/options", {
+    params: { product_id: productId },
+  })
+  return response.data
+}
+
+export async function createAccountWishlist(payload) {
+  const response = await api.post("/account/wishlists", payload)
+  return response.data
+}
+
+export async function getAccountWishlist(wishlistId, params = {}) {
+  const response = await api.get(`/account/wishlists/${wishlistId}`, { params })
+  return response.data
+}
+
+export async function updateAccountWishlist(wishlistId, payload) {
+  const response = await api.patch(`/account/wishlists/${wishlistId}`, payload)
+  return response.data
+}
+
+export async function deleteAccountWishlist(wishlistId) {
+  const response = await api.delete(`/account/wishlists/${wishlistId}`)
+  return response.data
+}
+
+export async function addAccountWishlistProduct(payload) {
+  const response = await api.post("/account/wishlists/products", payload)
+  return response.data
+}
+
+export async function removeAccountWishlistProduct(wishlistId, productId) {
+  const response = await api.delete(`/account/wishlists/${wishlistId}/products/${productId}`)
+  return response.data
+}

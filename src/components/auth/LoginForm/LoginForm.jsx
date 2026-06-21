@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { useAuth } from "../../../context/AuthContext"
+import { consumePendingCartRecoveryUrl } from "../../../utils/cartRecovery"
 import "./loginform.css"
 
 function LoginForm() {
@@ -90,6 +91,13 @@ function LoginForm() {
       })
 
       toast.success("Sesión iniciada correctamente.")
+
+      const pendingRecoverUrl = consumePendingCartRecoveryUrl()
+
+      if (pendingRecoverUrl) {
+        window.location.href = pendingRecoverUrl
+        return
+      }
 
       navigate(resolveRedirect(response), { replace: true })
     } catch (error) {

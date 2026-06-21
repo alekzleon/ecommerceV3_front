@@ -30,6 +30,11 @@ export async function clearCart() {
   return response.data
 }
 
+export async function recoverAbandonedCart(cartId) {
+  const response = await api.post(`/cart/abandoned/${cartId}/recover`)
+  return response.data
+}
+
 export async function applyCartCoupon(payload) {
   const response = await api.post("/cart/coupon", payload)
   return response.data

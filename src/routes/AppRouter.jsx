@@ -11,8 +11,11 @@ import CartPage from "../pages/cart/CartPage"
 import CheckoutPage from "../pages/cart/CheckoutPage"
 import CheckoutResultPage from "../pages/cart/CheckoutResultPage"
 import CartExcelImportPage from "../pages/cart/CartExcelImportPage"
+import RecoverCartPage from "../pages/cart/RecoverCartPage"
 import LoginPage from "../pages/auth/LoginPage"
 import RegisterPage from "../pages/auth/RegisterPage"
+import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage"
+import ResetPasswordPage from "../pages/auth/ResetPasswordPage"
 import AccountPage from "../pages/account/AccountHomePage"
 import NotFoundPage from "../pages/public/NotFoundPage"
 import PrivacyPolicyPage from "../pages/legal/PrivacyPolicyPage"
@@ -21,6 +24,7 @@ import ScrollToTop from "../components/common/ScrollToTop/ScrollToTop"
 import AccountProfilePage from "../pages/account/AccountProfilePage"
 import AccountAddressesPage from "../pages/account/AccountAddressesPage"
 import FavoritesPage from "../pages/account/FavoritesPage"
+import WishlistsPage from "../pages/account/WishlistsPage"
 
 import AdminRoutes from "../admin/routes/AdminRoutes"
 import { getAdminMenu } from "../admin/services/adminNavigationService"
@@ -101,16 +105,20 @@ function AppRouter() {
           <Route path="ofertas" element={<OffersPage />} />
           <Route path="contacto" element={<ContactPage />} />
           <Route path="carrito" element={<CartPage />} />
+          <Route path="carrito/recuperar" element={<RecoverCartPage />} />
           <Route path="carrito/excel" element={<CartExcelImportPage />} />
           <Route path="checkout" element={<CheckoutPage />} />
           <Route path="checkout/success" element={<CheckoutResultPage type="success" />} />
           <Route path="checkout/cancel" element={<CheckoutResultPage type="cancel" />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="registro" element={<RegisterPage />} />
+          <Route path="recuperar-password" element={<ForgotPasswordPage />} />
+          <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="mi-cuenta" element={<AccountPage />} />
           <Route path="mi-cuenta/datos" element={<AccountProfilePage />} />
           <Route path="mi-cuenta/direcciones" element={<AccountAddressesPage />} />
           <Route path="favoritos" element={<FavoritesPage />} />
+          <Route path="listas" element={<WishlistsPage />} />
           <Route path="aviso-privacidad" element={<PrivacyPolicyPage />} />
           <Route path="terminos-y-condiciones" element={<TermsPage />} />
         </Route>

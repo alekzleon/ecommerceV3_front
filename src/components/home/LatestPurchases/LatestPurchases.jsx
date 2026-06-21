@@ -73,6 +73,7 @@ function LatestPurchases() {
   const safeStartIndex = Math.min(startIndex, maxIndex)
   const visibleProducts = products.slice(safeStartIndex, safeStartIndex + visibleCount)
   const canShowPrices = sessionReady && isAuthenticated
+  const sectionTitle = canShowPrices ? "Tus últimas compras" : "Te puede interesar"
 
   const goPrev = () => {
     setStartIndex((prev) => Math.max(prev - visibleCount, 0))
@@ -122,7 +123,7 @@ function LatestPurchases() {
       <div className="container-main">
         <div className="latest-purchases__wrapper">
           <div className="latest-purchases__header">
-            <h2 className="latest-purchases__title">Tus últimas compras</h2>
+            <h2 className="latest-purchases__title">{sectionTitle}</h2>
 
             <div className="latest-purchases__controls">
               <button

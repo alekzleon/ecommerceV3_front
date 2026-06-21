@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   addCartPromotionGiftProduct,
   applyCartCoupon,
@@ -43,6 +43,8 @@ const emptyCartState = {
 }
 
 function CartPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [cart, setCart] = useState(emptyCartState)
   const [products, setProducts] = useState([])
   const [selected, setSelected] = useState([])
@@ -57,6 +59,7 @@ function CartPage() {
   const [couponCode, setCouponCode] = useState("")
   const [couponLoading, setCouponLoading] = useState(false)
   const restoringRecoverableRef = useRef(false)
+  const recoveredNoticeShownRef = useRef(false)
 
   const syncCartSummary = (cartData) => {
     const summary = {
@@ -201,6 +204,7 @@ function CartPage() {
         category: item.category || item.category_snapshot || "",
         family: item.family || item.family_snapshot || "",
         promotion: promotionData,
+        selectedAttributes: normalizeSelectedAttributes(item.selected_attributes ?? item.metadata?.selected_attributes),
         availablePromotions,
         giftUnits: Number(item.gift_units ?? item.giftUnits ?? 0),
         giftItemUnits: Number(
@@ -394,6 +398,24 @@ function CartPage() {
   useEffect(() => {
     fetchCartData()
   }, [fetchCartData])
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+
+    if (searchParams.get("recovered") !== "1" || recoveredNoticeShownRef.current) return
+
+    recoveredNoticeShownRef.current = true
+    notifySuccess("Carrito recuperado correctamente.")
+    searchParams.delete("recovered")
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: searchParams.toString(),
+      },
+      { replace: true }
+    )
+  }, [location.pathname, location.search, navigate])
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -1066,6 +1088,12 @@ function CartPage() {
                                   {product.presentation ? ` · ${product.presentation}` : ""}
                                 </p>
 
+                                {product.selectedAttributes.length ? (
+                                  <p className="cart_item_meta">
+                                    {formatSelectedAttributes(product.selectedAttributes)}
+                                  </p>
+                                ) : null}
+
                                 {product.promotion ? (
                                   <div className="cart_item_promo_badge is-applied">
                                     Promo aplicada: {product.promotion.name || "Promoción activa"}
@@ -1550,6 +1578,22 @@ function normalizeGiftItems(items) {
       estimatedValue: item.estimated_value ?? item.estimatedValue ?? null,
       unitLabel: item.unit_label ?? item.unitLabel ?? "",
     }))
+}
+
+function normalizeSelectedAttributes(attributes) {
+  if (!Array.isArray(attributes)) return []
+
+  return attributes
+    .filter(Boolean)
+    .map((attribute) => ({
+      attribute: attribute.attribute ?? attribute.name ?? "",
+      value: attribute.value ?? "",
+    }))
+    .filter((attribute) => attribute.attribute && attribute.value)
+}
+
+function formatSelectedAttributes(attributes = []) {
+  return attributes.map((attribute) => `${attribute.attribute}: ${attribute.value}`).join(" / ")
 }
 
 function normalizeCartItemImage(item = {}) {

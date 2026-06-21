@@ -5,7 +5,12 @@ import Footer from "../components/common/Footer/Footer"
 
 function MainLayout() {
   const { pathname } = useLocation()
-  const isFullscreenRoute = ["/login", "/registro"].includes(pathname)
+  const isFullscreenRoute = [
+    "/login",
+    "/registro",
+    "/recuperar-password",
+    "/reset-password",
+  ].includes(pathname)
 
   return (
     <>

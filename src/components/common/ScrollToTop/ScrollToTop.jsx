@@ -1,8 +1,9 @@
 import { useEffect } from "react"
 import { useLocation } from "react-router-dom"
+import { trackMetaPageView } from "../../../utils/metaPixel"
 
 function ScrollToTop() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
 
   useEffect(() => {
     window.scrollTo({
@@ -10,7 +11,8 @@ function ScrollToTop() {
       left: 0,
       behavior: "auto",
     })
-  }, [pathname])
+    trackMetaPageView()
+  }, [pathname, search])
 
   return null
 }

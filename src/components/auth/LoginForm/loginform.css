@@ -6,9 +6,14 @@
   width: 100%;
 }
 
+.login-form:not(.login-form--register) .login-form__form {
+  display: grid;
+  gap: 12px;
+}
+
 .login-form--register .login-form__form {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 12px;
 }
 
 .login-form__alert {
@@ -19,6 +24,12 @@
   color: #b91c1c;
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.login-form__alert--success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
 }
 
 .login-form__field {
@@ -32,6 +43,33 @@
   padding: 10px 20px 8px;
 }
 
+.login-form:not(.login-form--register) .login-form__field {
+  min-height: 54px;
+  border: 0;
+  border-left: 0;
+  border-radius: 8px;
+  background: #eef4fb;
+  padding: 10px 14px 8px;
+}
+
+.login-page__form-panel--single .login-form__field {
+  min-height: 54px;
+  border: 0;
+  border-left: 0;
+  border-radius: 8px;
+  background: #eef4fb;
+  padding: 10px 14px 8px;
+}
+
+.login-form--register .login-form__field {
+  min-height: 54px;
+  border: 0;
+  border-left: 0;
+  border-radius: 8px;
+  background: #eef4fb;
+  padding: 10px 14px 8px;
+}
+
 .login-form__field:first-of-type {
   border-left-color: #3451ff;
 }
@@ -40,14 +78,27 @@
   margin-top: -1px;
 }
 
+.login-form:not(.login-form--register) .login-form__field + .login-form__field {
+  margin-top: 0;
+}
+
+.login-page__form-panel--single .login-form__field + .login-form__field {
+  margin-top: 0;
+}
+
+.login-form--register .login-form__field + .login-form__field {
+  margin-top: 0;
+}
+
 .login-form__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .login-form__grid .login-form__field + .login-form__field {
   margin-top: 0;
-  margin-left: -1px;
+  margin-left: 0;
 }
 
 .login-form__field.is-error {
@@ -61,6 +112,21 @@
   line-height: 1.2;
 }
 
+.login-form:not(.login-form--register) .login-form__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.login-page__form-panel--single .login-form__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.login-form--register .login-form__label {
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
 .login-form__input {
   width: 100%;
   min-height: 24px;
@@ -71,6 +137,24 @@
   font-size: 0.9rem;
   font-weight: 700;
   padding: 2px 0 0;
+}
+
+.login-form:not(.login-form--register) .login-form__input {
+  color: #111827;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.login-page__form-panel--single .login-form__input {
+  color: #111827;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.login-form--register .login-form__input {
+  color: #111827;
+  font-size: 0.86rem;
+  font-weight: 800;
 }
 
 .login-form__input::placeholder {
@@ -93,11 +177,15 @@
   margin: 18px 0 54px;
 }
 
+.login-form:not(.login-form--register) .login-form__row {
+  margin: 2px 0 18px;
+}
+
 .login-form__row--terms {
   align-items: flex-start;
   flex-direction: column;
   gap: 8px;
-  margin: 18px 0 0;
+  margin: 6px 0 0;
 }
 
 .login-form__check {
@@ -138,8 +226,21 @@
   gap: 26px;
 }
 
+.login-form:not(.login-form--register) .login-form__actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.login-page__form-panel--single .login-form__actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 6px;
+}
+
 .login-form__actions--compact {
-  margin-top: 24px;
+  margin-top: 8px;
 }
 
 .login-form__submit,
@@ -155,6 +256,18 @@
   text-decoration: none;
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.login-form:not(.login-form--register) .login-form__submit,
+.login-form:not(.login-form--register) .login-form__signup {
+  width: 100%;
+  border-radius: 8px;
+}
+
+.login-page__form-panel--single .login-form__submit,
+.login-page__form-panel--single .login-form__signup {
+  width: 100%;
+  border-radius: 8px;
 }
 
 .login-form__submit {
