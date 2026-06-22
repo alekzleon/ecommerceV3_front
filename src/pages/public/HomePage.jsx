@@ -10,6 +10,7 @@ function HomePage() {
     <>
       <HeroBanner />
       <BrandBanners />
+      <LatestPurchases source="favorites" />
       <LatestPurchases />
       <MonthlyPromotions />
       <OffersSection />

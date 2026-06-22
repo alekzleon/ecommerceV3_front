@@ -10,6 +10,7 @@ import MarketingPage from "../pages/MarketingPage/MarketingPage"
 import PromotionsPage from "../pages/PromotionsPage/PromotionsPage"
 import GiftItemsPage from "../pages/PromotionsPage/GiftItemsPage"
 import CouponsPage from "../pages/CouponsPage/CouponsPage"
+import OrdersPage from "../pages/OrdersPage/OrdersPage"
 import AdminForbiddenPage from "../pages/AdminForbiddenPage/AdminForbiddenPage"
 import LogsPage from "../pages/LogsPage/LogsPage"
 import SettingsPage from "../pages/SettingsPage/SettingsPage"
@@ -47,6 +48,7 @@ function AdminRoutes({
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/customers" element={<CustomerPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/orders" element={<OrdersPage />} />
           <Route path="/marketing" element={<MarketingPage />} />
           <Route path="/promotions" element={<PromotionsPage />} />
           <Route path="/promotions/gift-items" element={<GiftItemsPage />} />

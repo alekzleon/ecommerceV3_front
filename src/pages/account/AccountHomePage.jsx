@@ -20,6 +20,14 @@ const accountCards = [
     icon: "📍",
   },
   {
+    id: "orders",
+    title: "Mis pedidos",
+    description:
+      "Consulta tus compras, productos, totales, pagos y notas del pedido.",
+    to: "/mi-cuenta/pedidos",
+    icon: "🧾",
+  },
+  {
     id: "credit",
     title: "Crédito",
     description:

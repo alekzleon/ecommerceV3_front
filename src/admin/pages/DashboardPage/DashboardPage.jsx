@@ -3,6 +3,12 @@ import { getAdminDashboard } from "../../../services/api/adminDashboardService"
 import { notifyError } from "../../../utils/toast"
 import "./DashboardPage.css"
 
+const QUICK_RANGES = [
+  { key: "today", label: "Hoy", days: 1 },
+  { key: "7d", label: "Últimos 7 días", days: 7 },
+  { key: "30d", label: "Últimos 30 días", days: 30 },
+]
+
 const EMPTY_DASHBOARD = {
   filters: getDefaultFilters(),
   summary: {
@@ -45,6 +51,7 @@ function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false)
 
   const summaryCards = useMemo(() => buildSummaryCards(dashboard.summary), [dashboard.summary])
+  const activeQuickRange = useMemo(() => getActiveQuickRange(filters), [filters])
 
   const loadDashboard = useCallback(async (nextFilters) => {
     try {
@@ -79,6 +86,12 @@ function DashboardPage() {
     loadDashboard(filters)
   }
 
+  function applyQuickRange(range) {
+    const nextFilters = getRangeFilters(range.days)
+    setFilters(nextFilters)
+    loadDashboard(nextFilters)
+  }
+
   return (
     <div className="dashboard-page">
       <header className="dashboard-page__header">
@@ -88,6 +101,21 @@ function DashboardPage() {
         </div>
 
         <form className="dashboard-filters" onSubmit={handleSubmit}>
+          <div className="dashboard-filters__quick" aria-label="Accesos rápidos de periodo">
+            {QUICK_RANGES.map((range) => (
+              <button
+                key={range.key}
+                type="button"
+                className={activeQuickRange === range.key ? "is-active" : ""}
+                onClick={() => applyQuickRange(range)}
+                disabled={refreshing}
+              >
+                {range.label}
+              </button>
+            ))}
+            <span className={!activeQuickRange ? "is-active" : ""}>Personalizado</span>
+          </div>
+
           <label>
             <span>Desde</span>
             <input type="date" name="from" value={filters.from} onChange={handleFilterChange} />
@@ -586,14 +614,27 @@ function normalizeRecentOrders(items = []) {
 }
 
 function getDefaultFilters() {
+  return getRangeFilters(30)
+}
+
+function getRangeFilters(days) {
   const today = new Date()
   const from = new Date(today)
-  from.setDate(today.getDate() - 29)
+  from.setDate(today.getDate() - Math.max(Number(days || 1) - 1, 0))
 
   return {
     from: formatDateInput(from),
     to: formatDateInput(today),
   }
+}
+
+function getActiveQuickRange(filters) {
+  const match = QUICK_RANGES.find((range) => {
+    const rangeFilters = getRangeFilters(range.days)
+    return filters.from === rangeFilters.from && filters.to === rangeFilters.to
+  })
+
+  return match?.key || ""
 }
 
 function formatDateInput(date) {

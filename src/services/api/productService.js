@@ -17,6 +17,18 @@ export async function getProducts(params = {}) {
   return data
 }
 
+export async function getSmartSearchProducts(params = {}) {
+  const searchParams = new URLSearchParams()
+
+  if (params.q) searchParams.set("q", params.q)
+  if (params.page) searchParams.set("page", String(params.page))
+  if (params.per_page) searchParams.set("per_page", String(params.per_page))
+  if (params.in_stock !== undefined) searchParams.set("in_stock", String(params.in_stock))
+
+  const { data } = await api.get("/products/smart-search", { params: searchParams })
+  return data
+}
+
 export async function getProductDetail(slug) {
   const { data } = await api.get(`/products/${slug}`)
   return data

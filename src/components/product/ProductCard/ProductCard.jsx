@@ -107,11 +107,7 @@ function ProductCard({ product, onFavoriteChange }) {
         response?.message || "Producto agregado al carrito correctamente."
       )
     } catch (error) {
-      const apiMessage =
-        error?.response?.data?.message ||
-        "No fue posible agregar el producto al carrito."
-
-      notifyError(apiMessage)
+      notifyError(getApiErrorMessage(error, "No fue posible agregar el producto al carrito."))
       console.error("Error al agregar al carrito:", error?.response?.data || error)
     } finally {
       setAddingToCart(false)
@@ -311,6 +307,33 @@ function formatStockMessage(status) {
   }
 
   return messages[status] || ""
+}
+
+function getApiErrorMessage(error, fallbackMessage) {
+  const payload = error?.response?.data
+  const errors = payload?.errors
+
+  if (errors && typeof errors === "object") {
+    const preferredKeys = ["attribute_value_ids", "quantity", "product_id"]
+
+    for (const key of preferredKeys) {
+      const message = extractValidationMessage(errors[key])
+      if (message) return message
+    }
+
+    for (const value of Object.values(errors)) {
+      const message = extractValidationMessage(value)
+      if (message) return message
+    }
+  }
+
+  return payload?.message || fallbackMessage
+}
+
+function extractValidationMessage(value) {
+  if (Array.isArray(value)) return value.find(Boolean) || ""
+  if (typeof value === "string") return value
+  return ""
 }
 
 export default ProductCard

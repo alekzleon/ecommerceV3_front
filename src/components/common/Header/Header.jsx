@@ -346,7 +346,7 @@ function Header() {
                   <hr className="header-profile-divider" />
 
                   <Link
-                    to="/pedidos"
+                  to="/mi-cuenta/pedidos"
                     className="header-profile-item"
                     onClick={() => {
                       setIsProfileOpen(false)

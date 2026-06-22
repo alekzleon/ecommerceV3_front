@@ -73,7 +73,7 @@ const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 const STRIPE_SUCCESS_RETURN_STORAGE_KEY = "ecommerce_stripe_success_return"
 const DEBUG_RECOVERABLE_CART = true
 const DELIVERY_NOTE_MAX_LENGTH = 200
-const DOCUMENT_NOTE_MAX_LENGTH = 200
+const DOCUMENT_NOTE_MAX_LENGTH = 1000
 
 function CheckoutPage() {
   const { brandName, logoUrl } = useSettings()
@@ -1498,7 +1498,7 @@ function buildCheckoutPayload(address, documentNotes = "") {
 
   return {
     ...buildCheckoutAddressSelection(address),
-    ...(notes ? { notes } : {}),
+    ...(notes ? { document_notes: notes } : {}),
   }
 }
 

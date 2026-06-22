@@ -23,6 +23,7 @@ import TermsPage from "../pages/legal/TermsPage"
 import ScrollToTop from "../components/common/ScrollToTop/ScrollToTop"
 import AccountProfilePage from "../pages/account/AccountProfilePage"
 import AccountAddressesPage from "../pages/account/AccountAddressesPage"
+import AccountOrdersPage from "../pages/account/AccountOrdersPage"
 import FavoritesPage from "../pages/account/FavoritesPage"
 import WishlistsPage from "../pages/account/WishlistsPage"
 
@@ -117,6 +118,7 @@ function AppRouter() {
           <Route path="mi-cuenta" element={<AccountPage />} />
           <Route path="mi-cuenta/datos" element={<AccountProfilePage />} />
           <Route path="mi-cuenta/direcciones" element={<AccountAddressesPage />} />
+          <Route path="mi-cuenta/pedidos" element={<AccountOrdersPage />} />
           <Route path="favoritos" element={<FavoritesPage />} />
           <Route path="listas" element={<WishlistsPage />} />
           <Route path="aviso-privacidad" element={<PrivacyPolicyPage />} />

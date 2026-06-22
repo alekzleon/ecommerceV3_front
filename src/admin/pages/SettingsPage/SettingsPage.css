@@ -306,7 +306,8 @@
   align-items: start;
 }
 
-.settings-page__abandoned-grid {
+.settings-page__abandoned-grid,
+.settings-page__notifications-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
@@ -569,6 +570,7 @@
   .settings-page__asset-grid,
   .settings-page__loyalty-grid,
   .settings-page__abandoned-grid,
+  .settings-page__notifications-grid,
   .settings-shipping__grid {
     grid-template-columns: 1fr;
   }

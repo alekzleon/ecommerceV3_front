@@ -41,6 +41,11 @@ export async function getPublicAbandonedCartSettings() {
   return data
 }
 
+export async function getPublicSaleNotificationSettings() {
+  const { data } = await api.get("/ecommerce-settings/sale-notifications")
+  return data
+}
+
 export async function getPublicHomeBenefits() {
   const { data } = await api.get("/ecommerce-settings/home-benefits")
   return data
@@ -83,6 +88,11 @@ export async function getAdminMetaPixel() {
 
 export async function getAdminAbandonedCartSettings() {
   const { data } = await api.get("/admin/ecommerce-settings/abandoned-cart")
+  return data
+}
+
+export async function getAdminSaleNotificationSettings() {
+  const { data } = await api.get("/admin/ecommerce-settings/sale-notifications")
   return data
 }
 
@@ -157,6 +167,11 @@ export async function updateAdminMetaPixel(pixelId) {
 
 export async function updateAdminAbandonedCartSettings(payload) {
   const { data } = await api.patch("/admin/ecommerce-settings/abandoned-cart", payload)
+  return data
+}
+
+export async function updateAdminSaleNotificationSettings(payload) {
+  const { data } = await api.patch("/admin/ecommerce-settings/sale-notifications", payload)
   return data
 }
 

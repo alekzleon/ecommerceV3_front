@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom"
 import ProductGrid from "../../components/product/ProductGrid/ProductGrid"
 import ProductListSkeleton from "../../components/product/ProductListSkeleton/ProductListSkeleton"
 import CatalogSidebar from "../../components/product/CatalogSidebar/CatalogSidebar"
-import { getCatalogSidebar, getProducts } from "../../services/api/productService"
+import { getCatalogSidebar, getProducts, getSmartSearchProducts } from "../../services/api/productService"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
 import "./productspage.css"
 
@@ -12,6 +12,7 @@ const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Prod
 const PAGINATION_SIBLINGS = 1
 const PAGINATION_BOUNDARIES = 1
 const PAGINATION_ELLIPSIS = "ellipsis"
+const SMART_SEARCH_HINTS = /\b(regalo|regalos|para|menos|menor|hasta|barato|baratos|barata|baratas|econ[oó]mico|econ[oó]micos|mam[aá]|pap[aá]|oficina|pesos?)\b/i
 
 function getPaginationItems(currentPage, lastPage) {
   const pages = []
@@ -77,6 +78,7 @@ function ProductsPage() {
     total: 0,
   })
   const [error, setError] = useState("")
+  const [smartSearchInfo, setSmartSearchInfo] = useState(null)
 
   const page = useMemo(() => Number(searchParams.get("page")) || 1, [searchParams])
   const sort = useMemo(() => searchParams.get("sort") || "relevantes", [searchParams])
@@ -84,6 +86,19 @@ function ProductsPage() {
   const selectedFamilySlug = useMemo(() => searchParams.get("family") || "", [searchParams])
   const selectedBrand = useMemo(() => searchParams.get("brand") || "", [searchParams])
   const searchTerm = useMemo(() => searchParams.get("search") || "", [searchParams])
+  const shouldUseSmartSearch = useMemo(
+    () =>
+      isSmartSearchQuery(searchTerm) &&
+      !selectedCategorySlug &&
+      !selectedFamilySlug &&
+      !selectedBrand &&
+      sort === "relevantes",
+    [searchTerm, selectedBrand, selectedCategorySlug, selectedFamilySlug, sort]
+  )
+  const smartSearchChips = useMemo(
+    () => buildSmartSearchChips(smartSearchInfo),
+    [smartSearchInfo]
+  )
   const paginationItems = useMemo(
     () => getPaginationItems(page, meta.last_page),
     [page, meta.last_page]
@@ -118,57 +133,30 @@ function ProductsPage() {
           "precio-desc": "price_desc",
         }
 
-        const response = await getProducts({
-          page,
-          per_page: PRODUCTS_PER_PAGE,
-          sort: sortMap[sort] || "relevant",
-          category_slug: selectedCategorySlug || undefined,
-          family_slug: selectedFamilySlug || undefined,
-          brand: selectedBrand || undefined,
-          search: searchTerm || undefined,
-        })
+        const response = shouldUseSmartSearch
+          ? await getSmartSearchProducts({
+              page,
+              per_page: PRODUCTS_PER_PAGE,
+              q: searchTerm,
+              in_stock: true,
+            })
+          : await getProducts({
+              page,
+              per_page: PRODUCTS_PER_PAGE,
+              sort: sortMap[sort] || "relevant",
+              category_slug: selectedCategorySlug || undefined,
+              family_slug: selectedFamilySlug || undefined,
+              brand: selectedBrand || undefined,
+              search: searchTerm || undefined,
+            })
 
-        const normalizedProducts = (response?.data || []).map((item) => {
-          const price = Number(item?.default_price ?? 0)
-          const activePromotions = Array.isArray(item?.active_promotions)
-            ? item.active_promotions
-            : []
-          const mainPromotion = activePromotions[0] || null
-          const promotionMessage =
-            mainPromotion?.message ||
-            mainPromotion?.label ||
-            mainPromotion?.name ||
-            ""
-
-          return {
-            id: item?.id ?? null,
-            name: item?.name ?? "Producto sin nombre",
-            slug: item?.slug ?? "",
-            image: getProductImage(item),
-            price,
-            oldPrice: price,
-            priceInfo: item?.price_info ?? null,
-            brand: item?.brand ?? "Sin marca",
-            shortDescription: item?.short_description ?? "Producto disponible en catálogo.",
-            description: item?.description ?? "Producto disponible en catálogo.",
-            category: item?.category?.name ?? "",
-            family: item?.family?.name ?? "",
-            sku: item?.sku ?? "",
-            rating: 4.8,
-            sold: "Alta rotación",
-            shipping: "Entrega disponible",
-            discountLabel: "",
-            badges: promotionMessage ? [promotionMessage] : [],
-            activePromotions,
-            promotionMessage,
-            stock: item?.stock ?? null,
-            stockStatus: item?.stock_status ?? "untracked",
-            stockMessage: item?.stock_message ?? "",
-            isFavorite: Boolean(item?.is_favorite),
-          }
-        })
+        const rawProducts = shouldUseSmartSearch
+          ? response?.data?.products || []
+          : response?.data || []
+        const normalizedProducts = rawProducts.map(normalizeProduct)
 
         setProducts(normalizedProducts)
+        setSmartSearchInfo(shouldUseSmartSearch ? response?.data?.interpreted || null : null)
         setMeta({
           current_page: response?.meta?.current_page ?? 1,
           last_page: response?.meta?.last_page ?? 1,
@@ -178,6 +166,7 @@ function ProductsPage() {
       } catch (err) {
         console.error(err)
         setProducts([])
+        setSmartSearchInfo(null)
         setError("No fue posible cargar los productos.")
       } finally {
         setLoading(false)
@@ -185,7 +174,7 @@ function ProductsPage() {
     }
 
     fetchProducts()
-  }, [page, sort, selectedCategorySlug, selectedFamilySlug, selectedBrand, searchTerm])
+  }, [page, sort, selectedCategorySlug, selectedFamilySlug, selectedBrand, searchTerm, shouldUseSmartSearch])
 
   useEffect(() => {
     setIsMobileFiltersOpen(false)
@@ -345,6 +334,16 @@ function ProductsPage() {
               <div className="products-page__error">{error}</div>
             ) : (
               <>
+                {smartSearchChips.length ? (
+                  <div className="products-page__smart-chips" aria-label="Interpretación de búsqueda">
+                    {smartSearchChips.map((chip) => (
+                      <span className="products-page__smart-chip" key={chip}>
+                        {chip}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
                 <ProductGrid products={products} />
 
                 {!loading && !error && products.length === 0 ? (
@@ -449,6 +448,101 @@ function ProductsPage() {
       </aside>
     </section>
   )
+}
+
+function normalizeProduct(item = {}) {
+  const price = Number(item?.default_price ?? 0)
+  const activePromotions = Array.isArray(item?.active_promotions)
+    ? item.active_promotions
+    : []
+  const mainPromotion = activePromotions[0] || null
+  const promotionMessage =
+    mainPromotion?.message ||
+    mainPromotion?.label ||
+    mainPromotion?.name ||
+    ""
+
+  return {
+    id: item?.id ?? null,
+    name: item?.name ?? "Producto sin nombre",
+    slug: item?.slug ?? "",
+    image: getProductImage(item),
+    price,
+    oldPrice: price,
+    priceInfo: item?.price_info ?? null,
+    brand: item?.brand ?? "Sin marca",
+    shortDescription: item?.short_description ?? "Producto disponible en catálogo.",
+    description: item?.description ?? "Producto disponible en catálogo.",
+    category: item?.category?.name ?? "",
+    family: item?.family?.name ?? "",
+    sku: item?.sku ?? "",
+    rating: 4.8,
+    sold: "Alta rotación",
+    shipping: "Entrega disponible",
+    discountLabel: "",
+    badges: promotionMessage ? [promotionMessage] : [],
+    activePromotions,
+    promotionMessage,
+    stock: item?.stock ?? null,
+    stockStatus: item?.stock_status ?? getStockStatus(item),
+    stockMessage: item?.stock_message ?? "",
+    isFavorite: Boolean(item?.is_favorite),
+    relevanceScore: item?.relevance_score ?? null,
+    matchReasons: Array.isArray(item?.match_reasons) ? item.match_reasons : [],
+  }
+}
+
+function isSmartSearchQuery(value = "") {
+  const normalizedValue = String(value || "").trim()
+
+  if (!normalizedValue) return false
+
+  const words = normalizedValue.split(/\s+/).filter(Boolean)
+
+  return words.length >= 3 || SMART_SEARCH_HINTS.test(normalizedValue)
+}
+
+function buildSmartSearchChips(interpreted) {
+  if (!interpreted) return []
+
+  const chips = []
+  const filters = interpreted.filters || {}
+
+  if (interpreted.intent === "gift") chips.push("Regalo")
+  if (interpreted.recipient) chips.push(capitalizeLabel(interpreted.recipient))
+  if (filters.price_gte != null || interpreted.min_price != null) {
+    chips.push(`Desde ${formatMoney(filters.price_gte ?? interpreted.min_price)}`)
+  }
+  if (filters.price_lte != null || interpreted.max_price != null) {
+    chips.push(`Hasta ${formatMoney(filters.price_lte ?? interpreted.max_price)}`)
+  }
+  if (filters.in_stock ?? interpreted.filters?.in_stock) chips.push("En stock")
+
+  return Array.from(new Set(chips))
+}
+
+function capitalizeLabel(value = "") {
+  const label = String(value).trim()
+
+  if (!label) return ""
+
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0))
+}
+
+function getStockStatus(item = {}) {
+  if (item?.stock === null || item?.stock === undefined || item?.stock === "") {
+    return "untracked"
+  }
+
+  return Number(item.stock) > 0 ? "in_stock" : "out_of_stock"
 }
 
 function getProductImage(item = {}) {

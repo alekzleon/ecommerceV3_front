@@ -112,6 +112,27 @@
   min-width: 0;
 }
 
+.products-page__smart-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.products-page__smart-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid #cfe0ec;
+  border-radius: 999px;
+  background: #eef7fb;
+  color: #13426b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 /* ---------------- STATES ---------------- */
 
 .products-page__error,

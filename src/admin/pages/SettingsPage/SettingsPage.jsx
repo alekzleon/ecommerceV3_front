@@ -5,9 +5,11 @@ import {
   deleteAdminSettings,
   getAdminAbandonedCartSettings,
   getAdminMetaPixel,
+  getAdminSaleNotificationSettings,
   getAdminSettings,
   updateAdminAbandonedCartSettings,
   updateAdminMetaPixel,
+  updateAdminSaleNotificationSettings,
 } from "../../../services/api/settingsService"
 import {
   createAdminContactFaq,
@@ -55,6 +57,13 @@ const EMPTY_FORM = {
     recovery_link_expires_hours: 48,
     send_email: true,
     send_whatsapp: true,
+  },
+  sale_notifications: {
+    enabled: true,
+    send_email: true,
+    send_whatsapp: true,
+    admin_email: "",
+    admin_whatsapp: "",
   },
   logo: null,
   logo_url: "",
@@ -128,6 +137,12 @@ const SECTIONS = [
     description: "Tiempo de abandono, expiración y canales de recuperación.",
   },
   {
+    id: "sale_notifications",
+    icon: "bi-bell",
+    title: "Notificaciones",
+    description: "Canales y destinatarios para avisos de ventas procesadas.",
+  },
+  {
     id: "contact_faqs",
     icon: "bi-question-circle",
     title: "Preguntas frecuentes",
@@ -143,7 +158,7 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const canSubmitSection = !["contact_faqs", "envios"].includes(activeSection)
-  const canDeleteSettings = !["contact_faqs", "abandoned_cart", "envios"].includes(activeSection)
+  const canDeleteSettings = !["contact_faqs", "abandoned_cart", "sale_notifications", "envios"].includes(activeSection)
 
   const activeSectionMeta = useMemo(() => {
     return SECTIONS.find((section) => section.id === activeSection) || SECTIONS[0]
@@ -156,10 +171,11 @@ function SettingsPage() {
   async function loadSettings() {
     try {
       setLoading(true)
-      const [settingsResponse, metaPixelResponse, abandonedCartResponse] = await Promise.allSettled([
+      const [settingsResponse, metaPixelResponse, abandonedCartResponse, saleNotificationsResponse] = await Promise.allSettled([
         getAdminSettings(),
         getAdminMetaPixel(),
         getAdminAbandonedCartSettings(),
+        getAdminSaleNotificationSettings(),
       ])
       const data = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -170,11 +186,15 @@ function SettingsPage() {
       const abandonedCart = abandonedCartResponse.status === "fulfilled"
         ? normalizeAbandonedCartResponse(abandonedCartResponse.value)
         : EMPTY_FORM.abandoned_cart
+      const saleNotifications = saleNotificationsResponse.status === "fulfilled"
+        ? normalizeSaleNotificationResponse(saleNotificationsResponse.value)
+        : EMPTY_FORM.sale_notifications
 
       setForm(mapSettingsToForm({
         ...data,
         meta_pixel_id: metaPixelId,
         abandoned_cart: abandonedCart,
+        sale_notifications: saleNotifications,
       }))
     } catch (error) {
       console.error("Error al cargar configuración:", error)
@@ -248,6 +268,18 @@ function SettingsPage() {
       return
     }
 
+    if (name.startsWith("sale_notifications.")) {
+      const key = name.replace("sale_notifications.", "")
+      setForm((prev) => ({
+        ...prev,
+        sale_notifications: {
+          ...prev.sale_notifications,
+          [key]: type === "checkbox" ? checked : value,
+        },
+      }))
+      return
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -297,6 +329,24 @@ function SettingsPage() {
         return
       }
 
+      if (activeSection === "sale_notifications") {
+        const payload = buildSaleNotificationPayload(form.sale_notifications)
+        const validationMessage = validateSaleNotificationPayload(payload)
+
+        if (validationMessage) {
+          notifyWarning(validationMessage)
+          return
+        }
+
+        const response = await updateAdminSaleNotificationSettings(payload)
+        setForm((prev) => ({
+          ...prev,
+          sale_notifications: normalizeSaleNotificationResponse(response),
+        }))
+        notifySuccess("Configuración de notificaciones guardada correctamente.")
+        return
+      }
+
       const payload = buildSettingsPayload(form, activeSection)
       if (activeSection === "tracking") {
         const pixelId = String(form.meta_pixel_id || "").trim()
@@ -321,6 +371,7 @@ function SettingsPage() {
         ...data,
         meta_pixel_id: normalizeMetaPixelResponse(freshMetaPixelResponse),
         abandoned_cart: form.abandoned_cart,
+        sale_notifications: form.sale_notifications,
       }))
       refreshSettings()
       notifySuccess("Configuración guardada correctamente.")
@@ -435,6 +486,10 @@ function SettingsPage() {
 
               {activeSection === "abandoned_cart" ? (
                 <AbandonedCartSection form={form} onChange={handleFieldChange} />
+              ) : null}
+
+              {activeSection === "sale_notifications" ? (
+                <SaleNotificationsSection form={form} onChange={handleFieldChange} />
               ) : null}
 
               {activeSection === "contact_faqs" ? (
@@ -774,6 +829,64 @@ function AbandonedCartSection({ form, onChange }) {
           max="720"
           step="1"
           helpText="Mínimo 1 hora. Máximo 720 horas."
+        />
+      </div>
+    </section>
+  )
+}
+
+function SaleNotificationsSection({ form, onChange }) {
+  const settings = form.sale_notifications || EMPTY_FORM.sale_notifications
+
+  return (
+    <section className="settings-page__section">
+      <div className="settings-page__notifications-grid">
+        <ToggleField
+          label="Activar notificaciones de venta"
+          name="sale_notifications.enabled"
+          checked={settings.enabled}
+          onChange={onChange}
+          helpText="Controla si el backend envía avisos al administrador cuando se procesa una venta."
+        />
+
+        <ToggleField
+          label="Enviar correo"
+          name="sale_notifications.send_email"
+          checked={settings.send_email}
+          onChange={onChange}
+          helpText="Envía el resumen de venta al correo administrador."
+        />
+
+        <ToggleField
+          label="Enviar WhatsApp"
+          name="sale_notifications.send_whatsapp"
+          checked={settings.send_whatsapp}
+          onChange={onChange}
+          helpText="Envía el aviso de venta al WhatsApp administrador."
+        />
+      </div>
+
+      <div className="settings-page__grid settings-page__grid--two">
+        <Field
+          label="Correo administrador"
+          name="sale_notifications.admin_email"
+          type="email"
+          value={settings.admin_email}
+          onChange={onChange}
+          placeholder="ventas@cloudishop.mx"
+          required={settings.send_email}
+          helpText="Requerido cuando el envío por correo está activo."
+        />
+
+        <Field
+          label="WhatsApp administrador"
+          name="sale_notifications.admin_whatsapp"
+          type="tel"
+          value={settings.admin_whatsapp}
+          onChange={onChange}
+          placeholder="9612819842"
+          required={settings.send_whatsapp}
+          helpText="Requerido cuando WhatsApp está activo. Usa entre 10 y 15 dígitos."
         />
       </div>
     </section>
@@ -1222,6 +1335,7 @@ function mapSettingsToForm(settings) {
         settings.loyalty?.cashback_max_redeem_percentage ?? "100",
     },
     abandoned_cart: normalizeAbandonedCartValue(settings.abandoned_cart),
+    sale_notifications: normalizeSaleNotificationValue(settings.sale_notifications),
     logo: null,
     logo_url: normalizeMediaUrl(settings.logo_url || settings.logo_path),
     favicon: null,
@@ -1248,6 +1362,13 @@ function normalizeAbandonedCartResponse(response) {
   return normalizeAbandonedCartValue(value)
 }
 
+function normalizeSaleNotificationResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return normalizeSaleNotificationValue(value)
+}
+
 function normalizeAbandonedCartValue(value = {}) {
   return {
     enabled: booleanOrDefault(value.enabled, EMPTY_FORM.abandoned_cart.enabled),
@@ -1256,6 +1377,16 @@ function normalizeAbandonedCartValue(value = {}) {
       value.recovery_link_expires_hours ?? EMPTY_FORM.abandoned_cart.recovery_link_expires_hours,
     send_email: booleanOrDefault(value.send_email, EMPTY_FORM.abandoned_cart.send_email),
     send_whatsapp: booleanOrDefault(value.send_whatsapp, EMPTY_FORM.abandoned_cart.send_whatsapp),
+  }
+}
+
+function normalizeSaleNotificationValue(value = {}) {
+  return {
+    enabled: booleanOrDefault(value.enabled, EMPTY_FORM.sale_notifications.enabled),
+    send_email: booleanOrDefault(value.send_email, EMPTY_FORM.sale_notifications.send_email),
+    send_whatsapp: booleanOrDefault(value.send_whatsapp, EMPTY_FORM.sale_notifications.send_whatsapp),
+    admin_email: value.admin_email || EMPTY_FORM.sale_notifications.admin_email,
+    admin_whatsapp: value.admin_whatsapp || EMPTY_FORM.sale_notifications.admin_whatsapp,
   }
 }
 
@@ -1278,6 +1409,16 @@ function buildAbandonedCartPayload(settings) {
   }
 }
 
+function buildSaleNotificationPayload(settings) {
+  return {
+    enabled: Boolean(settings.enabled),
+    send_email: Boolean(settings.send_email),
+    send_whatsapp: Boolean(settings.send_whatsapp),
+    admin_email: nullableValue(settings.admin_email),
+    admin_whatsapp: onlyDigits(settings.admin_whatsapp) || null,
+  }
+}
+
 function validateAbandonedCartPayload(payload) {
   if (!Number.isInteger(payload.abandon_after_minutes)) {
     return "Los minutos de abandono deben ser un número entero."
@@ -1293,6 +1434,26 @@ function validateAbandonedCartPayload(payload) {
 
   if (payload.recovery_link_expires_hours < 1 || payload.recovery_link_expires_hours > 720) {
     return "Las horas de vigencia deben estar entre 1 y 720."
+  }
+
+  return ""
+}
+
+function validateSaleNotificationPayload(payload) {
+  if (payload.send_email && !payload.admin_email) {
+    return "El correo administrador es requerido cuando el envío por correo está activo."
+  }
+
+  if (payload.admin_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.admin_email)) {
+    return "Escribe un correo administrador válido."
+  }
+
+  if (payload.send_whatsapp && !payload.admin_whatsapp) {
+    return "El WhatsApp administrador es requerido cuando el envío por WhatsApp está activo."
+  }
+
+  if (payload.admin_whatsapp && !/^\d{10,15}$/.test(payload.admin_whatsapp)) {
+    return "El WhatsApp administrador debe tener entre 10 y 15 dígitos."
   }
 
   return ""
@@ -1405,6 +1566,10 @@ function nullableValue(value) {
   const normalizedValue = String(value ?? "").trim()
 
   return normalizedValue || null
+}
+
+function onlyDigits(value) {
+  return String(value ?? "").replace(/\D/g, "")
 }
 
 function appendNullableFormData(payload, key, value) {

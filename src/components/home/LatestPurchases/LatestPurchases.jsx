@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { toggleAccountFavorite } from "../../../services/api/accountService"
+import { getAccountFavorites, toggleAccountFavorite } from "../../../services/api/accountService"
 import { getRecentPurchases } from "../../../services/api/productService"
 import { useAuth } from "../../../context/AuthContext"
 import { notifyError, notifySuccess } from "../../../utils/toast"
@@ -12,9 +12,10 @@ const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Prod
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 const RECENT_PURCHASES_LIMIT = 10
 
-function LatestPurchases() {
+function LatestPurchases({ source = "recent" }) {
   const navigate = useNavigate()
   const { isAuthenticated, sessionReady } = useAuth()
+  const isFavoritesSource = source === "favorites"
 
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -25,26 +26,44 @@ function LatestPurchases() {
   useEffect(() => {
     if (!sessionReady) return undefined
 
+    if (isFavoritesSource && !isAuthenticated) {
+      setProducts([])
+      setLoading(false)
+      return undefined
+    }
+
     let isMounted = true
 
     const fetchProducts = async () => {
       try {
         setLoading(true)
-        const searchTerms = getRecentSearchTerms()
-        const response = await getRecentPurchases({
-          limit: RECENT_PURCHASES_LIMIT,
-          search_terms: searchTerms.join(","),
-        })
+        const response = isFavoritesSource
+          ? await getAccountFavorites({
+              page: 1,
+              per_page: RECENT_PURCHASES_LIMIT,
+            })
+          : await getRecentPurchases({
+              limit: RECENT_PURCHASES_LIMIT,
+              search_terms: getRecentSearchTerms().join(","),
+            })
 
         if (!isMounted) return
 
-        setProducts(normalizeProducts(response?.data || []))
+        setProducts(normalizeProducts(response?.data || [], { defaultFavorite: isFavoritesSource }))
         setStartIndex(0)
       } catch (error) {
         if (!isMounted) return
 
-        console.error("Error al cargar últimos productos:", error?.response?.data || error)
-        notifyError(error?.response?.data?.message || "No fue posible cargar los productos recientes.")
+        console.error(
+          isFavoritesSource ? "Error al cargar favoritos:" : "Error al cargar últimos productos:",
+          error?.response?.data || error
+        )
+        notifyError(
+          error?.response?.data?.message ||
+            (isFavoritesSource
+              ? "No fue posible cargar tus favoritos."
+              : "No fue posible cargar los productos recientes.")
+        )
         setProducts([])
       } finally {
         if (isMounted) {
@@ -58,7 +77,7 @@ function LatestPurchases() {
     return () => {
       isMounted = false
     }
-  }, [sessionReady])
+  }, [isAuthenticated, isFavoritesSource, sessionReady])
 
   useEffect(() => {
     const handleResize = () => {
@@ -73,7 +92,11 @@ function LatestPurchases() {
   const safeStartIndex = Math.min(startIndex, maxIndex)
   const visibleProducts = products.slice(safeStartIndex, safeStartIndex + visibleCount)
   const canShowPrices = sessionReady && isAuthenticated
-  const sectionTitle = canShowPrices ? "Tus últimas compras" : "Te puede interesar"
+  const sectionTitle = isFavoritesSource
+    ? "Favoritos"
+    : canShowPrices
+      ? "Tus últimas compras"
+      : "Te puede interesar"
 
   const goPrev = () => {
     setStartIndex((prev) => Math.max(prev - visibleCount, 0))
@@ -105,9 +128,11 @@ function LatestPurchases() {
       const isFavorite = Boolean(response?.data?.is_favorite)
 
       setProducts((prev) =>
-        prev.map((item) =>
-          item.id === product.id ? { ...item, isFavorite } : item
-        )
+        isFavoritesSource && !isFavorite
+          ? prev.filter((item) => item.id !== product.id)
+          : prev.map((item) =>
+              item.id === product.id ? { ...item, isFavorite } : item
+            )
       )
       notifySuccess(response?.message || (isFavorite ? "Producto agregado a favoritos." : "Producto eliminado de favoritos."))
     } catch (error) {
@@ -116,6 +141,10 @@ function LatestPurchases() {
     } finally {
       setFavoriteLoadingId(null)
     }
+  }
+
+  if (isFavoritesSource && (!sessionReady || (!loading && products.length === 0))) {
+    return null
   }
 
   return (
@@ -247,7 +276,7 @@ function getVisibleCount() {
   return 6
 }
 
-function normalizeProducts(items = []) {
+function normalizeProducts(items = [], options = {}) {
   return items.map((item) => {
     const price = Number(item?.default_price ?? 0)
     const priceInfo = item?.price_info ?? null
@@ -271,7 +300,7 @@ function normalizeProducts(items = []) {
       priceInfo,
       hasAvailablePrice: price > 0 && priceInfo?.source !== PRICE_UNAVAILABLE_SOURCE,
       discount: promotionMessage,
-      isFavorite: Boolean(item?.is_favorite),
+      isFavorite: Boolean(item?.is_favorite ?? options.defaultFavorite),
       tags: [
         item?.brand ? String(item.brand) : "",
       ].filter(Boolean),

@@ -54,6 +54,16 @@ export async function setAccountAddressDefault(addressId) {
   return response.data
 }
 
+export async function getAccountOrders(params = {}) {
+  const response = await api.get("/account/orders", { params })
+  return response.data
+}
+
+export async function getAccountOrder(orderId) {
+  const response = await api.get(`/account/orders/${orderId}`)
+  return response.data
+}
+
 export async function getAccountFavorites(params = {}) {
   const response = await api.get("/account/favorites", { params })
   return response.data
