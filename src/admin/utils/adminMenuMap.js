@@ -30,6 +30,18 @@ const adminMenuMap = [
     subtitle: "Controla el catálogo y la información comercial.",
   },
   {
+    module: "carga_masiva_productos",
+    path: "/admin/products",
+    title: "Productos",
+    subtitle: "Importación masiva y mantenimiento del catálogo.",
+  },
+  {
+    module: "variantes",
+    path: "/admin/products",
+    title: "Productos",
+    subtitle: "Configuración de variantes y catálogo.",
+  },
+  {
     module: "categorias",
     path: "/admin/catalog/categories",
     title: "Categorías",
@@ -48,10 +60,28 @@ const adminMenuMap = [
     subtitle: "Consulta y da seguimiento a los pedidos.",
   },
   {
+    module: "carritos",
+    path: "/admin/orders",
+    title: "Pedidos",
+    subtitle: "Consulta pedidos y carritos del ecommerce.",
+  },
+  {
     module: "clientes",
     path: "/admin/customers",
     title: "Clientes",
     subtitle: "Gestiona la información de clientes.",
+  },
+  {
+    module: "credito",
+    path: "/admin/credit",
+    title: "Crédito",
+    subtitle: "Gestiona validaciones y operación de crédito.",
+  },
+  {
+    module: "cobranza",
+    path: "/admin/collections",
+    title: "Cobranza",
+    subtitle: "Da seguimiento a cartera y cobranza.",
   },
   {
     module: "promociones",
@@ -76,6 +106,12 @@ const adminMenuMap = [
     path: "/admin/logs",
     title: "Logs",
     subtitle: "Consulta los registros del sistema.",
+  },
+  {
+    module: "sincronizacion",
+    path: "/admin/sync",
+    title: "Sincronización",
+    subtitle: "Monitorea procesos de sincronización.",
   },
   {
     module: "configuracion_ecommerce",

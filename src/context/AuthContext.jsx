@@ -24,9 +24,11 @@ export function AuthProvider({ children }) {
       device_name,
     })
 
-    setAuthSession(response.token, response.user)
+    const nextUser = normalizeAuthUser(response)
+
+    setAuthSession(response.token, nextUser)
     setToken(response.token)
-    setUser(response.user)
+    setUser(nextUser)
     setIsAuthenticated(true)
     setSessionReady(true)
 
@@ -39,9 +41,11 @@ export function AuthProvider({ children }) {
       device_name: payload.device_name || "react-web",
     })
 
-    setAuthSession(response.token, response.user)
+    const nextUser = normalizeAuthUser(response)
+
+    setAuthSession(response.token, nextUser)
     setToken(response.token)
-    setUser(response.user)
+    setUser(nextUser)
     setIsAuthenticated(true)
     setSessionReady(true)
 
@@ -63,9 +67,11 @@ export function AuthProvider({ children }) {
     try {
       const response = await meRequest(currentToken)
 
-      setAuthSession(currentToken, response.user)
+      const nextUser = normalizeAuthUser(response)
+
+      setAuthSession(currentToken, nextUser)
       setToken(currentToken)
-      setUser(response.user)
+      setUser(nextUser)
       setIsAuthenticated(true)
       setSessionReady(true)
 
@@ -104,7 +110,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => {
     const modules = user?.modules || []
-    const isInternal = user?.role?.name !== "cliente" && Boolean(user?.role)
+    const isInternal = Boolean(user?.is_internal ?? (user?.role?.name !== "cliente" && user?.role))
 
     return {
       token,
@@ -121,6 +127,19 @@ export function AuthProvider({ children }) {
   }, [token, user, isAuthenticated, sessionReady])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+function normalizeAuthUser(response = {}) {
+  const responseUser = response.user || response.data || null
+
+  if (!responseUser) return null
+
+  return {
+    ...responseUser,
+    is_internal: responseUser.is_internal ?? response.is_internal,
+    can_manage_access: responseUser.can_manage_access ?? response.can_manage_access,
+    modules: responseUser.modules || response.modules || [],
+  }
 }
 
 export function useAuth() {

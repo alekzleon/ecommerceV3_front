@@ -37,18 +37,19 @@ import {
 } from "../utils/salesTracking"
 
 const HIDDEN_ADMIN_MODULES = new Set([
-  "credito",
-  "cobranza",
-  "sincronizacion",
+  "carga_masiva_productos",
   "carga_masiva",
   "bulk_import",
   "variantes",
   "variant_attributes",
+  "notificaciones",
+  "notifications",
 ])
 
 const HIDDEN_ADMIN_ROUTE_NAMES = new Set([
   "admin.products.bulk-import",
   "admin.variant-attributes.index",
+  "admin.notifications.index",
 ])
 
 function AppRouter() {
@@ -199,10 +200,13 @@ const ADMIN_ROUTE_NAME_PATHS = {
   "admin.carts.index": "/admin/orders",
   "admin.customers.index": "/admin/customers",
   "admin.sales-channels.index": "/admin/sales-channels",
+  "admin.credit.index": "/admin/credit",
+  "admin.collections.index": "/admin/collections",
   "admin.promotions.index": "/admin/promotions",
   "admin.coupons.index": "/admin/coupons",
   "admin.banners.index": "/admin/banners",
   "admin.marketing.index": "/admin/marketing",
+  "admin.sync.index": "/admin/sync",
   "admin.settings.index": "/admin/settings",
   "admin.notifications.index": "/admin/settings",
   "admin.users.index": "/admin/users",
@@ -218,6 +222,11 @@ const ADMIN_MODULE_NAME_PATHS = {
   categories: "/admin/catalog/categories",
   familias: "/admin/catalog/families",
   families: "/admin/catalog/families",
+  carga_masiva_productos: "/admin/products",
+  carga_masiva: "/admin/products",
+  bulk_import: "/admin/products",
+  variantes: "/admin/products",
+  variant_attributes: "/admin/products",
   usuarios: "/admin/users",
   users: "/admin/users",
   roles: "/admin/roles",
@@ -229,6 +238,10 @@ const ADMIN_MODULE_NAME_PATHS = {
   carts: "/admin/orders",
   clientes: "/admin/customers",
   customers: "/admin/customers",
+  credito: "/admin/credit",
+  credit: "/admin/credit",
+  cobranza: "/admin/collections",
+  collections: "/admin/collections",
   marketing: "/admin/marketing",
   banners: "/admin/banners",
   promociones: "/admin/promotions",
@@ -236,6 +249,8 @@ const ADMIN_MODULE_NAME_PATHS = {
   cupones: "/admin/coupons",
   coupons: "/admin/coupons",
   logs: "/admin/logs",
+  sincronizacion: "/admin/sync",
+  sync: "/admin/sync",
   configuracion_ecommerce: "/admin/settings",
   settings: "/admin/settings",
   notificaciones: "/admin/settings",

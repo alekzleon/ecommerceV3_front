@@ -1,9 +1,9 @@
+import { can, getUserModules, isInternalUser } from "../../utils/adminAccess"
+
 function useAdminAccess(user) {
-  const modules = user?.modules || user?.user?.modules || []
-
-  const hasModule = (moduleName) => modules.includes(moduleName)
-
-  const isInternal = Boolean(user?.is_internal ?? user?.user?.is_internal ?? true)
+  const modules = getUserModules(user)
+  const hasModule = (moduleName) => can(user, moduleName)
+  const isInternal = isInternalUser(user)
 
   return {
     modules,

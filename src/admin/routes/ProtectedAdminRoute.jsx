@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom"
+import { can } from "../../utils/adminAccess"
 
 function ProtectedAdminRoute({ sessionReady, isAuthenticated, isInternal }) {
   if (!sessionReady) {
@@ -17,3 +18,11 @@ function ProtectedAdminRoute({ sessionReady, isAuthenticated, isInternal }) {
 }
 
 export default ProtectedAdminRoute
+
+export function ProtectedAdminModule({ module, user, children }) {
+  if (module && !can(user, module)) {
+    return <Navigate to="/admin/forbidden" replace />
+  }
+
+  return children
+}

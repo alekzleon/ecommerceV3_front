@@ -37,18 +37,13 @@ function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
           </div>
         ) : (
           menu.map((group) => (
-            <details
-              className="admin-sidebar__group admin-sidebar__dropdown"
-              key={group.group_key}
-              open={isDefaultOpenGroup(group)}
-            >
-              <summary className="admin-sidebar__group-title">
+            <section className="admin-sidebar__group" key={group.group_key}>
+              <div className="admin-sidebar__group-title">
                 <span>{group.group_name}</span>
-                <i className="bi bi-chevron-down" aria-hidden="true" />
-              </summary>
+              </div>
 
               <SidebarGroupLinks group={group} onClose={onClose} />
-            </details>
+            </section>
           ))
         )}
       </nav>
@@ -71,10 +66,6 @@ function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
   )
 }
 
-function isDefaultOpenGroup(group) {
-  return String(group?.group_key || "").toLowerCase() === "analitica"
-}
-
 function SidebarGroupLinks({ group, onClose }) {
   return (
     <div className="admin-sidebar__group-links">
@@ -93,8 +84,6 @@ function SidebarGroupLinks({ group, onClose }) {
           </span>
 
           <span className="admin-sidebar__link-text">{item.display_name}</span>
-
-          <span className="admin-sidebar__link-arrow">+</span>
         </NavLink>
       ))}
     </div>
@@ -103,27 +92,39 @@ function SidebarGroupLinks({ group, onClose }) {
 
 function renderSidebarIcon(moduleName) {
   const icons = {
-    dashboard: "◫",
-    sales_channels: "◬",
-    usuarios: "◎",
-    roles: "◈",
-    productos: "▣",
-    categorias: "▤",
-    familias: "▥",
-    pedidos: "◉",
-    clientes: "◌",
-    credito: "◍",
-    cobranza: "◔",
-    marketing: "✦",
-    banners: "▧",
-    promociones: "✧",
-    cupones: "%",
-    logs: "☰",
-    sincronizacion: "↻",
-    configuracion_ecommerce: "⚙",
+    dashboard: "bi-house-door-fill",
+    sales_channels: "bi-shop-window",
+    canales_venta: "bi-shop-window",
+    usuarios: "bi-person-fill",
+    roles: "bi-shield-lock-fill",
+    productos: "bi-tag-fill",
+    categories: "bi-collection-fill",
+    categorias: "bi-collection-fill",
+    families: "bi-diagram-3-fill",
+    familias: "bi-diagram-3-fill",
+    pedidos: "bi-inbox-fill",
+    orders: "bi-inbox-fill",
+    carritos: "bi-cart-fill",
+    carts: "bi-cart-fill",
+    clientes: "bi-people-fill",
+    customers: "bi-people-fill",
+    credito: "bi-credit-card-2-front-fill",
+    cobranza: "bi-bank2",
+    marketing: "bi-bullseye",
+    banners: "bi-image-fill",
+    promociones: "bi-percent",
+    promotions: "bi-percent",
+    cupones: "bi-ticket-perforated-fill",
+    coupons: "bi-ticket-perforated-fill",
+    logs: "bi-list-check",
+    sincronizacion: "bi-arrow-repeat",
+    configuracion_ecommerce: "bi-gear-fill",
+    settings: "bi-gear-fill",
+    notificaciones: "bi-bell-fill",
+    notifications: "bi-bell-fill",
   }
 
-  return icons[moduleName] || "•"
+  return <i className={`bi ${icons[moduleName] || "bi-circle-fill"}`} aria-hidden="true" />
 }
 
 export default AdminSidebar
