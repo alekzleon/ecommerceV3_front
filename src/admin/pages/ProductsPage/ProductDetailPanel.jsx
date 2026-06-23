@@ -995,11 +995,11 @@ function ProductDetailPanel({
                 value={form.family_id}
                 entity={form.family}
                 options={familyOptions}
-                placeholder="Elige una familia"
+                placeholder={form.category_id ? "Elige una familia" : "Primero elige una categoría"}
                 type="family"
                 onSelect={onEntitySelect}
                 onCreate={onEntityCreate}
-                disabled={saving}
+                disabled={saving || !form.category_id}
               />
             </div>
 

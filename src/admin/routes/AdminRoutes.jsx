@@ -2,10 +2,13 @@ import { Route, Routes, Navigate } from "react-router-dom"
 import ProtectedAdminRoute from "./ProtectedAdminRoute"
 import AdminLayout from "../components/AdminLayout/AdminLayout"
 import DashboardPage from "../pages/DashboardPage/DashboardPage"
+import SalesChannelsPage from "../pages/SalesChannelsPage/SalesChannelsPage"
 import UsersPage from "../pages/UsersPage/UsersPage"
 import RolesPage from "../pages/RolesPage/RolesPage"
 import CustomerPage from "../pages/CustomersPage/CustomersPage"
 import ProductsPage from "../pages/ProductsPage/ProductsPage"
+import CategoriesPage from "../pages/CategoriesPage/CategoriesPage"
+import FamiliesPage from "../pages/FamiliesPage/FamiliesPage"
 import MarketingPage from "../pages/MarketingPage/MarketingPage"
 import PromotionsPage from "../pages/PromotionsPage/PromotionsPage"
 import GiftItemsPage from "../pages/PromotionsPage/GiftItemsPage"
@@ -44,12 +47,16 @@ function AdminRoutes({
           }
         >
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/sales-channels" element={<SalesChannelsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/roles" element={<RolesPage />} />
           <Route path="/customers" element={<CustomerPage />} />
           <Route path="/products" element={<ProductsPage />} />
+          <Route path="/catalog/categories" element={<CategoriesPage />} />
+          <Route path="/catalog/families" element={<FamiliesPage />} />
           <Route path="/orders" element={<OrdersPage />} />
           <Route path="/marketing" element={<MarketingPage />} />
+          <Route path="/banners" element={<MarketingPage />} />
           <Route path="/promotions" element={<PromotionsPage />} />
           <Route path="/promotions/gift-items" element={<GiftItemsPage />} />
           <Route path="/coupons" element={<CouponsPage />} />

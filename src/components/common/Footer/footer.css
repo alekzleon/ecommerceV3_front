@@ -522,27 +522,6 @@ h6 {
   background-size: cover;
 }
 
-.new_footer_top .footer_bg .footer_bg_one {
-  background: url("../../../assets/images/footer_camion.gif")
-    no-repeat center center;
-  width: 330px;
-  height: 105px;
-  background-size: 100%;
-  position: absolute;
-  bottom: 0;
-  left: 30%;
-  animation: myfirst 22s linear infinite;
-}
-
-@keyframes myfirst {
-  0% {
-    left: -25%;
-  }
-  100% {
-    left: 100%;
-  }
-}
-
 @media (max-width: 991px) {
   .footer_col {
     width: 50%;

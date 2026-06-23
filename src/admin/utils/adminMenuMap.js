@@ -6,6 +6,12 @@ const adminMenuMap = [
     subtitle: "Resumen general del panel administrativo.",
   },
   {
+    module: "sales_channels",
+    path: "/admin/sales-channels",
+    title: "Canales de venta",
+    subtitle: "Analiza ventas, pedidos y productos por canal.",
+  },
+  {
     module: "usuarios",
     path: "/admin/users",
     title: "Usuarios",
@@ -24,6 +30,18 @@ const adminMenuMap = [
     subtitle: "Controla el catálogo y la información comercial.",
   },
   {
+    module: "categorias",
+    path: "/admin/catalog/categories",
+    title: "Categorías",
+    subtitle: "Administra categorías del catálogo.",
+  },
+  {
+    module: "familias",
+    path: "/admin/catalog/families",
+    title: "Familias",
+    subtitle: "Administra familias del catálogo.",
+  },
+  {
     module: "pedidos",
     path: "/admin/orders",
     title: "Pedidos",
@@ -40,6 +58,12 @@ const adminMenuMap = [
     path: "/admin/promotions",
     title: "Promociones",
     subtitle: "Controla promociones, ofertas y banners.",
+  },
+  {
+    module: "banners",
+    path: "/admin/banners",
+    title: "Banners",
+    subtitle: "Administra banners y espacios destacados.",
   },
   {
     module: "cupones",

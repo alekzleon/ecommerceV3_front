@@ -1,6 +1,13 @@
+import { Link } from "react-router-dom"
+import { useSettings } from "../../context/SettingsContext"
 import "./legalpages.css"
 
 function TermsPage() {
+  const { settings, brandName } = useSettings()
+  const siteName = brandName || "CloudiShop"
+  const contactEmail = settings.email || "hola@cloudi.mx"
+  const address = settings.address || "domicilio disponible en los medios oficiales de contacto de Cloudi"
+
   return (
     <section className="legal-document-page">
       <div className="container-narrow">
@@ -8,295 +15,205 @@ function TermsPage() {
           <h1>Términos y Condiciones</h1>
 
           <p>
-            Este contrato describe los términos y condiciones generales (en adelante
-            únicamente <strong>“TÉRMINOS Y CONDICIONES”</strong>) aplicables al uso de los
-            contenidos, productos y servicios ofrecidos a través del sitio web{" "}
-            <strong>el sitio web</strong> (en adelante <strong>“SITIO WEB”</strong>),
-            del cual es titular <strong>la tienda</strong> (en adelante,{" "}
-            <strong>“TITULAR”</strong>) quién tiene su domicilio establecido en Jalisco,
-            en la siguiente dirección:
+            Los presentes Términos y Condiciones regulan el acceso, navegación y uso de{" "}
+            <strong>{siteName}</strong>, plataforma de comercio electrónico y servicios digitales
+            operada por <strong>Grupo Cloudi Software S.A. de C.V.</strong>, conocido comercialmente
+            como <strong>Cloudi</strong>, con domicilio para efectos de contacto en{" "}
+            <strong>{address}</strong> y correo electrónico <strong>{contactEmail}</strong>.
           </p>
 
           <p>
-            Calle 8, Ferrocarril, 44440 Guadalajara, Jalisco, México.
+            Al acceder al sitio, crear una cuenta, realizar una compra, solicitar soporte, contratar
+            servicios, usar integraciones, descargar información o interactuar con cualquier módulo de
+            la plataforma, el usuario acepta estos Términos y Condiciones, el{" "}
+            <Link to="/aviso-privacidad">Aviso de Privacidad</Link> y las políticas particulares que
+            resulten aplicables.
+          </p>
+
+          <h2>1. Definiciones</h2>
+
+          <p>
+            Para efectos de este documento, “Cloudi” se refiere a Grupo Cloudi Software S.A. de C.V.;
+            “CloudiShop” o “plataforma” se refiere al sitio, software, paneles, tienda en línea,
+            módulos, integraciones, APIs, automatizaciones y servicios relacionados; “usuario” se
+            refiere a cualquier persona que acceda o utilice la plataforma; “cliente” se refiere a
+            quien compra productos, contrata servicios o administra una tienda; y “terceros” se refiere
+            a proveedores externos como pasarelas de pago, paqueterías, hosting, analítica, mensajería,
+            facturación o herramientas conectadas.
+          </p>
+
+          <h2>2. Objeto del servicio</h2>
+
+          <p>
+            CloudiShop permite publicar, consultar, vender, comprar, administrar y dar seguimiento a
+            productos, pedidos, clientes, pagos, promociones, inventarios, canales de venta, reportes,
+            configuraciones ecommerce y funcionalidades relacionadas con operación comercial digital.
+            La disponibilidad de funciones puede variar según configuración, plan contratado, permisos,
+            integraciones activas, mantenimiento, reglas comerciales o necesidades operativas.
+          </p>
+
+          <h2>3. Cuentas, accesos y responsabilidades del usuario</h2>
+
+          <p>
+            El usuario se obliga a proporcionar información veraz, completa y actualizada, mantener la
+            confidencialidad de sus credenciales, usar la plataforma de forma lícita y notificar a
+            Cloudi cualquier uso no autorizado, vulneración, error operativo o sospecha de acceso indebido.
+            El usuario será responsable de las acciones realizadas desde su cuenta, salvo que demuestre
+            uso no autorizado no atribuible a su negligencia.
           </p>
 
           <p>
-            Cualquier persona que desee acceder o hacer uso del sitio o los servicios
-            que en él se ofrecen, podrá hacerlo sujetándose a los presentes{" "}
-            <strong>TÉRMINOS Y CONDICIONES</strong>, así como a políticas y principios
-            incorporados al presente documento. En todo caso, cualquier persona que no
-            acepte los presentes términos y condiciones, deberá abstenerse de utilizar
-            el <strong>SITIO WEB</strong> y/o adquirir los productos que en su caso sean
-            ofrecidos.
+            Queda prohibido usar la plataforma para actividades ilícitas, fraudulentas, engañosas,
+            discriminatorias, violatorias de derechos de terceros, envío de malware, scraping abusivo,
+            ingeniería inversa no autorizada, evasión de controles, alteración de precios, manipulación
+            de inventarios, ataques, carga de contenido ilegal o cualquier uso que afecte la seguridad,
+            continuidad o reputación de Cloudi, sus clientes, proveedores o usuarios.
           </p>
 
-          <h2>I. DEL OBJETO</h2>
+          <h2>4. Compras, precios, pagos y facturación</h2>
 
           <p>
-            El objeto de los presentes <strong>TÉRMINOS Y CONDICIONES</strong> es regular
-            el acceso y la utilización del <strong>SITIO WEB</strong>, entendido por este
-            cualquier tipo de contenido, producto o servicio que se encuentre a disposición
-            del público en general dentro del dominio: <strong>el sitio web</strong>.
-          </p>
-
-          <p>
-            El <strong>TITULAR</strong> se reserva la facultad de modificar en cualquier
-            momento y sin previo aviso, la presentación de los contenidos, la funcionalidad,
-            los productos y la configuración que pudiera estar contenida en el sitio web;
-            en este sentido, el Usuario reconoce y acepta que <strong>la tienda</strong>
-            en cualquier momento podrá interrumpir, desactivar o cancelar cualquiera de los
-            elementos que conforman el <strong>SITIO WEB</strong> o el acceso a los mismos.
+            Los precios, promociones, disponibilidad, impuestos, descuentos, costos de envío y condiciones
+            comerciales se mostrarán en la plataforma o en la cotización aplicable. CloudiShop podrá
+            actualizar precios, existencias y promociones sin previo aviso, respetando las operaciones
+            confirmadas conforme a las reglas vigentes al momento de compra, salvo errores evidentes,
+            fallas técnicas, fraude, abuso de promociones o imposibilidad material de cumplimiento.
           </p>
 
           <p>
-            Además del costo de la conexión a internet en virtud de los servicios que el
-            <strong> USUARIO</strong> tenga contratados con algún proveedor de telecomunicaciones,
-            parte de los contenidos o servicios ofrecidos en el <strong>SITIO WEB</strong> o,
-            en su caso, por terceros a través del <strong>SITIO WEB</strong> pueden estar
-            sujetos a la contratación previa del contenido, producto o servicio, en cuyo caso
-            se especificará de forma clara y se pondrá a disposición del <strong>USUARIO</strong>
-            las condiciones generales o particulares por las que se rija el acceso a dichos
-            contenidos.
+            Los pagos pueden procesarse mediante proveedores externos. Cloudi no controla por completo
+            las autorizaciones bancarias, comisiones, rechazos, contracargos, tiempos de dispersión o
+            revisiones antifraude realizadas por dichos proveedores. La facturación, cuando proceda,
+            deberá solicitarse con datos fiscales correctos y dentro de los plazos establecidos por la
+            legislación y políticas comerciales aplicables.
+          </p>
+
+          <h2>5. Envíos, entregas, devoluciones y garantías</h2>
+
+          <p>
+            Los tiempos de entrega son estimados y pueden variar por cobertura, paquetería, disponibilidad,
+            validación de pago, domicilio, caso fortuito, fuerza mayor o causas ajenas a CloudiShop. El
+            usuario deberá proporcionar datos de envío completos y atender las comunicaciones necesarias
+            para la entrega.
           </p>
 
           <p>
-            El acceso a parte de los contenidos y servicios del <strong>SITIO WEB</strong>
-            podrá realizarse previa suscripción o registro previo del <strong>USUARIO</strong>.
-            El <strong>SITIO WEB</strong> se encuentra dirigido principalmente a usuarios
-            residentes de la República Mexicana, por lo cual <strong>la tienda</strong>
-            no asegura que el <strong>SITIO WEB</strong> cumpla total o parcialmente con la
-            legislación de otros países, de forma que, si el <strong>USUARIO</strong> reside
-            o tiene domicilio establecido en otro país y decide acceder al <strong>SITIO WEB</strong>,
-            lo hará bajo su propia responsabilidad y deberá asegurarse de que tal acceso y
-            navegación cumple con la legislación local que le es aplicable, no asumiendo
-            <strong>la tienda</strong> ninguna responsabilidad que se pueda derivar de dicho acto.
+            Las devoluciones, cambios, cancelaciones y garantías se sujetarán a la naturaleza del producto
+            o servicio, estado del pedido, políticas comerciales vigentes, condiciones del proveedor,
+            normativa aplicable y validación correspondiente. Productos digitales, licencias, servicios
+            personalizados, desarrollos, configuraciones, consultorías o software activado pueden tener
+            restricciones especiales de cancelación o reembolso.
+          </p>
+
+          <h2>6. Software, integraciones y servicios digitales</h2>
+
+          <p>
+            Cloudi puede ofrecer software, módulos, configuraciones, integraciones, automatizaciones,
+            APIs, reportes, paneles, analítica, hosting, soporte técnico, implementación, mantenimiento
+            y servicios profesionales. Salvo pacto escrito distinto, el usuario recibe una licencia de
+            uso limitada, no exclusiva, revocable, intransferible y condicionada al cumplimiento de estos
+            términos, pagos aplicables y políticas técnicas.
           </p>
 
           <p>
-            Se hace del conocimiento del <strong>USUARIO</strong> que el <strong>TITULAR</strong>
-            podrá administrar o gestionar el <strong>SITIO WEB</strong> de manera directa o a
-            través de un tercero, lo cual no modificará en ningún sentido lo establecido en los
-            presentes <strong>TÉRMINOS Y CONDICIONES</strong>.
+            El usuario reconoce que los sistemas pueden requerir mantenimiento, actualizaciones,
+            ventanas de servicio, cambios de versión, ajustes de seguridad o suspensiones temporales.
+            Cloudi realizará esfuerzos razonables para mantener la continuidad, pero no garantiza que la
+            plataforma esté libre de errores, interrupciones, pérdida de conectividad, incompatibilidades
+            con terceros o incidentes fuera de su control.
           </p>
 
-          <h2>II. DEL USUARIO</h2>
+          <h2>7. Contenido, datos e información cargada por usuarios</h2>
 
           <p>
-            El acceso o utilización del <strong>SITIO WEB</strong>, confiere la condición de
-            <strong> USUARIO</strong> del <strong>SITIO WEB</strong>, por lo que quedará sujeto
-            a los presentes <strong>TÉRMINOS Y CONDICIONES</strong>, así como a sus ulteriores
-            modificaciones, sin perjuicio de la aplicación de la legislación aplicable; por tanto,
-            se tendrán por aceptados desde el momento en el que se accede al <strong>SITIO WEB</strong>.
-            Dada la relevancia de lo anterior, se recomienda al <strong>USUARIO</strong> revisar
-            las actualizaciones que se realicen a los presentes <strong>TÉRMINOS Y CONDICIONES</strong>.
+            El usuario conserva la responsabilidad sobre textos, imágenes, catálogos, precios, marcas,
+            productos, bases de datos, promociones, archivos, documentos, imágenes, información fiscal,
+            mensajes, notas de pedido o cualquier contenido que cargue o administre en la plataforma.
+            El usuario declara contar con derechos, autorizaciones y permisos suficientes para usar dicho
+            contenido y se obliga a mantener indemne a Cloudi ante reclamaciones relacionadas.
           </p>
 
+          <h2>8. Propiedad intelectual e industrial</h2>
+
           <p>
-            Es responsabilidad del <strong>USUARIO</strong> utilizar el <strong>SITIO WEB</strong>
-            de acuerdo con la forma en la que fue diseñado; en este sentido, queda prohibida la
-            utilización de cualquier tipo de software que automatice la interacción o descarga de
-            los contenidos o servicios proporcionados a través del <strong>SITIO WEB</strong>.
-            Además, el <strong>USUARIO</strong> se compromete a utilizar la información, contenidos
-            o servicios ofrecidos a través del <strong>SITIO WEB</strong> de manera lícita, sin
-            contravenir lo dispuesto en los presentes <strong>TÉRMINOS Y CONDICIONES</strong>, la
-            moral o el orden público, y se abstendrá de realizar cualquier acto que pueda suponer
-            una afectación a los derechos de terceros o perjudique de algún modo el funcionamiento
-            del <strong>SITIO WEB</strong>.
+            Cloudi conserva la titularidad o licencias correspondientes sobre el software, código,
+            diseño, interfaz, arquitectura, flujos, módulos, documentación, marcas, logotipos, procesos,
+            know-how, plantillas, componentes, desarrollos, mejoras, automatizaciones y elementos propios
+            de CloudiShop. Ninguna disposición de estos términos transfiere derechos de propiedad
+            intelectual al usuario, salvo autorización expresa y por escrito.
           </p>
 
           <p>
-            Así mismo, el usuario se compromete a proporcionar información lícita y veraz en los
-            formularios habilitados del <strong>SITIO WEB</strong>, en los cuales el usuario tenga
-            que proporcionar ciertos datos o información para el acceso a algún contenido, producto
-            o servicio ofrecido por el <strong>SITIO WEB</strong>. En todo caso, el <strong>USUARIO</strong>
-            notificará de forma inmediata al <strong>TITULAR</strong> acerca de cualquier hecho que
-            permita suponer el uso indebido de la información registrada en dichos formularios, tales
-            como robo, extravío o acceso no autorizado a cuentas y/o contraseñas, con el fin de
-            proceder a su inmediata cancelación.
+            Queda prohibido copiar, modificar, vender, sublicenciar, distribuir, explotar, descompilar,
+            realizar ingeniería inversa o crear obras derivadas del software o plataforma, excepto cuando
+            exista autorización expresa de Cloudi o permiso legal aplicable.
+          </p>
+
+          <h2>9. Privacidad, datos personales y seguridad</h2>
+
+          <p>
+            El tratamiento de datos personales se regula por el{" "}
+            <Link to="/aviso-privacidad">Aviso de Privacidad</Link>. El usuario acepta que Cloudi pueda
+            tratar datos necesarios para operar compras, cuentas, soporte, analítica, seguridad,
+            facturación, pagos, envíos, notificaciones, prevención de fraude y mejora del servicio.
           </p>
 
           <p>
-            El sólo acceso al <strong>SITIO WEB</strong> no supone el establecimiento de ningún tipo
-            de relación entre el <strong>TITULAR</strong> y el <strong>USUARIO</strong>.
+            Cuando el cliente administre datos personales de terceros dentro de CloudiShop, será
+            responsable de contar con avisos, consentimientos, bases legales y autorizaciones aplicables,
+            así como de instruir a Cloudi únicamente tratamientos lícitos y necesarios para la prestación
+            del servicio.
+          </p>
+
+          <h2>10. Terceros, enlaces e integraciones externas</h2>
+
+          <p>
+            La plataforma puede conectarse con servicios externos de pago, envío, facturación, mapas,
+            WhatsApp, correo, redes sociales, analítica, almacenamiento, autenticación u otros proveedores.
+            Cloudi no será responsable por fallas, cambios, cargos, suspensión, indisponibilidad,
+            políticas, contenidos o decisiones de terceros que estén fuera de su control.
+          </p>
+
+          <h2>11. Limitación de responsabilidad</h2>
+
+          <p>
+            En la medida permitida por la legislación aplicable, Cloudi no será responsable por daños
+            indirectos, lucro cesante, pérdida de datos no atribuible a dolo o negligencia grave,
+            interrupciones de terceros, errores derivados de información proporcionada por el usuario,
+            uso indebido de cuentas, incompatibilidades, decisiones comerciales del usuario, ataques,
+            caso fortuito, fuerza mayor o eventos fuera de control razonable.
+          </p>
+
+          <h2>12. Suspensión o terminación</h2>
+
+          <p>
+            Cloudi podrá suspender o limitar el acceso a cuentas, pedidos, módulos o servicios cuando
+            detecte incumplimiento de estos términos, riesgo de seguridad, fraude, pagos vencidos, uso
+            abusivo, requerimiento de autoridad, afectación a terceros o necesidad técnica justificada.
+            Cuando sea razonablemente posible, se notificará al usuario por los medios registrados.
+          </p>
+
+          <h2>13. Modificaciones</h2>
+
+          <p>
+            Cloudi podrá actualizar estos Términos y Condiciones para reflejar cambios legales, técnicos,
+            comerciales, operativos o de seguridad. La versión vigente estará disponible en este sitio.
+            El uso posterior de la plataforma implicará aceptación de los cambios, salvo que la ley exija
+            un mecanismo distinto.
+          </p>
+
+          <h2>14. Legislación y jurisdicción</h2>
+
+          <p>
+            Estos Términos y Condiciones se rigen por las leyes aplicables de los Estados Unidos Mexicanos.
+            Cualquier controversia será atendida preferentemente mediante comunicación directa y de buena
+            fe entre las partes. Si no fuera posible resolverla, las partes se someterán a las autoridades
+            y tribunales competentes conforme a la legislación mexicana aplicable, salvo disposición legal
+            imperativa en contrario.
           </p>
 
           <p>
-            Al tratarse de un <strong>SITIO WEB</strong> dirigido exclusivamente a personas que cuentan
-            con la mayoría de edad, el <strong>USUARIO</strong> manifiesta ser mayor de edad y disponer
-            de la capacidad jurídica necesaria para sujetarse a los presentes{" "}
-            <strong>TÉRMINOS Y CONDICIONES</strong>.
-          </p>
-
-          <h2>III. DEL ACCESO Y NAVEGACIÓN EN EL SITIO WEB</h2>
-
-          <p>
-            El <strong>TITULAR</strong> no garantiza de ningún modo la continuidad y disponibilidad de
-            los contenidos, productos o servicios ofrecidos a través del <strong>SITIO WEB</strong>,
-            no obstante, el <strong>TITULAR</strong> llevará a cabo las acciones que de acuerdo con sus
-            posibilidades le permitan mantener el buen funcionamiento del <strong>SITIO WEB</strong>,
-            sin que esto suponga alguna responsabilidad por parte de <strong>la tienda</strong>.
-          </p>
-
-          <p>
-            De igual forma, <strong>la tienda</strong> no será responsable ni garantizará que el
-            contenido o software al que pueda accederse a través del <strong>SITIO WEB</strong> se
-            encuentre libre de errores, software malicioso o que pueda causar algún daño a nivel de
-            software o hardware en el equipo a través del cual el <strong>USUARIO</strong> accede al
-            <strong> SITIO WEB</strong>.
-          </p>
-
-          <p>
-            El <strong>TITULAR</strong> tampoco se hace responsable de los daños totales o parciales que
-            pudiesen ocasionarse por un uso inadecuado del <strong>SITIO WEB</strong>. En ningún caso,
-            <strong>la tienda</strong> será responsable por las pérdidas, daños o perjuicios de
-            cualquier tipo que surjan por el sólo acceso o utilización del <strong>SITIO WEB</strong>.
-          </p>
-
-          <h2>IV. POLÍTICA DE PRIVACIDAD Y PROTECCIÓN DE DATOS</h2>
-
-          <p>
-            De conformidad con lo establecido en la Ley Federal de Protección de Datos Personales en
-            Posesión de Particulares, el <strong>TITULAR</strong> se compromete a adoptar las medidas
-            necesarias que estén a su alcance para asegurar la privacidad de los datos personales
-            recabados de forma que se garantice su seguridad, se evite su alteración, pérdida o
-            tratamiento no autorizado.
-          </p>
-
-          <p>
-            Además, a efecto de dar cumplimiento a lo establecido en la Ley Federal de Protección de
-            Datos Personales en Posesión de Particulares, todo dato personal que sea recabado a través
-            del <strong>SITIO WEB</strong> será tratado de conformidad con los principios de licitud,
-            calidad, finalidad, lealtad y responsabilidad. Todo tratamiento de datos personales quedará
-            sujeto al consentimiento de su titular. En todo caso, la utilización de datos financieros o
-            patrimoniales requerirá autorización expresa de sus titulares, no obstante, esta podrá darse
-            a través del propio <strong>SITIO WEB</strong> utilizando los mecanismos habilitados para tal
-            efecto, y en todo caso se dará la mayor diligencia y cuidado a este tipo de datos. Lo mismo
-            ocurrirá en el caso de datos personales sensibles.
-          </p>
-
-          <p>
-            En todo momento se procurará que los datos personales contenidos en las bases de datos o
-            archivos que en su caso se utilicen, sean pertinentes, correctos y actualizados para los
-            fines para los cuales fueron recabados.
-          </p>
-
-          <p>
-            El tratamiento de datos personales se limitará al cumplimiento de las finalidades previstas
-            en el Aviso de Privacidad, el cual se encontrará disponible en la siguiente dirección
-            electrónica: <strong>el sitio web</strong>.
-          </p>
-
-          <p>
-            El <strong>SITIO WEB</strong> podrá incluir hipervínculos o enlaces que permitan acceder a
-            páginas web de terceros distintos de <strong>la tienda</strong>. Los titulares de dichos
-            sitios web dispondrán de sus propias políticas de privacidad y protección de datos, por lo
-            cual <strong>la tienda</strong> no asume ningún tipo de responsabilidad por los datos
-            que sean facilitados por el <strong>USUARIO</strong> a través de cualquier sitio web distinto
-            a <strong>el sitio web</strong>.
-          </p>
-
-          <p>
-            <strong>la tienda</strong> se reserva el derecho a modificar su Política de Privacidad,
-            de acuerdo con sus necesidades o derivado de algún cambio en la legislación. El acceso o
-            utilización del <strong>SITIO WEB</strong> después de dichos cambios implicará la aceptación
-            de esos cambios.
-          </p>
-
-          <p>
-            Por otra parte, el acceso al <strong>SITIO WEB</strong> puede implicar la utilización de
-            cookies, las cuales son pequeñas cantidades de información que se almacenan en el navegador
-            utilizado por el <strong>USUARIO</strong>. Las cookies facilitan la navegación, la hacen más
-            amigable y no dañan el dispositivo de navegación.
-          </p>
-
-          <p>
-            Este tipo de información será utilizada para mejorar el <strong>SITIO WEB</strong>, detectar
-            errores y posibles necesidades que el <strong>USUARIO</strong> pueda tener, a efecto de
-            ofrecer servicios y contenidos de mejor calidad. En todo caso, la información que se recopile
-            será anónima y no se identificará a usuarios individuales.
-          </p>
-
-          <p>
-            En caso de que el <strong>USUARIO</strong> no desee que se recopile este tipo de información,
-            deberá deshabilitar, rechazar, restringir y/o eliminar el uso de cookies en su navegador.
-            Los procedimientos para realizar estas acciones pueden diferir de un navegador a otro.
-          </p>
-
-          <p>
-            Es posible que, en el futuro, estas políticas respecto a las cookies cambien o se actualicen,
-            por ello se recomienda revisar las actualizaciones que se realicen a los presentes{" "}
-            <strong>TÉRMINOS Y CONDICIONES</strong>.
-          </p>
-
-          <h2>V. POLÍTICA DE ENLACES</h2>
-
-          <p>
-            El <strong>SITIO WEB</strong> puede contener enlaces, contenidos, servicios o funciones de
-            otros sitios de internet pertenecientes o gestionados por terceros.
-          </p>
-
-          <p>
-            La utilización de esos enlaces, contenidos, servicios o funciones tiene por objeto mejorar la
-            experiencia del <strong>USUARIO</strong> al hacer uso del <strong>SITIO WEB</strong>, sin que
-            pueda considerarse una sugerencia, recomendación o invitación para hacer uso de sitios externos.
-            <strong>la tienda</strong> en ningún caso revisará o controlará el contenido de los sitios
-            externos, ni garantizará su disponibilidad, exactitud, veracidad, calidad o legalidad.
-          </p>
-
-          <p>
-            Así mismo, el <strong>TITULAR</strong> no asume ninguna responsabilidad por los daños y
-            perjuicios que pudieran producirse por el acceso o uso de los contenidos, productos o servicios
-            disponibles en los sitios web no gestionados por <strong>la tienda</strong> a los que se
-            pueda acceder mediante el <strong>SITIO WEB</strong>.
-          </p>
-
-          <h2>VI. POLÍTICA EN MATERIA DE PROPIEDAD INTELECTUAL E INDUSTRIAL</h2>
-
-          <p>
-            <strong>la tienda</strong>, por sí o como parte cesionaria, es titular de todos los
-            derechos de propiedad intelectual e industrial del <strong>SITIO WEB</strong>, entendiendo por
-            este el código fuente que hace posible su funcionamiento, así como las imágenes, archivos de
-            audio o video, logotipos, marcas, combinaciones de colores, estructuras, diseños y demás
-            elementos que los distinguen.
-          </p>
-
-          <p>
-            Queda expresamente prohibida la reproducción, distribución o difusión de los contenidos del
-            <strong> SITIO WEB</strong>, con fines comerciales, en cualquier soporte y por cualquier medio,
-            sin la autorización de <strong>la tienda</strong>.
-          </p>
-
-          <p>
-            El <strong>USUARIO</strong> se compromete a respetar los derechos de propiedad intelectual e
-            industrial del <strong>TITULAR</strong>. No obstante, podrá visualizar los elementos del
-            <strong>SITIO WEB</strong>, e incluso imprimirlos, copiarlos o almacenarlos, siempre y cuando
-            sea exclusivamente para su uso estrictamente personal.
-          </p>
-
-          <p>
-            En caso de que el <strong>USUARIO</strong> o algún tercero consideren que cualquiera de los
-            contenidos del <strong>SITIO WEB</strong> suponga una violación de los derechos de propiedad
-            industrial o intelectual, deberá comunicarlo inmediatamente a <strong>la tienda</strong>
-            a través de los datos de contacto disponibles en el propio <strong>SITIO WEB</strong> o por
-            medio de <strong>contacto.com</strong>.
-          </p>
-
-          <h2>VII. LEGISLACIÓN Y JURISDICCIÓN APLICABLE</h2>
-
-          <p>
-            <strong>la tienda</strong> se reserva la facultad de presentar las acciones civiles o
-            penales que considere necesarias por la utilización indebida del <strong>SITIO WEB</strong>,
-            sus contenidos, productos o servicios o por el incumplimiento de los presentes{" "}
-            <strong>TÉRMINOS Y CONDICIONES</strong>.
-          </p>
-
-          <p>
-            La relación entre el <strong>USUARIO</strong> y <strong>la tienda</strong> se regirá por
-            la legislación vigente en México, específicamente en Jalisco. De surgir cualquier controversia
-            en relación con la interpretación o la aplicación de los presentes{" "}
-            <strong>TÉRMINOS Y CONDICIONES</strong>, las partes se someterán a la jurisdicción ordinaria
-            de los tribunales que correspondan conforme a derecho en el Estado al que se hace referencia.
+            Fecha de última actualización: <strong>22 de junio de 2026</strong>.
           </p>
         </article>
       </div>

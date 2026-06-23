@@ -1,7 +1,8 @@
 import api from "./api.js"
+import { mergeSalesTrackingPayload } from "../../utils/salesTracking.js"
 
 export async function createCheckoutOrder(payload = {}) {
-  const response = await api.post("/checkout/orders", payload)
+  const response = await api.post("/checkout/orders", mergeSalesTrackingPayload(payload))
   return response.data
 }
 

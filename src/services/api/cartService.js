@@ -1,7 +1,13 @@
 import api from "./api"
+import { mergeSalesTrackingPayload } from "../../utils/salesTracking"
 
 export async function addCartItem(payload) {
-  const response = await api.post("/cart/items", payload)
+  const response = await api.post("/cart/items", mergeSalesTrackingPayload(payload))
+  return response.data
+}
+
+export async function updateCartSalesChannel(payload = {}) {
+  const response = await api.patch("/cart/sales-channel", mergeSalesTrackingPayload(payload))
   return response.data
 }
 
@@ -103,6 +109,6 @@ export async function getCheckoutPreview(params = {}) {
 }
 
 export async function validateCheckout(payload = {}) {
-  const response = await api.post("/checkout/validate", payload)
+  const response = await api.post("/checkout/validate", mergeSalesTrackingPayload(payload))
   return response.data
 }

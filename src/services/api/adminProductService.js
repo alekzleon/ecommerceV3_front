@@ -40,3 +40,34 @@ export async function deleteAdminProduct(productId) {
   const { data } = await api.delete(`/admin/products/${productId}`)
   return data
 }
+
+export async function downloadAdminProductsBulkImportLayout() {
+  const response = await api.get("/admin/products/bulk-import/layout", {
+    responseType: "blob",
+    headers: {
+      Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
+  })
+
+  return response
+}
+
+export async function previewAdminProductsBulkImport(payload) {
+  const { data } = await api.post("/admin/products/bulk-import/preview", payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  })
+
+  return data
+}
+
+export async function importAdminProductsBulk(payload) {
+  const { data } = await api.post("/admin/products/bulk-import", payload, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  })
+
+  return data
+}

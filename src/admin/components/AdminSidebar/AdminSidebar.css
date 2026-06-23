@@ -5,29 +5,29 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  padding: 16px 14px;
+  padding: 10px;
 }
 
 .admin-sidebar__top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 6px 18px;
+  gap: 8px;
+  padding: 6px 4px 10px;
   border-bottom: 1px solid var(--admin-border-soft);
 }
 
 .admin-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
 .admin-sidebar__brand-logo {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--admin-primary) 0%, #7f95ff 100%);
   color: #fff;
   display: inline-flex;
@@ -53,7 +53,7 @@
 
 .admin-sidebar__brand-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 0.98rem;
   line-height: 1.1;
   font-weight: 800;
   color: #111827;
@@ -61,13 +61,13 @@
 
 .admin-sidebar__brand-subtitle {
   margin: 2px 0 0;
-  font-size: 0.77rem;
+  font-size: 0.7rem;
   color: var(--admin-text-soft);
 }
 
 .admin-sidebar__brand-action {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--admin-border);
   border-radius: 12px;
   background: #fff;
@@ -81,21 +81,57 @@
 .admin-sidebar__nav {
   flex: 1;
   overflow: auto;
-  padding: 3px 2px;
+  padding: 8px 0;
 }
 
 .admin-sidebar__group + .admin-sidebar__group {
-  margin-top: 18px;
+  margin-top: 6px;
 }
 
 .admin-sidebar__group-title {
   margin: 0 0 1px;
-  padding: 0 10px;
-  font-size: 0.72rem;
+  padding: 0 8px;
+  font-size: 0.68rem;
   font-weight: 700;
   color: var(--admin-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.admin-sidebar__dropdown {
+  border: 1px solid var(--admin-border-soft);
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 3px;
+}
+
+.admin-sidebar__dropdown .admin-sidebar__group-title {
+  list-style: none;
+  min-height: 28px;
+  margin: 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.admin-sidebar__dropdown .admin-sidebar__group-title::-webkit-details-marker {
+  display: none;
+}
+
+.admin-sidebar__dropdown .admin-sidebar__group-title i {
+  font-size: 0.72rem;
+  transition: transform 0.18s ease;
+}
+
+.admin-sidebar__dropdown[open] .admin-sidebar__group-title i {
+  transform: rotate(180deg);
+}
+
+.admin-sidebar__dropdown .admin-sidebar__group-links {
+  margin-top: 2px;
 }
 
 .admin-sidebar__group-links {
@@ -105,12 +141,12 @@
 }
 
 .admin-sidebar__link {
-  min-height: 35px;
-  border-radius: 12px;
-  padding: 10px 12px;
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 7px 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   color: #374151;
   transition: all 0.2s ease;
 }
@@ -127,24 +163,24 @@
 }
 
 .admin-sidebar__link-icon {
-  width: 18px;
+  width: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
 }
 
 .admin-sidebar__link-text {
   flex: 1;
   min-width: 0;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
 }
 
 .admin-sidebar__link-arrow {
   color: var(--admin-text-muted);
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.75rem;
 }
 
 .admin-sidebar__empty {
@@ -157,23 +193,23 @@
 }
 
 .admin-sidebar__footer {
-  padding-top: 14px;
+  padding-top: 8px;
   border-top: 1px solid var(--admin-border-soft);
 }
 
 .admin-sidebar__user {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #fff;
   border: 1px solid var(--admin-border);
-  border-radius: 16px;
-  padding: 10px;
+  border-radius: 10px;
+  padding: 7px;
 }
 
 .admin-sidebar__avatar {
-  width: 42px;
-  height: 42px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, #eff4ff 0%, #dbe7ff 100%);
   color: #1f2937;
@@ -198,14 +234,14 @@
 }
 
 .admin-sidebar__user-name {
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #111827;
 }
 
 .admin-sidebar__user-role {
   margin-top: 2px;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   color: var(--admin-text-soft);
 }
 

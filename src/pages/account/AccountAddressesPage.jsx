@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
+  createAccountAddress,
   deleteAccountAddress,
   getAccountAddresses,
   setAccountAddressDefault,
@@ -59,6 +60,15 @@ function AccountAddressesPage() {
     }
   }
 
+  function openCreateModal() {
+    setEditingAddressId(null)
+    setForm({
+      ...emptyAddressForm,
+      is_default: addresses.length === 0,
+    })
+    setModalOpen(true)
+  }
+
   function openEditModal(address) {
     setEditingAddressId(address.id)
     setForm({
@@ -102,10 +112,17 @@ function AccountAddressesPage() {
     try {
       setSaving(true)
       const payload = buildAddressPayload(form)
-      const response = await updateAccountAddress(editingAddressId, payload)
+      const response = editingAddressId
+        ? await updateAccountAddress(editingAddressId, payload)
+        : await createAccountAddress(payload)
 
-      notifySuccess(response?.message || "Dirección guardada correctamente.")
-      closeModal()
+      notifySuccess(
+        response?.message ||
+          (editingAddressId ? "Dirección actualizada correctamente." : "Dirección agregada correctamente.")
+      )
+      setModalOpen(false)
+      setEditingAddressId(null)
+      setForm(emptyAddressForm)
       await loadInitialData()
     } catch (error) {
       console.error("Error al guardar dirección:", error?.response?.data || error)
@@ -166,6 +183,10 @@ function AccountAddressesPage() {
               Consulta tus domicilios de entrega y define cuál usar como predeterminada.
             </p>
           </div>
+          <button type="button" className="address_header_btn" onClick={openCreateModal}>
+            <i className="bi bi-plus-lg" aria-hidden="true" />
+            Agregar dirección
+          </button>
         </header>
 
         {loading ? (
@@ -177,9 +198,17 @@ function AccountAddressesPage() {
           <div className="address_empty_state">
             <h2>No hay direcciones disponibles</h2>
             <p>Agrega una dirección de entrega para poder completar tus pedidos.</p>
+            <button type="button" className="address_btn address_btn_primary" onClick={openCreateModal}>
+              Agregar dirección
+            </button>
           </div>
         ) : (
           <section className="account_addresses_grid">
+            <button type="button" className="address_add_card" onClick={openCreateModal}>
+              <span className="address_add_plus">+</span>
+              <span className="address_add_text">Agregar dirección</span>
+            </button>
+
             {sortedAddresses.map((address) => (
               <article className="address_card" key={address.id}>
                 <div className="address_card_top">
@@ -265,7 +294,7 @@ function AccountAddressesPage() {
           <form className="address_modal" onSubmit={handleSubmit}>
             <div className="address_modal_header">
               <div>
-                <h2>Editar dirección</h2>
+                <h2>{editingAddressId ? "Editar dirección" : "Agregar dirección"}</h2>
                 <p>Completa los datos de entrega para tu cuenta.</p>
               </div>
               <button type="button" className="address_modal_close" onClick={closeModal}>
@@ -323,7 +352,7 @@ function AccountAddressesPage() {
                 Cancelar
               </button>
               <button type="submit" className="address_btn address_btn_primary" disabled={saving}>
-                {saving ? "Guardando..." : "Guardar dirección"}
+                {saving ? "Guardando..." : editingAddressId ? "Guardar dirección" : "Agregar dirección"}
               </button>
             </div>
           </form>
@@ -334,7 +363,7 @@ function AccountAddressesPage() {
 }
 
 function normalizeAddresses(response) {
-  const data = response?.data || response || []
+  const data = response?.data?.data || response?.data || response || []
   return Array.isArray(data) ? data : []
 }
 

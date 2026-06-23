@@ -56,10 +56,10 @@ function DashboardPage() {
   const loadDashboard = useCallback(async (nextFilters) => {
     try {
       setRefreshing(true)
-      const response = await getAdminDashboard(nextFilters)
-      const normalized = normalizeDashboardResponse(response)
-      setDashboard(normalized)
-      setFilters(normalized.filters)
+      const dashboardResponse = await getAdminDashboard(nextFilters)
+      const normalizedDashboard = normalizeDashboardResponse(dashboardResponse)
+      setDashboard(normalizedDashboard)
+      setFilters(normalizedDashboard.filters)
     } catch (error) {
       console.error("Error cargando dashboard:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible cargar el dashboard.")
@@ -571,6 +571,7 @@ function normalizeCartFunnel(items = []) {
         }))
     : []
 }
+
 
 function normalizeProductSales(items = []) {
   return Array.isArray(items)

@@ -9,6 +9,9 @@ import {
   updateAdminProduct,
   updateAdminProductStatus,
   deleteAdminProduct,
+  downloadAdminProductsBulkImportLayout,
+  previewAdminProductsBulkImport,
+  importAdminProductsBulk,
 } from "../../../services/api/adminProductService.js"
 import {
   createAdminProductGalleryItem,
@@ -38,6 +41,8 @@ import {
   getAdminProductPriceScales,
   updateAdminProductPriceScales,
 } from "../../../services/api/adminProductPriceScaleService.js"
+import { getAdminCategories } from "../../../services/api/adminCategoryService.js"
+import { getAdminFamilies } from "../../../services/api/adminFamilyService.js"
 import { notifyError, notifySuccess } from "../../../utils/toast.js"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl.js"
 import "./ProductsPage.css"
@@ -124,12 +129,26 @@ const INITIAL_PRICE_SCALE_FORM = {
   ],
 }
 
+const INITIAL_BULK_IMPORT_FORM = {
+  file: null,
+  mode: "create_or_update",
+  import_images: false,
+}
+
+const SALES_CHANNEL_LINKS = [
+  { channel: "whatsapp", label: "WhatsApp", icon: "bi-whatsapp", className: "is-whatsapp" },
+  { channel: "instagram", label: "Instagram", icon: "bi-instagram", className: "is-instagram" },
+  { channel: "facebook", label: "Facebook", icon: "bi-facebook", className: "is-facebook" },
+  { channel: "tiktok", label: "TikTok", icon: "bi-tiktok", className: "is-tiktok" },
+]
+
 function ProductsPage() {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState(null)
   const [inlineSavingKey, setInlineSavingKey] = useState("")
   const [imagePreview, setImagePreview] = useState(null)
+  const [shareMenu, setShareMenu] = useState(null)
 
   const [filters, setFilters] = useState({
     search: "",
@@ -174,6 +193,15 @@ function ProductsPage() {
   const [priceScaleSaving, setPriceScaleSaving] = useState(false)
   const [priceScaleProduct, setPriceScaleProduct] = useState(null)
   const [priceScaleForm, setPriceScaleForm] = useState(INITIAL_PRICE_SCALE_FORM)
+  const [bulkImportOpen, setBulkImportOpen] = useState(false)
+  const [bulkImportForm, setBulkImportForm] = useState(INITIAL_BULK_IMPORT_FORM)
+  const [bulkImportPreview, setBulkImportPreview] = useState(null)
+  const [bulkImportAuthorizedRows, setBulkImportAuthorizedRows] = useState([])
+  const [bulkImportDownloading, setBulkImportDownloading] = useState(false)
+  const [bulkImportPreviewing, setBulkImportPreviewing] = useState(false)
+  const [bulkImportSaving, setBulkImportSaving] = useState(false)
+  const [categoryCatalog, setCategoryCatalog] = useState([])
+  const [familyCatalog, setFamilyCatalog] = useState([])
   const imagePreviewUrlRef = useRef("")
   const galleryPreviewUrlRef = useRef("")
   const gallerySaveTimersRef = useRef({})
@@ -192,13 +220,29 @@ function ProductsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!shareMenu) return undefined
+
+    const closeShareMenu = () => setShareMenu(null)
+
+    document.addEventListener("mousedown", closeShareMenu)
+    window.addEventListener("resize", closeShareMenu)
+    window.addEventListener("scroll", closeShareMenu, true)
+
+    return () => {
+      document.removeEventListener("mousedown", closeShareMenu)
+      window.removeEventListener("resize", closeShareMenu)
+      window.removeEventListener("scroll", closeShareMenu, true)
+    }
+  }, [shareMenu])
+
   const categoryOptions = useMemo(() => {
-    return buildEntityOptions(products, "category", panelForm.category)
-  }, [products, panelForm.category])
+    return buildCatalogEntityOptions(categoryCatalog, panelForm.category)
+  }, [categoryCatalog, panelForm.category])
 
   const familyOptions = useMemo(() => {
-    return buildEntityOptions(products, "family", panelForm.family)
-  }, [products, panelForm.family])
+    return buildCatalogEntityOptions(familyCatalog, panelForm.family)
+  }, [familyCatalog, panelForm.family])
 
   const missingVariantCombinationCount = useMemo(() => {
     return buildMissingVariantCombinations(variantAttributes, variants).length
@@ -240,6 +284,23 @@ function ProductsPage() {
 
     fetchVariantCatalog()
   }, [panelOpen])
+
+  useEffect(() => {
+    if (!panelOpen) return
+
+    fetchProductCategories()
+  }, [panelOpen])
+
+  useEffect(() => {
+    if (!panelOpen) return
+
+    if (!panelForm.category_id) {
+      setFamilyCatalog([])
+      return
+    }
+
+    fetchProductFamilies(panelForm.category_id)
+  }, [panelOpen, panelForm.category_id])
 
   async function fetchProducts(customSearch = null) {
     try {
@@ -314,6 +375,39 @@ function ProductsPage() {
       setVariantCatalog([])
     } finally {
       setVariantCatalogLoading(false)
+    }
+  }
+
+  async function fetchProductCategories() {
+    try {
+      const response = await getAdminCategories({
+        is_active: true,
+        per_page: 100,
+        sort_by: "name_asc",
+      })
+
+      setCategoryCatalog(normalizeEntityCatalog(response))
+    } catch (error) {
+      console.error("Error al cargar categorías para producto:", error?.response?.data || error)
+      notifyError("No fue posible cargar las categorías.")
+      setCategoryCatalog([])
+    }
+  }
+
+  async function fetchProductFamilies(categoryId) {
+    try {
+      const response = await getAdminFamilies({
+        category_id: categoryId,
+        is_active: true,
+        per_page: 100,
+        sort_by: "name_asc",
+      })
+
+      setFamilyCatalog(normalizeEntityCatalog(response))
+    } catch (error) {
+      console.error("Error al cargar familias para producto:", error?.response?.data || error)
+      notifyError("No fue posible cargar las familias de la categoría seleccionada.")
+      setFamilyCatalog([])
     }
   }
 
@@ -546,12 +640,18 @@ function ProductsPage() {
       ...prev,
       [`${type}_id`]: option?.id ?? "",
       [type]: option ? { id: option.id, name: option.name } : null,
+      ...(type === "category"
+        ? {
+            family_id: "",
+            family: null,
+          }
+        : {}),
     }))
   }
 
   function handleEntityCreate(type, name) {
     notifyError(
-      `Aún falta conectar el endpoint para crear ${type === "category" ? "categorías" : "familias"}: ${name}.`
+      `Crea "${name}" desde Catálogos > ${type === "category" ? "Categorías" : "Familias"} y vuelve a seleccionarlo aquí.`
     )
   }
 
@@ -1946,6 +2046,51 @@ function ProductsPage() {
     }
   }
 
+  async function handleSalesChannelLink(product, channel) {
+    const productUrl = buildProductSalesChannelUrl(product, channel)
+
+    if (!productUrl) {
+      notifyError("El producto no tiene slug para generar el link.")
+      return
+    }
+
+    try {
+      await copyTextToClipboard(productUrl)
+
+      if (channel === "whatsapp") {
+        window.open(
+          `https://wa.me/?text=${encodeURIComponent(`Te comparto este producto: ${productUrl}`)}`,
+          "_blank",
+          "noopener,noreferrer"
+        )
+        notifySuccess("Link de WhatsApp copiado y abierto.")
+        return
+      }
+
+      notifySuccess(`Link de ${formatSalesChannelLabel(channel)} copiado.`)
+    } catch (error) {
+      console.error("Error al copiar link de canal:", error)
+      notifyError("No fue posible copiar el link.")
+    }
+  }
+
+  function handleShareMenuToggle(event, product) {
+    event.stopPropagation()
+
+    const rect = event.currentTarget.getBoundingClientRect()
+
+    setShareMenu((prev) =>
+      prev?.productId === product.id
+        ? null
+        : {
+            product,
+            productId: product.id,
+            x: Math.min(rect.right, window.innerWidth - 12),
+            y: Math.min(rect.bottom + 6, window.innerHeight - 12),
+          }
+    )
+  }
+
   function handlePageChange(nextPage) {
     if (nextPage < 1 || nextPage > pagination.last_page) return
 
@@ -2067,6 +2212,135 @@ function ProductsPage() {
     }
   }
 
+  function openBulkImportPanel() {
+    setBulkImportOpen(true)
+  }
+
+  function closeBulkImportPanel() {
+    if (bulkImportPreviewing || bulkImportSaving || bulkImportDownloading) return
+
+    setBulkImportOpen(false)
+    setBulkImportForm(INITIAL_BULK_IMPORT_FORM)
+    setBulkImportPreview(null)
+    setBulkImportAuthorizedRows([])
+  }
+
+  function handleBulkImportChange(event) {
+    const { name, value, checked, files, type } = event.target
+    const fieldValue = type === "file" ? files?.[0] || null : type === "checkbox" ? checked : value
+    const nextForm = {
+      ...bulkImportForm,
+      [name]: fieldValue,
+    }
+
+    setBulkImportForm(nextForm)
+
+    if (name === "file" || name === "mode" || name === "import_images") {
+      setBulkImportPreview(null)
+      setBulkImportAuthorizedRows([])
+
+      if (nextForm.file) {
+        previewBulkImport(nextForm)
+      }
+    }
+  }
+
+  async function handleDownloadBulkImportLayout() {
+    try {
+      setBulkImportDownloading(true)
+      const response = await downloadAdminProductsBulkImportLayout()
+      const blob = new Blob([response.data], {
+        type: response.headers?.["content-type"] || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+
+      link.href = url
+      link.download = getBulkImportLayoutFilename(response) || "plantilla-productos.xlsx"
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error("Error al descargar plantilla:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible descargar la plantilla.")
+    } finally {
+      setBulkImportDownloading(false)
+    }
+  }
+
+  async function previewBulkImport(form) {
+    if (!form.file) {
+      notifyError("Selecciona un archivo Excel para previsualizar.")
+      return
+    }
+
+    try {
+      setBulkImportPreviewing(true)
+      const response = await previewAdminProductsBulkImport(buildBulkImportPayload(form))
+      setBulkImportPreview(normalizeBulkImportResponse(response))
+      setBulkImportAuthorizedRows([])
+      notifySuccess(response?.message || "Archivo validado correctamente.")
+    } catch (error) {
+      console.error("Error al previsualizar carga masiva:", error?.response?.data || error)
+      setBulkImportPreview(normalizeBulkImportResponse(error?.response?.data))
+      setBulkImportAuthorizedRows([])
+      notifyError(error?.response?.data?.message || "No fue posible validar el archivo.")
+    } finally {
+      setBulkImportPreviewing(false)
+    }
+  }
+
+  async function handleConfirmBulkImport() {
+    if (!bulkImportForm.file) {
+      notifyError("Selecciona un archivo Excel para importar.")
+      return
+    }
+
+    const importableRows = getBulkImportImportableRows(bulkImportPreview?.items)
+
+    if (!importableRows.length) {
+      notifyError("No hay filas válidas para importar.")
+      return
+    }
+
+    if (!areBulkImportRowsAuthorized(bulkImportPreview?.items, bulkImportAuthorizedRows)) {
+      notifyError("Autoriza todas las filas válidas antes de confirmar.")
+      return
+    }
+
+    try {
+      setBulkImportSaving(true)
+      const response = await importAdminProductsBulk(buildBulkImportPayload(bulkImportForm))
+      setBulkImportPreview(normalizeBulkImportResponse(response))
+      setBulkImportAuthorizedRows([])
+      notifySuccess(response?.message || "Productos importados correctamente.")
+      fetchProducts()
+    } catch (error) {
+      console.error("Error al importar productos:", error?.response?.data || error)
+      setBulkImportPreview(normalizeBulkImportResponse(error?.response?.data))
+      notifyError(error?.response?.data?.message || "No fue posible importar los productos.")
+    } finally {
+      setBulkImportSaving(false)
+    }
+  }
+
+  function handleBulkImportRowToggle(rowKey, checked) {
+    setBulkImportAuthorizedRows((prev) =>
+      checked
+        ? [...new Set([...prev, rowKey])]
+        : prev.filter((key) => key !== rowKey)
+    )
+  }
+
+  function handleBulkImportToggleAll(checked) {
+    setBulkImportAuthorizedRows(
+      checked
+        ? getBulkImportImportableRows(bulkImportPreview?.items).map(getBulkImportRowKey)
+        : []
+    )
+  }
+
   function renderPagination() {
     if (pagination.last_page <= 1) return null
 
@@ -2123,10 +2397,16 @@ function ProductsPage() {
         title="Productos"
         subtitle="Listado general de productos registrados"
         right={
-          <button type="button" className="btn btn-primary" onClick={handleOpenCreatePanel}>
-            <i className="bi bi-plus-lg" aria-hidden="true" />{" "}
-            Nuevo producto
-          </button>
+          <div className="product-page__header-actions">
+            <button type="button" className="btn btn-outline-primary" onClick={openBulkImportPanel}>
+              <i className="bi bi-file-earmark-spreadsheet" aria-hidden="true" />{" "}
+              Carga masiva
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleOpenCreatePanel}>
+              <i className="bi bi-plus-lg" aria-hidden="true" />{" "}
+              Nuevo producto
+            </button>
+          </div>
         }
       >
         <div className="product-page">
@@ -2351,6 +2631,18 @@ function ProductsPage() {
                           >
                             <button
                               type="button"
+                              className="product-page__share-action"
+                              onClick={(event) => handleShareMenuToggle(event, product)}
+                              title="Compartir"
+                              aria-label={`Compartir ${product.name}`}
+                              aria-expanded={shareMenu?.productId === product.id}
+                            >
+                              <i className="bi bi-share" aria-hidden="true" />
+                              <span>Compartir</span>
+                            </button>
+
+                            <button
+                              type="button"
                               className={`product-page__icon-action ${
                                 isActive ? "is-warning" : "is-success"
                               }`}
@@ -2453,6 +2745,56 @@ function ProductsPage() {
         onSubmit={handlePanelSubmit}
       />
 
+      <AdminSidePanel
+        isOpen={bulkImportOpen}
+        title="Carga masiva de productos"
+        subtitle="Descarga la plantilla, valida el archivo y confirma la importación."
+        onClose={closeBulkImportPanel}
+        closeDisabled={bulkImportPreviewing || bulkImportSaving || bulkImportDownloading}
+        width="xl"
+        footer={
+          <div className="bulk-import-panel__footer">
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={closeBulkImportPanel}
+              disabled={bulkImportPreviewing || bulkImportSaving || bulkImportDownloading}
+            >
+              Cerrar
+            </button>
+            <div className="bulk-import-panel__footer-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConfirmBulkImport}
+                disabled={
+                  !bulkImportForm.file ||
+                  !bulkImportPreview ||
+                  !areBulkImportRowsAuthorized(bulkImportPreview?.items, bulkImportAuthorizedRows) ||
+                  bulkImportSaving ||
+                  bulkImportPreviewing
+                }
+              >
+                {bulkImportSaving ? "Importando..." : "Confirmar importación"}
+              </button>
+            </div>
+          </div>
+        }
+      >
+        <BulkImportPanel
+          form={bulkImportForm}
+          preview={bulkImportPreview}
+          downloading={bulkImportDownloading}
+          previewing={bulkImportPreviewing}
+          saving={bulkImportSaving}
+          authorizedRows={bulkImportAuthorizedRows}
+          onChange={handleBulkImportChange}
+          onRowToggle={handleBulkImportRowToggle}
+          onToggleAll={handleBulkImportToggleAll}
+          onDownloadLayout={handleDownloadBulkImportLayout}
+        />
+      </AdminSidePanel>
+
       {imagePreview ? (
         <div
           className="product-page__image-preview"
@@ -2462,6 +2804,32 @@ function ProductsPage() {
           }}
         >
           <img src={imagePreview.src} alt={imagePreview.alt} />
+        </div>
+      ) : null}
+
+      {shareMenu ? (
+        <div
+          className="product-page__share-menu"
+          style={{
+            left: shareMenu.x,
+            top: shareMenu.y,
+          }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          {SALES_CHANNEL_LINKS.map((channelLink) => (
+            <button
+              key={channelLink.channel}
+              type="button"
+              className={channelLink.className}
+              onClick={() => {
+                handleSalesChannelLink(shareMenu.product, channelLink.channel)
+                setShareMenu(null)
+              }}
+            >
+              <i className={`bi ${channelLink.icon}`} aria-hidden="true" />
+              <span>{channelLink.label}</span>
+            </button>
+          ))}
         </div>
       ) : null}
 
@@ -2585,17 +2953,358 @@ function ProductsPage() {
 
 export default ProductsPage
 
-function buildEntityOptions(products, key, currentEntity) {
+function buildProductSalesChannelUrl(product, channel) {
+  const slug = String(product?.slug || "").trim()
+
+  if (!slug) return ""
+
+  const url = new URL(`/producto/${slug}`, window.location.origin)
+  url.searchParams.set("channel", channel)
+  url.searchParams.set("utm_campaign", `producto_${product.id}`)
+
+  return url.toString()
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = text
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.top = "-9999px"
+
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand("copy")
+  document.body.removeChild(textarea)
+}
+
+function formatSalesChannelLabel(channel) {
+  const match = SALES_CHANNEL_LINKS.find((item) => item.channel === channel)
+
+  return match?.label || "canal"
+}
+
+function buildBulkImportPayload(form) {
+  const payload = new FormData()
+  payload.append("file", form.file)
+  payload.append("mode", form.mode || "create_or_update")
+  payload.append("import_images", form.import_images ? "1" : "0")
+
+  return payload
+}
+
+function normalizeBulkImportResponse(response) {
+  const payload = response?.data || response || {}
+
+  return {
+    summary: {
+      processed_rows: Number(payload.summary?.processed_rows ?? 0),
+      valid_rows: Number(payload.summary?.valid_rows ?? 0),
+      created_rows: Number(payload.summary?.created_rows ?? 0),
+      updated_rows: Number(payload.summary?.updated_rows ?? 0),
+      skipped_rows: Number(payload.summary?.skipped_rows ?? 0),
+      mode: payload.summary?.mode || "create_or_update",
+      commit: Boolean(payload.summary?.commit),
+      import_images: Boolean(payload.summary?.import_images),
+    },
+    items: Array.isArray(payload.items) ? payload.items : [],
+    errors: Array.isArray(payload.errors) ? payload.errors : [],
+  }
+}
+
+function getBulkImportLayoutFilename(response) {
+  const disposition = response.headers?.["content-disposition"] || ""
+  const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i)
+
+  return match?.[1] ? decodeURIComponent(match[1]) : ""
+}
+
+function normalizeBulkImportStatus(status) {
+  const normalized = String(status || "").toLowerCase()
+
+  if (["create", "created"].includes(normalized)) return "create"
+  if (["update", "updated"].includes(normalized)) return "update"
+  if (["invalid", "error"].includes(normalized)) return "invalid"
+  if (["skipped", "skip"].includes(normalized)) return "skipped"
+
+  return "unknown"
+}
+
+function isBulkImportRowImportable(item) {
+  return ["create", "update"].includes(normalizeBulkImportStatus(item?.status))
+}
+
+function getBulkImportImportableRows(items = []) {
+  return Array.isArray(items) ? items.filter(isBulkImportRowImportable) : []
+}
+
+function getBulkImportRowKey(item) {
+  return String(item?.row ?? item?.sku ?? item?.name ?? "")
+}
+
+function areBulkImportRowsAuthorized(items = [], authorizedRows = []) {
+  const importableRows = getBulkImportImportableRows(items)
+
+  return (
+    importableRows.length > 0 &&
+    importableRows.every((item) => authorizedRows.includes(getBulkImportRowKey(item)))
+  )
+}
+
+function translateBulkImportStatus(status) {
+  const map = {
+    create: "Crear",
+    created: "Crear",
+    update: "Actualizar",
+    updated: "Actualizar",
+    invalid: "Con error",
+    error: "Con error",
+    skipped: "Omitida",
+    skip: "Omitida",
+  }
+
+  return map[String(status || "").toLowerCase()] || status || "-"
+}
+
+function formatBulkImportMessages(messages) {
+  if (!Array.isArray(messages) || !messages.length) return "-"
+
+  return messages.join(" · ")
+}
+
+function formatBulkImportError(error) {
+  if (typeof error === "string") return error
+
+  const row = error?.row ? `Fila ${error.row}: ` : ""
+  const message = error?.message || error?.error || formatBulkImportMessages(error?.messages)
+
+  return `${row}${message || "Error de validación."}`
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0))
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("es-MX").format(Number(value || 0))
+}
+
+function BulkImportPanel({
+  form,
+  preview,
+  downloading,
+  previewing,
+  saving,
+  authorizedRows,
+  onChange,
+  onRowToggle,
+  onToggleAll,
+  onDownloadLayout,
+}) {
+  const summary = preview?.summary || {}
+  const items = Array.isArray(preview?.items) ? preview.items : []
+  const errors = Array.isArray(preview?.errors) ? preview.errors : []
+  const canShowPreview = Boolean(preview)
+  const importableRows = getBulkImportImportableRows(items)
+  const authorizedCount = importableRows.filter((item) => authorizedRows.includes(getBulkImportRowKey(item))).length
+
+  return (
+    <div className="bulk-import-panel">
+      <section className="bulk-import-panel__steps">
+        <article>
+          <span>1</span>
+          <strong>Descargar plantilla</strong>
+          <p>Usa el layout oficial con columnas obligatorias y opcionales.</p>
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-sm"
+            onClick={onDownloadLayout}
+            disabled={downloading || previewing || saving}
+          >
+            {downloading ? "Descargando..." : "Descargar Excel"}
+          </button>
+        </article>
+        <article>
+          <span>2</span>
+          <strong>Subir y validar</strong>
+          <p>Al elegir el archivo se valida automáticamente.</p>
+        </article>
+        <article>
+          <span>3</span>
+          <strong>Autorizar filas</strong>
+          <p>Marca cada fila válida antes de confirmar.</p>
+        </article>
+      </section>
+
+      <section className="bulk-import-panel__form">
+        <label className="bulk-import-panel__field">
+          <span>Archivo Excel</span>
+          <input
+            type="file"
+            name="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={onChange}
+            disabled={previewing || saving}
+          />
+          {form.file ? <small>{form.file.name}</small> : null}
+        </label>
+
+        <label className="bulk-import-panel__field">
+          <span>Modo</span>
+          <select name="mode" value={form.mode} onChange={onChange} disabled={previewing || saving}>
+            <option value="create_or_update">Crear o actualizar</option>
+            <option value="create_only">Solo crear</option>
+          </select>
+        </label>
+
+        <label className="bulk-import-panel__check">
+          <input
+            type="checkbox"
+            name="import_images"
+            checked={form.import_images}
+            onChange={onChange}
+            disabled={previewing || saving}
+          />
+          <span>Importar imágenes remotas</span>
+        </label>
+      </section>
+
+      {canShowPreview ? (
+        <>
+          <section className="bulk-import-panel__summary">
+            <SummaryCard label="Filas procesadas" value={summary.processed_rows} />
+            <SummaryCard label="Válidas" value={summary.valid_rows} tone="success" />
+            <SummaryCard label="Se crearán" value={summary.created_rows} tone="primary" />
+            <SummaryCard label="Se actualizarán" value={summary.updated_rows} tone="warning" />
+            <SummaryCard label="Con error" value={errors.length} tone="danger" />
+            <SummaryCard label="Autorizadas" value={`${authorizedCount}/${importableRows.length}`} tone="neutral" />
+          </section>
+
+          {errors.length ? (
+            <section className="bulk-import-panel__errors">
+              <strong>Errores</strong>
+              <ul>
+                {errors.slice(0, 8).map((error, index) => (
+                  <li key={`${error?.row || "error"}-${index}`}>
+                    {formatBulkImportError(error)}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          <BulkImportTable
+            items={items}
+            authorizedRows={authorizedRows}
+            onRowToggle={onRowToggle}
+            onToggleAll={onToggleAll}
+          />
+        </>
+      ) : (
+        <div className="bulk-import-panel__empty">
+          Sube un archivo para validar la carga automáticamente antes de importar.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, tone = "neutral" }) {
+  return (
+    <article className={`bulk-import-panel__summary-card is-${tone}`}>
+      <span>{label}</span>
+      <strong>{typeof value === "number" ? formatNumber(value) : value}</strong>
+    </article>
+  )
+}
+
+function BulkImportTable({ items, authorizedRows, onRowToggle, onToggleAll }) {
+  if (!items.length) {
+    return (
+      <div className="bulk-import-panel__empty">
+        No hay filas para mostrar en la previsualización.
+      </div>
+    )
+  }
+
+  const importableRows = getBulkImportImportableRows(items)
+  const allImportableAuthorized = areBulkImportRowsAuthorized(items, authorizedRows)
+
+  return (
+    <div className="bulk-import-table">
+      <div className="bulk-import-table__head">
+        <span>
+          <input
+            type="checkbox"
+            checked={allImportableAuthorized}
+            onChange={(event) => onToggleAll(event.target.checked)}
+            disabled={!importableRows.length}
+            aria-label="Autorizar todas las filas válidas"
+          />
+        </span>
+        <span>Fila</span>
+        <span>SKU</span>
+        <span>Nombre</span>
+        <span>Precio</span>
+        <span>Stock</span>
+        <span>Categoría</span>
+        <span>Familia</span>
+        <span>Acción</span>
+        <span>Mensajes</span>
+      </div>
+      <div className="bulk-import-table__body">
+        {items.map((item, index) => {
+          const rowKey = getBulkImportRowKey(item)
+          const isImportable = isBulkImportRowImportable(item)
+
+          return (
+            <div className="bulk-import-table__row" key={`${item.row || "row"}-${index}`}>
+              <span>
+                <input
+                  type="checkbox"
+                  checked={authorizedRows.includes(rowKey)}
+                  onChange={(event) => onRowToggle(rowKey, event.target.checked)}
+                  disabled={!isImportable}
+                  aria-label={`Autorizar fila ${item.row || index + 1}`}
+                />
+              </span>
+              <span>{item.row || "-"}</span>
+              <span>{item.sku || "-"}</span>
+              <strong>{item.name || "-"}</strong>
+              <span>{formatMoney(item.default_price)}</span>
+              <span>{item.stock ?? "-"}</span>
+              <span>{item.category_name || "-"}</span>
+              <span>{item.family_name || "-"}</span>
+              <span className={`bulk-import-status is-${normalizeBulkImportStatus(item.status)}`}>
+                {translateBulkImportStatus(item.status)}
+              </span>
+              <span>{formatBulkImportMessages(item.messages)}</span>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function buildCatalogEntityOptions(items = [], currentEntity) {
   const map = new Map()
 
-  products.forEach((product) => {
-    const entity = product?.[key]
+  items.forEach((item) => {
+    if (!item?.id || !item?.name) return
 
-    if (!entity?.id || !entity?.name) return
-
-    map.set(Number(entity.id), {
-      id: Number(entity.id),
-      name: entity.name,
+    map.set(Number(item.id), {
+      id: Number(item.id),
+      name: item.name,
     })
   })
 
@@ -2607,6 +3316,19 @@ function buildEntityOptions(products, key, currentEntity) {
   }
 
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function normalizeEntityCatalog(response) {
+  const data = response?.data?.data || response?.data || response || []
+
+  return Array.isArray(data)
+    ? data
+        .map((item) => ({
+          id: Number(item.id),
+          name: item.name || "",
+        }))
+        .filter((item) => item.id && item.name)
+    : []
 }
 
 function sortGalleryItems(items = []) {

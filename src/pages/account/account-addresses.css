@@ -57,6 +57,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 0 14px;
@@ -106,6 +107,8 @@
   border: 2px dashed #c9c9c9;
   background: #f7f7f7;
   border-radius: 12px;
+  color: inherit;
+  font: inherit;
 
   display: flex;
   flex-direction: column;
@@ -114,6 +117,7 @@
 
   min-height: 280px;
   cursor: pointer;
+  padding: 24px;
 }
 
 .address_card_body {
@@ -309,6 +313,10 @@
 .address_empty_state p {
   margin: 0;
   color: #6b7280;
+}
+
+.address_empty_state .address_btn {
+  margin-top: 18px;
 }
 
 .address_modal_overlay {
