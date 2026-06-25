@@ -15,6 +15,7 @@ import {
   notifySuccess,
   notifyWarning,
 } from "../../../utils/toast.js"
+import { normalizeMediaUrl } from "../../../utils/mediaUrl.js"
 import "./PromotionsPage.css"
 
 const PROMOTION_TYPE_OPTIONS = [
@@ -65,6 +66,9 @@ const PROMOTION_TYPE_OPTIONS = [
   },
 ]
 
+const PROMOTION_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+const PROMOTION_IMAGE_MAX_SIZE = 10 * 1024 * 1024
+
 const emptyScale = {
   from_quantity: "",
   to_quantity: "",
@@ -98,6 +102,9 @@ const defaultForm = {
   requires_login: false,
   is_general: true,
   priority: null,
+  image: null,
+  image_url: "",
+  image_path: "",
   product_ids: [],
   gift_item_ids: [],
   user_ids: [],
@@ -125,6 +132,10 @@ function PromotionsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingPromotionId, setEditingPromotionId] = useState(null)
   const [form, setForm] = useState(defaultForm)
+  const imagePreview = useMemo(() => {
+    if (!form.image) return ""
+    return URL.createObjectURL(form.image)
+  }, [form.image])
 
   const loadPromotions = async () => {
     try {
@@ -235,6 +246,12 @@ function PromotionsPage() {
     loadFormOptions()
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview)
+    }
+  }, [imagePreview])
+
   const filteredPromotions = useMemo(() => {
     const term = search.trim().toLowerCase()
 
@@ -341,6 +358,9 @@ function PromotionsPage() {
     setForm({
       ...defaultForm,
       config: { ...emptyConfig },
+      image: null,
+      image_url: "",
+      image_path: "",
       product_ids: [],
       gift_item_ids: [],
       user_ids: [],
@@ -371,6 +391,9 @@ function PromotionsPage() {
       requires_login: Boolean(promotion.requires_login),
       is_general: Boolean(promotion.is_general ?? true),
       priority: promotion.priority ?? null,
+      image: null,
+      image_url: normalizeMediaUrl(promotion.image_url || promotion.image_path || ""),
+      image_path: promotion.image_path || "",
       product_ids: Array.isArray(promotion.products)
         ? promotion.products.map((item) => Number(item.id))
         : Array.isArray(promotion.product_ids)
@@ -425,6 +448,29 @@ function PromotionsPage() {
         ? { user_ids: [] }
         : {}),
     }))
+  }
+
+  const handleImageChange = (event) => {
+    const file = event.target.files?.[0] || null
+
+    if (!file) {
+      setForm((prev) => ({ ...prev, image: null }))
+      return
+    }
+
+    if (!PROMOTION_IMAGE_TYPES.includes(file.type)) {
+      notifyWarning("La imagen debe ser JPG, PNG, WEBP o GIF.")
+      event.target.value = ""
+      return
+    }
+
+    if (file.size > PROMOTION_IMAGE_MAX_SIZE) {
+      notifyWarning("La imagen no debe superar 10 MB.")
+      event.target.value = ""
+      return
+    }
+
+    setForm((prev) => ({ ...prev, image: file }))
   }
 
   const handleConfigChange = (field, value) => {
@@ -675,6 +721,16 @@ function PromotionsPage() {
     return payload
   }
 
+  const buildRequestPayload = (payload) => {
+    if (!(form.image instanceof File)) return payload
+
+    const formData = new FormData()
+    appendPromotionFormData(formData, payload)
+    formData.append("image", form.image)
+
+    return formData
+  }
+
   const validateBeforeSubmit = (payload) => {
     if (!payload.name) {
       notifyWarning("Escribe el nombre de la promoción.")
@@ -831,12 +887,13 @@ function PromotionsPage() {
 
     try {
       setSaving(true)
+      const requestPayload = buildRequestPayload(payload)
 
       if (editingPromotionId) {
-        await updateAdminPromotion(editingPromotionId, payload)
+        await updateAdminPromotion(editingPromotionId, requestPayload)
         notifySuccess("Promoción actualizada correctamente.")
       } else {
-        await createAdminPromotion(payload)
+        await createAdminPromotion(requestPayload)
         notifySuccess("Promoción creada correctamente.")
       }
 
@@ -962,6 +1019,13 @@ function PromotionsPage() {
                     <tr key={promotion.id}>
                       <td>
                         <div className="promotion-main-cell">
+                          <span className={`promotion-image-thumb ${promotion.image_url ? "" : "is-empty"}`}>
+                            {promotion.image_url ? (
+                              <img src={normalizeMediaUrl(promotion.image_url || promotion.image_path)} alt={promotion.name} />
+                            ) : (
+                              <i className="bi bi-image" aria-hidden="true" />
+                            )}
+                          </span>
                           <strong>{promotion.name}</strong>
                           <span>{promotion.slug}</span>
                           {promotion.description ? (
@@ -1146,6 +1210,29 @@ function PromotionsPage() {
                         onChange={(e) => handleChange("description", e.target.value)}
                         placeholder="Describe brevemente qué hace esta promoción."
                       />
+                    </div>
+
+                    <div className="promo_form_group">
+                      <label>Imagen de promoción</label>
+                      <label className="promotion-image-upload">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handleImageChange}
+                          disabled={saving}
+                        />
+                        <span className="promotion-image-upload__preview">
+                          {imagePreview || form.image_url ? (
+                            <img src={imagePreview || form.image_url} alt={form.name || "Promoción"} />
+                          ) : (
+                            <i className="bi bi-image" aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="promotion-image-upload__copy">
+                          <strong>{form.image ? form.image.name : "Selecciona una imagen"}</strong>
+                          <small>JPG, PNG, WEBP o GIF. Máximo 10 MB.</small>
+                        </span>
+                      </label>
                     </div>
                   </section>
 
@@ -2024,6 +2111,37 @@ function PromotionsPage() {
       ) : null}
     </>
   )
+}
+
+function appendPromotionFormData(formData, payload, parentKey = "") {
+  Object.entries(payload).forEach(([key, value]) => {
+    const fieldKey = parentKey ? `${parentKey}[${key}]` : key
+
+    if (value === undefined) return
+
+    if (value === null) {
+      formData.append(fieldKey, "")
+      return
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (item && typeof item === "object" && !(item instanceof File)) {
+          appendPromotionFormData(formData, item, `${fieldKey}[${index}]`)
+        } else {
+          formData.append(`${fieldKey}[]`, item ?? "")
+        }
+      })
+      return
+    }
+
+    if (value && typeof value === "object" && !(value instanceof File)) {
+      appendPromotionFormData(formData, value, fieldKey)
+      return
+    }
+
+    formData.append(fieldKey, typeof value === "boolean" ? (value ? "1" : "0") : value)
+  })
 }
 
 function normalizeCollectionResponse(response) {

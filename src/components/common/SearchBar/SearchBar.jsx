@@ -11,7 +11,7 @@ const currencyFormatter = new Intl.NumberFormat("es-MX", {
 })
 const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 
-function SearchBar({ onSearchSubmit }) {
+function SearchBar({ onSearchSubmit, onNavigate }) {
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
@@ -101,6 +101,7 @@ function SearchBar({ onSearchSubmit }) {
 
   const goToProduct = (slug) => {
     closeDropdown()
+    onNavigate?.()
     navigate(`/producto/${slug}`)
   }
 

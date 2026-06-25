@@ -4,6 +4,7 @@ import ProductListSkeleton from "../../components/product/ProductListSkeleton/Pr
 import { addCartItem } from "../../services/api/cartService"
 import { getAllPromotions } from "../../services/api/promotionsService"
 import { useAuth } from "../../context/AuthContext"
+import { useSettings } from "../../context/SettingsContext"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import { trackMetaAddToCart } from "../../utils/metaPixel"
 import "./offerspage.css"
@@ -16,11 +17,13 @@ function OffersPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { isAuthenticated } = useAuth()
+  const { settings } = useSettings()
   const page = Number(searchParams.get("page")) || 1
 
   const [offers, setOffers] = useState([])
   const [loading, setLoading] = useState(true)
   const [addingOfferId, setAddingOfferId] = useState(null)
+  const [activeOfferIndex, setActiveOfferIndex] = useState(0)
   const [meta, setMeta] = useState({
     current_page: 1,
     last_page: 1,
@@ -54,6 +57,10 @@ function OffersPage() {
     }
 
     loadOffers()
+  }, [page])
+
+  useEffect(() => {
+    setActiveOfferIndex(0)
   }, [page])
 
   const handlePageChange = (nextPage) => {
@@ -132,64 +139,76 @@ function OffersPage() {
     }
   }
 
+  const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
+
   return (
-    <section className="offers-page">
+    <section className={`offers-page ${isEditorialShop ? "offers-page--editorial" : ""}`}>
       <div className="container-main">
-        <div className="offers-page__top">
-          <div>
-            <p className="offers-page__breadcrumbs">Inicio &gt; Ofertas</p>
-            <h1 className="offers-page__title">Ofertas</h1>
-            <p className="offers-page__results">{meta.total} promoción(es) vigente(s)</p>
+        {!isEditorialShop ? (
+          <div className="offers-page__top">
+            <div>
+              <p className="offers-page__breadcrumbs">Inicio &gt; Ofertas</p>
+              <h1 className="offers-page__title">Ofertas</h1>
+              <p className="offers-page__results">{meta.total} promoción(es) vigente(s)</p>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {loading ? (
           <ProductListSkeleton count={8} />
         ) : offers.length ? (
           <>
-            <div className="offers-page__grid">
-              {offers.map((offer) => {
-                const isOutOfStock = isOfferOutOfStock(offer)
+            {isEditorialShop ? (
+              <EditorialOffersShowcase
+                offers={offers}
+                activeIndex={activeOfferIndex}
+                onActiveIndexChange={setActiveOfferIndex}
+              />
+            ) : (
+              <div className="offers-page__grid">
+                {offers.map((offer) => {
+                  const isOutOfStock = isOfferOutOfStock(offer)
 
-                return (
-                <article className="offers-page__card" key={offer.id}>
-                  <div className="offers-page__card-media">
-                    <img src={offer.image} alt={offer.title} />
-                  </div>
+                  return (
+                  <article className="offers-page__card" key={offer.id}>
+                    <div className="offers-page__card-media">
+                      <img src={offer.image} alt={offer.title} />
+                    </div>
 
-                  <div className="offers-page__card-body">
-                    <span className="offers-page__badge">{offer.label}</span>
-                    <h2>{offer.title}</h2>
-                    {offer.productName ? (
-                      <h3 className="offers-page__product-name">{offer.productName}</h3>
-                    ) : null}
-                    {offer.description ? <p>{offer.description}</p> : null}
-                    <div className="offers-page__meta">
-                      <span>{offer.productsCount} producto(s)</span>
-                      <strong>{offer.typeLabel}</strong>
+                    <div className="offers-page__card-body">
+                      <span className="offers-page__badge">{offer.label}</span>
+                      <h2>{offer.title}</h2>
+                      {offer.productName ? (
+                        <h3 className="offers-page__product-name">{offer.productName}</h3>
+                      ) : null}
+                      {offer.description ? <p>{offer.description}</p> : null}
+                      <div className="offers-page__meta">
+                        <span>{offer.productsCount} producto(s)</span>
+                        <strong>{offer.typeLabel}</strong>
+                      </div>
+                      <div className="offers-page__actions">
+                        <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
+                          Ver
+                        </Link>
+                        <button
+                          type="button"
+                          className="offers-page__action offers-page__action--primary"
+                          onClick={() => handleAddOfferToCart(offer)}
+                          disabled={addingOfferId === offer.id || isOutOfStock}
+                        >
+                          {addingOfferId === offer.id
+                            ? "Agregando..."
+                            : isOutOfStock
+                            ? "Producto sin inventario"
+                            : "Agregar al carrito"}
+                        </button>
+                      </div>
                     </div>
-                    <div className="offers-page__actions">
-                      <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
-                        Ver
-                      </Link>
-                      <button
-                        type="button"
-                        className="offers-page__action offers-page__action--primary"
-                        onClick={() => handleAddOfferToCart(offer)}
-                        disabled={addingOfferId === offer.id || isOutOfStock}
-                      >
-                        {addingOfferId === offer.id
-                          ? "Agregando..."
-                          : isOutOfStock
-                          ? "Producto sin inventario"
-                          : "Agregar al carrito"}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-                )
-              })}
-            </div>
+                  </article>
+                  )
+                })}
+              </div>
+            )}
 
             {meta.last_page > 1 ? (
               <div className="offers-page__pagination">
@@ -240,6 +259,86 @@ function OffersPage() {
       </div>
     </section>
   )
+}
+
+function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange }) {
+  const activeOffer = offers[activeIndex] || offers[0]
+  const visibleOffers = getVisibleEditorialOffers(offers, activeIndex)
+
+  const goToPrevious = () => {
+    onActiveIndexChange(activeIndex === 0 ? offers.length - 1 : activeIndex - 1)
+  }
+
+  const goToNext = () => {
+    onActiveIndexChange(activeIndex >= offers.length - 1 ? 0 : activeIndex + 1)
+  }
+
+  if (!activeOffer) return null
+
+  return (
+    <div className="editorial-offers-showcase">
+      <div className="editorial-offers-showcase__media">
+        <button
+          type="button"
+          className="editorial-offers-showcase__arrow editorial-offers-showcase__arrow--prev"
+          onClick={goToPrevious}
+          aria-label="Promoción anterior"
+        >
+          ‹
+        </button>
+
+        {visibleOffers.map(({ offer, sourceIndex }, imageIndex) => (
+          <button
+            type="button"
+            className={`editorial-offers-showcase__panel ${sourceIndex === activeIndex ? "is-active" : ""}`}
+            key={`${offer.id}-${imageIndex}`}
+            onClick={() => onActiveIndexChange(sourceIndex)}
+            aria-label={`Ver promoción ${offer.title}`}
+          >
+            <img src={offer.image} alt={offer.productName || offer.title} />
+          </button>
+        ))}
+
+        <button
+          type="button"
+          className="editorial-offers-showcase__arrow editorial-offers-showcase__arrow--next"
+          onClick={goToNext}
+          aria-label="Promoción siguiente"
+        >
+          ›
+        </button>
+
+        <div className="editorial-offers-showcase__info">
+          <span>{activeOffer.label}</span>
+          <h1>{activeOffer.productName || activeOffer.title}</h1>
+          {activeOffer.price > 0 ? <p>{formatMoney(activeOffer.price)}</p> : null}
+          {activeOffer.description ? <small>{activeOffer.description}</small> : null}
+          <Link to={getOfferUrl(activeOffer)}>Ver promoción</Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function getVisibleEditorialOffers(offers = [], activeIndex = 0) {
+  if (!offers.length) return []
+
+  if (offers.length === 1) {
+    return Array.from({ length: 3 }).map((_, index) => ({
+      offer: offers[0],
+      sourceIndex: 0,
+      key: index,
+    }))
+  }
+
+  return [-1, 0, 1].map((offset) => {
+    const sourceIndex = (activeIndex + offset + offers.length) % offers.length
+
+    return {
+      offer: offers[sourceIndex],
+      sourceIndex,
+    }
+  })
 }
 
 function normalizePromotions(items = []) {
@@ -391,6 +490,15 @@ function formatPromotionType(type) {
   return String(type || "Promoción")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0))
 }
 
 export default OffersPage

@@ -7,6 +7,7 @@ import {
   getPublicMetaPixel,
   getPublicNavTitle,
   getPublicSettings,
+  getPublicStorefront,
 } from "../services/api/settingsService"
 import { normalizeMediaUrl } from "../utils/mediaUrl"
 import { loadMetaPixel } from "../utils/metaPixel"
@@ -53,9 +54,124 @@ const DEFAULT_SETTINGS = {
     cashback_redeem_enabled: false,
     cashback_max_redeem_percentage: 100,
   },
+  storefront: {
+    is_published: false,
+    construction: {
+      title: "Ecommerce en construcción",
+      message: "Estamos preparando la tienda. Vuelve pronto.",
+    },
+    home_template: "classic",
+    active_template: "classic",
+    available_home_templates: ["classic"],
+    available_templates: [],
+    available_home_template_options: [
+      {
+        key: "classic",
+        name: "Classic",
+        description: "Home equilibrado con carrusel, beneficios, categorías, productos y banners de marca.",
+      },
+    ],
+    visual_design: {
+      nav: {
+        variant: "classic",
+        density: "comfortable",
+        show_top_bar: true,
+      },
+      home: {
+        variant: "classic",
+        hero: "carousel",
+        category_layout: "grid",
+        product_layout: "standard",
+      },
+      footer: {
+        variant: "classic",
+        newsletter_position: "inline",
+      },
+    },
+    theme: {
+      primary_color: "#111827",
+      secondary_color: "#2563eb",
+      accent_color: "#f59e0b",
+      background_color: "#ffffff",
+      surface_color: "#f8fafc",
+      text_color: "#111827",
+      muted_text_color: "#64748b",
+      button_text_color: "#ffffff",
+      buttons: {
+        primary: {
+          background_color: "#111827",
+          text_color: "#ffffff",
+          border_color: "#111827",
+          hover_background_color: "#1f2937",
+          hover_text_color: "#ffffff",
+          hover_border_color: "#1f2937",
+        },
+        secondary: {
+          background_color: "#2563eb",
+          text_color: "#ffffff",
+          border_color: "#2563eb",
+          hover_background_color: "#1d4ed8",
+          hover_text_color: "#ffffff",
+          hover_border_color: "#1d4ed8",
+        },
+        outline: {
+          background_color: "transparent",
+          text_color: "#111827",
+          border_color: "#111827",
+          hover_background_color: "#111827",
+          hover_text_color: "#ffffff",
+          hover_border_color: "#111827",
+        },
+      },
+    },
+  },
 }
 
 const SettingsContext = createContext(null)
+
+const TEMPLATE_VISUAL_DESIGN_OVERRIDES = {
+  classic: DEFAULT_SETTINGS.storefront.visual_design,
+  minimal: {
+    nav: { variant: "minimal", density: "comfortable", show_top_bar: false },
+    home: {
+      variant: "minimal",
+      hero: "clean",
+      category_layout: "simple_grid",
+      product_layout: "minimal_cards",
+    },
+    footer: { variant: "minimal", newsletter_position: "inline" },
+  },
+  showcase: {
+    nav: { variant: "showcase", density: "comfortable", show_top_bar: true },
+    home: {
+      variant: "showcase",
+      hero: "visual",
+      category_layout: "featured_grid",
+      product_layout: "showcase_cards",
+    },
+    footer: { variant: "showcase", newsletter_position: "block" },
+  },
+  promo: {
+    nav: { variant: "promo_dense", density: "compact", show_top_bar: true },
+    home: {
+      variant: "promo_first",
+      hero: "promo_banner",
+      category_layout: "compact_grid",
+      product_layout: "deal_cards",
+    },
+    footer: { variant: "promo_links", newsletter_position: "inline" },
+  },
+  editorial_shop: {
+    nav: { variant: "editorial_shop", density: "comfortable", show_top_bar: true },
+    home: {
+      variant: "editorial_shop",
+      hero: "brand_banners",
+      category_layout: "editorial_carousel",
+      product_layout: "editorial_cards",
+    },
+    footer: { variant: "editorial_shop", newsletter_position: "featured" },
+  },
+}
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
@@ -71,6 +187,7 @@ export function SettingsProvider({ children }) {
         contactFaqImageResponse,
         contactMapUrlResponse,
         metaPixelResponse,
+        storefrontResponse,
       ] = await Promise.allSettled([
         getPublicSettings(),
         getPublicNavTitle(),
@@ -78,6 +195,7 @@ export function SettingsProvider({ children }) {
         getPublicContactFaqImage(),
         getPublicContactMapUrl(),
         getPublicMetaPixel(),
+        getPublicStorefront(),
       ])
       const nextSettings = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -97,6 +215,9 @@ export function SettingsProvider({ children }) {
       const metaPixelId = metaPixelResponse.status === "fulfilled"
         ? normalizeMetaPixelResponse(metaPixelResponse.value)
         : nextSettings.meta_pixel_id
+      const storefront = storefrontResponse.status === "fulfilled"
+        ? normalizeStorefrontResponse(storefrontResponse.value)
+        : DEFAULT_SETTINGS.storefront
 
       setSettings({
         ...nextSettings,
@@ -107,6 +228,7 @@ export function SettingsProvider({ children }) {
         meta_pixel: metaPixelId,
         meta_pixel_id: metaPixelId,
         logo_url: generalLogo.logo_url || nextSettings.logo_url,
+        storefront: applyStorefrontPreview(storefront),
       })
     } catch (error) {
       console.error("Error loading public settings:", error)
@@ -123,6 +245,7 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     applyDocumentSettings(settings)
     applyTrackingSettings(settings)
+    applyStorefrontTheme(settings.storefront?.theme)
   }, [settings])
 
   const value = useMemo(
@@ -141,6 +264,34 @@ export function SettingsProvider({ children }) {
   )
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>
+}
+
+function getStorefrontPreviewTemplate() {
+  if (typeof window === "undefined") return ""
+
+  const { pathname, search } = window.location
+
+  if (pathname !== "/preview/ecommerce") return ""
+
+  const params = new URLSearchParams(search)
+  return params.get("template") || ""
+}
+
+function applyStorefrontPreview(storefront) {
+  const previewTemplate = getStorefrontPreviewTemplate()
+
+  if (!previewTemplate) return storefront
+
+  const visualDesign = TEMPLATE_VISUAL_DESIGN_OVERRIDES[previewTemplate] || storefront.visual_design
+
+  return {
+    ...storefront,
+    is_published: true,
+    active_template: previewTemplate,
+    home_template: previewTemplate,
+    template: previewTemplate,
+    visual_design: normalizeVisualDesign(visualDesign),
+  }
 }
 
 export function useSettings() {
@@ -270,6 +421,90 @@ function normalizeNavTitleValue(value) {
   return DEFAULT_SETTINGS.nav_title
 }
 
+function normalizeStorefrontResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const construction = data.construction && typeof data.construction === "object"
+    ? data.construction
+    : {}
+  const theme = data.theme && typeof data.theme === "object" ? data.theme : {}
+  const visualDesign = data.visual_design && typeof data.visual_design === "object"
+    ? data.visual_design
+    : {}
+
+  return {
+    ...DEFAULT_SETTINGS.storefront,
+    ...data,
+    is_published: Boolean(data.is_published),
+    construction: {
+      ...DEFAULT_SETTINGS.storefront.construction,
+      ...construction,
+      title: construction.title || data.construction_title || DEFAULT_SETTINGS.storefront.construction.title,
+      message:
+        construction.message ||
+        data.construction_message ||
+        DEFAULT_SETTINGS.storefront.construction.message,
+    },
+    home_template: data.home_template || data.template || DEFAULT_SETTINGS.storefront.home_template,
+    active_template:
+      data.active_template ||
+      data.home_template ||
+      data.template ||
+      DEFAULT_SETTINGS.storefront.active_template,
+    available_home_templates: Array.isArray(data.available_home_templates)
+      ? data.available_home_templates
+      : DEFAULT_SETTINGS.storefront.available_home_templates,
+    available_templates: Array.isArray(data.available_templates)
+      ? data.available_templates
+      : DEFAULT_SETTINGS.storefront.available_templates,
+    available_home_template_options: Array.isArray(data.available_home_template_options)
+      ? data.available_home_template_options
+      : DEFAULT_SETTINGS.storefront.available_home_template_options,
+    visual_design: normalizeVisualDesign(visualDesign),
+    theme: {
+      ...DEFAULT_SETTINGS.storefront.theme,
+      ...theme,
+      buttons: normalizeThemeButtons(theme.buttons),
+    },
+  }
+}
+
+function normalizeVisualDesign(visualDesign = {}) {
+  const defaultVisualDesign = DEFAULT_SETTINGS.storefront.visual_design
+
+  return {
+    nav: {
+      ...defaultVisualDesign.nav,
+      ...(visualDesign.nav && typeof visualDesign.nav === "object" ? visualDesign.nav : {}),
+    },
+    home: {
+      ...defaultVisualDesign.home,
+      ...(visualDesign.home && typeof visualDesign.home === "object" ? visualDesign.home : {}),
+    },
+    footer: {
+      ...defaultVisualDesign.footer,
+      ...(visualDesign.footer && typeof visualDesign.footer === "object" ? visualDesign.footer : {}),
+    },
+  }
+}
+
+function normalizeThemeButtons(buttons = {}) {
+  const defaultButtons = DEFAULT_SETTINGS.storefront.theme.buttons
+  const nextButtons = {}
+
+  Object.entries(defaultButtons).forEach(([buttonKey, defaultValue]) => {
+    const buttonValue = buttons?.[buttonKey] && typeof buttons[buttonKey] === "object"
+      ? buttons[buttonKey]
+      : {}
+
+    nextButtons[buttonKey] = {
+      ...defaultValue,
+      ...buttonValue,
+    }
+  })
+
+  return nextButtons
+}
+
 function setSettingValue(settings, key, value) {
   const parts = String(key || "").split(".").filter(Boolean)
   if (!parts.length) return settings
@@ -369,6 +604,37 @@ function applyTrackingSettings(settings) {
   }
 
   loadMetaPixel(settings.meta_pixel_id || settings.meta_pixel)
+}
+
+function applyStorefrontTheme(theme = {}) {
+  const nextTheme = {
+    ...DEFAULT_SETTINGS.storefront.theme,
+    ...(theme && typeof theme === "object" ? theme : {}),
+  }
+  const buttons = normalizeThemeButtons(nextTheme.buttons)
+  const root = document.documentElement
+
+  root.style.setProperty("--color-primary", nextTheme.primary_color)
+  root.style.setProperty("--color-secondary", nextTheme.secondary_color)
+  root.style.setProperty("--color-accent", nextTheme.accent_color)
+  root.style.setProperty("--color-warning", nextTheme.accent_color)
+  root.style.setProperty("--color-background", nextTheme.background_color)
+  root.style.setProperty("--color-surface", nextTheme.surface_color)
+  root.style.setProperty("--color-card", nextTheme.surface_color)
+  root.style.setProperty("--color-text-primary", nextTheme.text_color)
+  root.style.setProperty("--color-price", nextTheme.text_color)
+  root.style.setProperty("--color-text-secondary", nextTheme.muted_text_color)
+  root.style.setProperty("--color-text-muted", nextTheme.muted_text_color)
+  root.style.setProperty("--color-text-inverse", nextTheme.button_text_color)
+
+  Object.entries(buttons).forEach(([buttonKey, buttonTheme]) => {
+    root.style.setProperty(`--button-${buttonKey}-bg`, buttonTheme.background_color)
+    root.style.setProperty(`--button-${buttonKey}-text`, buttonTheme.text_color)
+    root.style.setProperty(`--button-${buttonKey}-border`, buttonTheme.border_color)
+    root.style.setProperty(`--button-${buttonKey}-hover-bg`, buttonTheme.hover_background_color)
+    root.style.setProperty(`--button-${buttonKey}-hover-text`, buttonTheme.hover_text_color)
+    root.style.setProperty(`--button-${buttonKey}-hover-border`, buttonTheme.hover_border_color)
+  })
 }
 
 function removeManagedTrackingNodes() {

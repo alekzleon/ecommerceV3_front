@@ -7,9 +7,11 @@ import {
   getAdminMetaPixel,
   getAdminSaleNotificationSettings,
   getAdminSettings,
+  getAdminStorefront,
   updateAdminAbandonedCartSettings,
   updateAdminMetaPixel,
   updateAdminSaleNotificationSettings,
+  updateAdminStorefront,
 } from "../../../services/api/settingsService"
 import {
   createAdminContactFaq,
@@ -65,6 +67,23 @@ const EMPTY_FORM = {
     admin_email: "",
     admin_whatsapp: "",
   },
+  storefront: {
+    is_published: false,
+    construction_title: "Ecommerce en construcción",
+    construction_message: "Estamos preparando la tienda. Vuelve pronto.",
+    template: "classic",
+    available_home_templates: ["classic"],
+    theme: {
+      primary_color: "#111827",
+      secondary_color: "#2563eb",
+      accent_color: "#f59e0b",
+      background_color: "#ffffff",
+      surface_color: "#f8fafc",
+      text_color: "#111827",
+      muted_text_color: "#64748b",
+      button_text_color: "#ffffff",
+    },
+  },
   logo: null,
   logo_url: "",
   favicon: null,
@@ -87,6 +106,12 @@ const SECTIONS = [
     icon: "bi-shop-window",
     title: "Identidad del sitio",
     description: "Nombre, logo, favicon e imagen para compartir.",
+  },
+  {
+    id: "storefront",
+    icon: "bi-broadcast",
+    title: "Publicación",
+    description: "Estado público y mensaje visible cuando la tienda está en construcción.",
   },
   {
     id: "contact",
@@ -158,7 +183,13 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const canSubmitSection = !["contact_faqs", "envios"].includes(activeSection)
-  const canDeleteSettings = !["contact_faqs", "abandoned_cart", "sale_notifications", "envios"].includes(activeSection)
+  const canDeleteSettings = ![
+    "contact_faqs",
+    "storefront",
+    "abandoned_cart",
+    "sale_notifications",
+    "envios",
+  ].includes(activeSection)
 
   const activeSectionMeta = useMemo(() => {
     return SECTIONS.find((section) => section.id === activeSection) || SECTIONS[0]
@@ -171,11 +202,18 @@ function SettingsPage() {
   async function loadSettings() {
     try {
       setLoading(true)
-      const [settingsResponse, metaPixelResponse, abandonedCartResponse, saleNotificationsResponse] = await Promise.allSettled([
+      const [
+        settingsResponse,
+        metaPixelResponse,
+        abandonedCartResponse,
+        saleNotificationsResponse,
+        storefrontResponse,
+      ] = await Promise.allSettled([
         getAdminSettings(),
         getAdminMetaPixel(),
         getAdminAbandonedCartSettings(),
         getAdminSaleNotificationSettings(),
+        getAdminStorefront(),
       ])
       const data = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -189,12 +227,16 @@ function SettingsPage() {
       const saleNotifications = saleNotificationsResponse.status === "fulfilled"
         ? normalizeSaleNotificationResponse(saleNotificationsResponse.value)
         : EMPTY_FORM.sale_notifications
+      const storefront = storefrontResponse.status === "fulfilled"
+        ? normalizeStorefrontResponse(storefrontResponse.value)
+        : EMPTY_FORM.storefront
 
       setForm(mapSettingsToForm({
         ...data,
         meta_pixel_id: metaPixelId,
         abandoned_cart: abandonedCart,
         sale_notifications: saleNotifications,
+        storefront,
       }))
     } catch (error) {
       console.error("Error al cargar configuración:", error)
@@ -280,6 +322,33 @@ function SettingsPage() {
       return
     }
 
+    if (name.startsWith("storefront.theme.")) {
+      const key = name.replace("storefront.theme.", "")
+      setForm((prev) => ({
+        ...prev,
+        storefront: {
+          ...prev.storefront,
+          theme: {
+            ...prev.storefront.theme,
+            [key]: value,
+          },
+        },
+      }))
+      return
+    }
+
+    if (name.startsWith("storefront.")) {
+      const key = name.replace("storefront.", "")
+      setForm((prev) => ({
+        ...prev,
+        storefront: {
+          ...prev.storefront,
+          [key]: type === "checkbox" ? checked : value,
+        },
+      }))
+      return
+    }
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -344,6 +413,25 @@ function SettingsPage() {
           sale_notifications: normalizeSaleNotificationResponse(response),
         }))
         notifySuccess("Configuración de notificaciones guardada correctamente.")
+        return
+      }
+
+      if (activeSection === "storefront") {
+        const payload = buildStorefrontPublicationPayload(form.storefront)
+        const validationMessage = validateStorefrontPublicationPayload(payload)
+
+        if (validationMessage) {
+          notifyWarning(validationMessage)
+          return
+        }
+
+        const response = await updateAdminStorefront(payload)
+        setForm((prev) => ({
+          ...prev,
+          storefront: normalizeStorefrontResponse(response),
+        }))
+        refreshSettings()
+        notifySuccess("Storefront guardado correctamente.")
         return
       }
 
@@ -452,6 +540,10 @@ function SettingsPage() {
                 <IdentitySection form={form} onChange={handleFieldChange} />
               ) : null}
 
+              {activeSection === "storefront" ? (
+                <StorefrontSection form={form} onChange={handleFieldChange} />
+              ) : null}
+
               {activeSection === "contact" ? (
                 <ContactSection
                   form={form}
@@ -551,6 +643,49 @@ function IdentitySection({ form, onChange }) {
           onChange={onChange}
           compact
         />
+      </div>
+    </section>
+  )
+}
+
+function StorefrontSection({ form, onChange }) {
+  const settings = form.storefront || EMPTY_FORM.storefront
+
+  return (
+    <section className="settings-page__section">
+      <div className="settings-storefront__status">
+        <ToggleField
+          label={settings.is_published ? "Ecommerce publicado" : "Ecommerce en construcción"}
+          name="storefront.is_published"
+          checked={settings.is_published}
+          onChange={onChange}
+          helpText="Cuando está apagado, la home pública muestra el mensaje de construcción."
+        />
+      </div>
+
+      <div className="settings-page__grid settings-page__grid--two">
+        <Field
+          label="Título de construcción"
+          name="storefront.construction_title"
+          value={settings.construction_title}
+          onChange={onChange}
+          placeholder="Ecommerce en construcción"
+        />
+
+        <label className="settings-page__field">
+          <span>Mensaje de construcción</span>
+          <textarea
+            name="storefront.construction_message"
+            value={settings.construction_message}
+            onChange={onChange}
+            placeholder="Estamos preparando la tienda. Vuelve pronto."
+          />
+        </label>
+      </div>
+
+      <div className="settings-storefront__note">
+        <i className="bi bi-palette" aria-hidden="true" />
+        <span>La plantilla y los colores ahora se administran desde Diseña tu ecommerce.</span>
       </div>
     </section>
   )
@@ -1336,6 +1471,7 @@ function mapSettingsToForm(settings) {
     },
     abandoned_cart: normalizeAbandonedCartValue(settings.abandoned_cart),
     sale_notifications: normalizeSaleNotificationValue(settings.sale_notifications),
+    storefront: normalizeStorefrontValue(settings.storefront),
     logo: null,
     logo_url: normalizeMediaUrl(settings.logo_url || settings.logo_path),
     favicon: null,
@@ -1369,6 +1505,13 @@ function normalizeSaleNotificationResponse(response) {
   return normalizeSaleNotificationValue(value)
 }
 
+function normalizeStorefrontResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return normalizeStorefrontValue(value)
+}
+
 function normalizeAbandonedCartValue(value = {}) {
   return {
     enabled: booleanOrDefault(value.enabled, EMPTY_FORM.abandoned_cart.enabled),
@@ -1387,6 +1530,34 @@ function normalizeSaleNotificationValue(value = {}) {
     send_whatsapp: booleanOrDefault(value.send_whatsapp, EMPTY_FORM.sale_notifications.send_whatsapp),
     admin_email: value.admin_email || EMPTY_FORM.sale_notifications.admin_email,
     admin_whatsapp: value.admin_whatsapp || EMPTY_FORM.sale_notifications.admin_whatsapp,
+  }
+}
+
+function normalizeStorefrontValue(value = {}) {
+  const construction = value.construction && typeof value.construction === "object"
+    ? value.construction
+    : {}
+  const theme = value.theme && typeof value.theme === "object" ? value.theme : {}
+
+  return {
+    ...EMPTY_FORM.storefront,
+    is_published: booleanOrDefault(value.is_published, EMPTY_FORM.storefront.is_published),
+    construction_title:
+      value.construction_title ||
+      construction.title ||
+      EMPTY_FORM.storefront.construction_title,
+    construction_message:
+      value.construction_message ||
+      construction.message ||
+      EMPTY_FORM.storefront.construction_message,
+    template: value.template || value.home_template || EMPTY_FORM.storefront.template,
+    available_home_templates: Array.isArray(value.available_home_templates)
+      ? value.available_home_templates
+      : EMPTY_FORM.storefront.available_home_templates,
+    theme: {
+      ...EMPTY_FORM.storefront.theme,
+      ...theme,
+    },
   }
 }
 
@@ -1419,6 +1590,14 @@ function buildSaleNotificationPayload(settings) {
   }
 }
 
+function buildStorefrontPublicationPayload(settings) {
+  return {
+    is_published: Boolean(settings.is_published),
+    construction_title: nullableValue(settings.construction_title),
+    construction_message: nullableValue(settings.construction_message),
+  }
+}
+
 function validateAbandonedCartPayload(payload) {
   if (!Number.isInteger(payload.abandon_after_minutes)) {
     return "Los minutos de abandono deben ser un número entero."
@@ -1434,6 +1613,18 @@ function validateAbandonedCartPayload(payload) {
 
   if (payload.recovery_link_expires_hours < 1 || payload.recovery_link_expires_hours > 720) {
     return "Las horas de vigencia deben estar entre 1 y 720."
+  }
+
+  return ""
+}
+
+function validateStorefrontPublicationPayload(payload) {
+  if (!payload.construction_title) {
+    return "Escribe el título de construcción."
+  }
+
+  if (!payload.construction_message) {
+    return "Escribe el mensaje de construcción."
   }
 
   return ""

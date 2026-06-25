@@ -45,6 +45,10 @@ function Footer() {
     ? settings.contact_numbers.filter(Boolean)
     : []
   const socialLinks = settings.social_links || {}
+  const footerDesign = settings.storefront?.visual_design?.footer || {}
+  const footerVariant = footerDesign.variant || "classic"
+  const newsletterPosition = footerDesign.newsletter_position || "inline"
+  const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
   const canEditHomeBenefits =
     isAuthenticated && isInternal && hasModule(modules, "configuracion_ecommerce")
 
@@ -111,25 +115,30 @@ function Footer() {
   }
 
   return (
-    <footer className="new_footer_area bg_color">
-      <section className="footer_benefits" aria-label="Beneficios de compra">
-        <div className="footer_container">
-          <div className="footer_benefits_grid">
-            {homeBenefitsLoading
-              ? DEFAULT_HOME_BENEFITS.map((benefit) => (
-                  <HomeBenefitSkeleton key={benefit.benefit} />
-                ))
-              : homeBenefits.map((benefit) => (
-                  <HomeBenefitCard
-                    key={benefit.benefit}
-                    benefit={benefit}
-                    canEdit={canEditHomeBenefits}
-                    onSave={handleSaveHomeBenefit}
-                  />
-                ))}
-          </div>
-        </div>
-      </section>
+    <footer className={`new_footer_area bg_color footer--${footerVariant} footer--newsletter-${newsletterPosition}`}>
+      {isEditorialShop ? (
+        <>
+          <HomeBenefitsSection
+            loading={homeBenefitsLoading}
+            benefits={homeBenefits}
+            canEdit={canEditHomeBenefits}
+            onSave={handleSaveHomeBenefit}
+          />
+          <EditorialShopFooter
+            socialLinks={socialLinks}
+            submittingLead={submittingLead}
+            leadStatus={leadStatus}
+            onLeadSubmit={handleLeadSubmit}
+          />
+        </>
+      ) : (
+        <>
+          <HomeBenefitsSection
+            loading={homeBenefitsLoading}
+            benefits={homeBenefits}
+            canEdit={canEditHomeBenefits}
+            onSave={handleSaveHomeBenefit}
+          />
 
       <div className="new_footer_top">
         <div className="footer_container">
@@ -300,17 +309,18 @@ function Footer() {
           </div>
         </div>
 
-        <div className="footer_bg">
-          <div className="footer_bg_two"></div>
-        </div>
       </div>
+        </>
+      )}
 
       <div className="footer_bottom">
         <div className="footer_container">
-          <div className="footer_bottom_row">
-            <div className="footer_bottom_left">
-              <p className="mb-0 f_400">todos los derechos reservados de {brandName}</p>
-            </div>
+          <div className={`footer_bottom_row ${isEditorialShop ? "footer_bottom_row--editorial" : ""}`}>
+            {!isEditorialShop ? (
+              <div className="footer_bottom_left">
+                <p className="mb-0 f_400">todos los derechos reservados de {brandName}</p>
+              </div>
+            ) : null}
 
             <div className="footer_bottom_right">
               <p>
@@ -329,6 +339,89 @@ function Footer() {
         </div>
       </div>
     </footer>
+  )
+}
+
+function HomeBenefitsSection({ loading, benefits, canEdit, onSave }) {
+  return (
+    <section className="footer_benefits" aria-label="Beneficios de compra">
+      <div className="footer_container">
+        <div className="footer_benefits_grid">
+          {loading
+            ? DEFAULT_HOME_BENEFITS.map((benefit) => (
+                <HomeBenefitSkeleton key={benefit.benefit} />
+              ))
+            : benefits.map((benefit) => (
+                <HomeBenefitCard
+                  key={benefit.benefit}
+                  benefit={benefit}
+                  canEdit={canEdit}
+                  onSave={onSave}
+                />
+              ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EditorialShopFooter({
+  socialLinks,
+  submittingLead,
+  leadStatus,
+  onLeadSubmit,
+}) {
+  return (
+    <section className="editorial-footer">
+      <div className="editorial-footer__newsletter">
+        <h2>Regístrate</h2>
+        <p>Recibe promociones, novedades y beneficios exclusivos directamente en tu correo.</p>
+        <form onSubmit={onLeadSubmit}>
+          <input type="text" name="name" placeholder="Nombre" autoComplete="name" required />
+          <input type="email" name="email" placeholder="Email" autoComplete="email" required />
+          {leadStatus ? (
+            <p className={`footer_form_status footer_form_status--${leadStatus.type}`}>
+              {leadStatus.message}
+            </p>
+          ) : null}
+          <button type="submit" disabled={submittingLead}>
+            {submittingLead ? "Enviando..." : "Enviar"}
+          </button>
+        </form>
+      </div>
+
+      <div className="editorial-footer__links">
+        <div>
+          <h3>Legal</h3>
+          <a href="/aviso-privacidad">Aviso de privacidad</a>
+          <a href="/terminos-y-condiciones">Términos y condiciones</a>
+          <a href="/contacto">Contacto</a>
+        </div>
+        <div>
+          <h3>Nuestras redes</h3>
+          <div className="editorial-footer__socials">
+            {socialLinks.instagram ? <a href={socialLinks.instagram} target="_blank" rel="noreferrer"><i className="bi bi-instagram" /></a> : null}
+            {socialLinks.facebook ? <a href={socialLinks.facebook} target="_blank" rel="noreferrer"><i className="bi bi-facebook" /></a> : null}
+            {socialLinks.tiktok ? <a href={socialLinks.tiktok} target="_blank" rel="noreferrer"><i className="bi bi-tiktok" /></a> : null}
+            {!socialLinks.instagram && !socialLinks.facebook && !socialLinks.tiktok ? (
+              <>
+                <a href="/contacto"><i className="bi bi-pinterest" /></a>
+                <a href="/contacto"><i className="bi bi-facebook" /></a>
+                <a href="/contacto"><i className="bi bi-instagram" /></a>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="editorial-footer__top"
+        aria-label="Volver arriba"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      >
+        ↑
+      </button>
+    </section>
   )
 }
 

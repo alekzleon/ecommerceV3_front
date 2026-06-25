@@ -5,6 +5,7 @@ import "./AdminSidebar.css"
 function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
   const { brandName, logoUrl } = useSettings()
   const brandInitial = brandName?.charAt(0)?.toUpperCase() || "T"
+  const visibleMenu = addDesignMenuItem(menu)
 
   return (
     <aside className={`admin-sidebar ${isOpen ? "admin-sidebar--open" : ""}`}>
@@ -31,12 +32,12 @@ function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
       </div>
 
       <nav className="admin-sidebar__nav">
-        {menu.length === 0 ? (
+        {visibleMenu.length === 0 ? (
           <div className="admin-sidebar__empty">
             <p>No hay módulos visibles para este usuario.</p>
           </div>
         ) : (
-          menu.map((group) => (
+          visibleMenu.map((group) => (
             <section className="admin-sidebar__group" key={group.group_key}>
               <div className="admin-sidebar__group-title">
                 <span>{group.group_name}</span>
@@ -90,6 +91,35 @@ function SidebarGroupLinks({ group, onClose }) {
   )
 }
 
+function addDesignMenuItem(menu) {
+  return menu.map((group) => {
+    const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
+    const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
+
+    if (!hasSettings || hasDesign) return group
+
+    const items = []
+
+    group.items.forEach((item) => {
+      items.push(item)
+
+      if (item.name === "configuracion_ecommerce") {
+        items.push({
+          ...item,
+          name: "disena_ecommerce",
+          display_name: "Diseña tu ecommerce",
+          front_path: "/admin/design",
+        })
+      }
+    })
+
+    return {
+      ...group,
+      items,
+    }
+  })
+}
+
 function renderSidebarIcon(moduleName) {
   const icons = {
     dashboard: "bi-house-door-fill",
@@ -119,6 +149,8 @@ function renderSidebarIcon(moduleName) {
     logs: "bi-list-check",
     sincronizacion: "bi-arrow-repeat",
     configuracion_ecommerce: "bi-gear-fill",
+    disena_ecommerce: "bi-palette-fill",
+    design: "bi-palette-fill",
     settings: "bi-gear-fill",
     notificaciones: "bi-bell-fill",
     notifications: "bi-bell-fill",

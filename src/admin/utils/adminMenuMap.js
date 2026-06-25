@@ -119,6 +119,12 @@ const adminMenuMap = [
     title: "Configuración",
     subtitle: "Ajustes generales del ecommerce.",
   },
+  {
+    module: "disena_ecommerce",
+    path: "/admin/design",
+    title: "Diseña tu ecommerce",
+    subtitle: "Plantilla, theme y vista previa del storefront.",
+  },
 ]
 
 export default adminMenuMap

@@ -143,7 +143,8 @@
 }
 
 .settings-page__field input,
-.settings-page__field textarea {
+.settings-page__field textarea,
+.settings-page__field select {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
@@ -155,7 +156,8 @@
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.settings-page__field input {
+.settings-page__field input,
+.settings-page__field select {
   min-height: 42px;
 }
 
@@ -165,7 +167,8 @@
 }
 
 .settings-page__field input:focus,
-.settings-page__field textarea:focus {
+.settings-page__field textarea:focus,
+.settings-page__field select:focus {
   border-color: #13426b;
   box-shadow: 0 0 0 3px rgba(19, 66, 107, 0.12);
 }
@@ -311,6 +314,79 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1rem;
+}
+
+.settings-storefront__status {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) minmax(220px, 0.55fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.settings-storefront__theme {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.settings-storefront__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: fit-content;
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 0.75rem 0.85rem;
+}
+
+.settings-storefront__color {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 0.8rem;
+}
+
+.settings-storefront__color span {
+  color: #111827;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.settings-storefront__color-control {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.settings-storefront__color-control input[type="color"] {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0.18rem;
+  cursor: pointer;
+}
+
+.settings-storefront__color-control input[type="text"] {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #111827;
+  font-size: 0.86rem;
+  font-weight: 800;
+  outline: none;
+  padding: 0 0.65rem;
 }
 
 .settings-shipping__grid {
@@ -571,6 +647,8 @@
   .settings-page__loyalty-grid,
   .settings-page__abandoned-grid,
   .settings-page__notifications-grid,
+  .settings-storefront__status,
+  .settings-storefront__theme,
   .settings-shipping__grid {
     grid-template-columns: 1fr;
   }

@@ -56,6 +56,16 @@ export async function getPublicHomeBenefit(benefitId) {
   return data
 }
 
+export async function getPublicStorefront() {
+  const { data } = await api.get("/storefront")
+  return data
+}
+
+export async function getPublicHome() {
+  const { data } = await api.get("/home")
+  return data
+}
+
 export async function getAdminSettings() {
   const { data } = await api.get("/admin/settings")
   return data
@@ -103,6 +113,11 @@ export async function getAdminHomeBenefits() {
 
 export async function getAdminHomeBenefit(benefitId) {
   const { data } = await api.get(`/admin/ecommerce-settings/home-benefits/${benefitId}`)
+  return data
+}
+
+export async function getAdminStorefront() {
+  const { data } = await api.get("/admin/ecommerce-settings/storefront")
   return data
 }
 
@@ -182,6 +197,12 @@ export async function updateAdminHomeBenefit(benefitId, payload, options = {}) {
     payload,
     multipartConfig(payload)
   )
+  return data
+}
+
+export async function updateAdminStorefront(payload, options = {}) {
+  const method = options.replace ? "put" : "patch"
+  const { data } = await api[method]("/admin/ecommerce-settings/storefront", payload)
   return data
 }
 

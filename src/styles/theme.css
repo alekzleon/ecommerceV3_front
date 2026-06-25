@@ -32,15 +32,22 @@ img {
   height: var(--height-button);
   border-radius: var(--radius-md);
   padding: 0 20px;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
 }
 
 /* PRIMARY BUTTON */
 
 .button-primary {
-  background: var(--color-primary);
-  color: white;
+  background: var(--button-primary-bg, var(--color-primary));
+  color: var(--button-primary-text, var(--color-text-inverse));
+  border-color: var(--button-primary-border, var(--color-primary));
+}
+
+.button-primary:hover {
+  background: var(--button-primary-hover-bg, var(--color-secondary));
+  color: var(--button-primary-hover-text, var(--color-text-inverse));
+  border-color: var(--button-primary-hover-border, var(--color-secondary));
 }
 
 /* INPUT BASE */

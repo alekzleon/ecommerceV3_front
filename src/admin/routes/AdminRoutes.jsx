@@ -17,6 +17,7 @@ import OrdersPage from "../pages/OrdersPage/OrdersPage"
 import AdminForbiddenPage from "../pages/AdminForbiddenPage/AdminForbiddenPage"
 import LogsPage from "../pages/LogsPage/LogsPage"
 import SettingsPage from "../pages/SettingsPage/SettingsPage"
+import DesignEcommercePage from "../pages/DesignEcommercePage/DesignEcommercePage"
 import CreditPage from "../pages/CreditPage/CreditPage"
 import CollectionsPage from "../pages/CollectionsPage/CollectionsPage"
 import SyncPage from "../pages/SyncPage/SyncPage"
@@ -71,6 +72,10 @@ function AdminRoutes({
           <Route path="/logs" element={withModule(currentUser, "logs", <LogsPage />)} />
           <Route path="/sync" element={withModule(currentUser, "sincronizacion", <SyncPage />)} />
           <Route path="/settings" element={withModule(currentUser, "configuracion_ecommerce", <SettingsPage />)} />
+          <Route
+            path="/design"
+            element={withModule(currentUser, "configuracion_ecommerce", <DesignEcommercePage />)}
+          />
           <Route path="/forbidden" element={<AdminForbiddenPage />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>

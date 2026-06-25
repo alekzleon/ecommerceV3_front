@@ -42,6 +42,11 @@ function Header() {
   const profileName = user?.name ? user.name.toUpperCase() : ""
   const avatarLetter = user?.name ? user.name.charAt(0).toUpperCase() : ""
   const navTitle = settings.nav_title?.title || DEFAULT_NAV_TAGLINE
+  const navDesign = settings.storefront?.visual_design?.nav || {}
+  const navVariant = navDesign.variant || "classic"
+  const navDensity = navDesign.density || "comfortable"
+  const showTopBar = navDesign.show_top_bar !== false
+  const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
   const canEditNavTitle = isAuthenticated && isInternal && hasModule(modules, "configuracion_ecommerce")
   const canEditGeneralLogo = canEditNavTitle
   const visibleLogoUrl = logoPreviewUrl || logoUrl
@@ -189,8 +194,31 @@ function Header() {
     setIsMobileMenuOpen(false)
   }
 
+  if (isEditorialShop) {
+    return (
+      <EditorialShopHeader
+        brandName={brandName}
+        logoUrl={visibleLogoUrl}
+        cartSummary={cartSummary}
+        isAuthenticated={isAuthenticated}
+        displayName={displayName}
+        categories={categories}
+        categoriesLoading={categoriesLoading}
+        onCategoryClick={handleCategoryClick}
+        onLogout={handleLogout}
+        navTitle={navTitle}
+        canEditNavTitle={canEditNavTitle}
+        onNavTitleSaved={(value) => updateLocalSetting("nav_title.title", value)}
+        contactNumbers={Array.isArray(settings.contact_numbers) ? settings.contact_numbers.filter(Boolean) : []}
+        email={settings.email}
+        socialLinks={settings.social_links || {}}
+      />
+    )
+  }
+
   return (
-    <header className="header">
+    <header className={`header header--${navVariant} header--density-${navDensity}`}>
+      {showTopBar ? <div className="header-visual-topbar" /> : null}
       <div className="header-top container-main">
         <div className="header-logo">
           {settingsLoading ? (
@@ -435,11 +463,250 @@ function Header() {
 
 export default Header
 
+function EditorialShopHeader({
+  brandName,
+  logoUrl,
+  cartSummary,
+  isAuthenticated,
+  displayName,
+  categories,
+  categoriesLoading,
+  onCategoryClick,
+  onLogout,
+  navTitle,
+  canEditNavTitle,
+  onNavTitleSaved,
+  contactNumbers,
+  email,
+  socialLinks,
+}) {
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [categoriesOpen, setCategoriesOpen] = useState(false)
+  const [adminOpen, setAdminOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const navigate = useNavigate()
+  const categoryColumns = chunkItems(categories, 5)
+  const closeEditorialMenu = () => {
+    setMobileMenuOpen(false)
+    setCategoriesOpen(false)
+    setAdminOpen(false)
+  }
+
+  return (
+    <>
+      <header className={`editorial-nav ${mobileMenuOpen ? "is-mobile-open" : ""}`}>
+        <div className="editorial-nav__announcement">
+          <span>{buildEditorialContactText(contactNumbers, email)}</span>
+          <span className="editorial-nav__announcement-socials">
+            {socialLinks?.facebook ? (
+              <a href={socialLinks.facebook} target="_blank" rel="noreferrer" aria-label="Facebook">
+                <i className="bi bi-facebook" />
+              </a>
+            ) : null}
+            {socialLinks?.instagram ? (
+              <a href={socialLinks.instagram} target="_blank" rel="noreferrer" aria-label="Instagram">
+                <i className="bi bi-instagram" />
+              </a>
+            ) : null}
+            {socialLinks?.tiktok ? (
+              <a href={socialLinks.tiktok} target="_blank" rel="noreferrer" aria-label="TikTok">
+                <i className="bi bi-tiktok" />
+              </a>
+            ) : null}
+          </span>
+        </div>
+
+        <div className="editorial-nav__social">
+          <span><i className="bi bi-instagram" /> 100k Followers</span>
+          <span><i className="bi bi-facebook" /> 300k Followers</span>
+          <div className="editorial-nav__tagline">
+            <InlineSettingEditor
+              settingKey="nav_title.title"
+              value={navTitle}
+              canEdit={canEditNavTitle}
+              onSaved={onNavTitleSaved}
+              className="inline-setting-editor--wrap"
+              inputLabel="Editar mensaje del nav"
+              allowEmpty
+            />
+          </div>
+        </div>
+
+        <div className="editorial-nav__main">
+          <button
+            type="button"
+            className={`editorial-nav__mobile-toggle ${mobileMenuOpen ? "is-open" : ""}`}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Abrir menú"
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+
+          <nav className="editorial-nav__links">
+            <Link to="/" onClick={closeEditorialMenu}>Inicio</Link>
+            <div
+              className={`editorial-nav__dropdown ${categoriesOpen ? "is-open" : ""}`}
+              onMouseEnter={() => setCategoriesOpen(true)}
+              onMouseLeave={() => setCategoriesOpen(false)}
+            >
+              <button
+                type="button"
+                className="editorial-nav__dropdown-toggle"
+                onClick={() => setCategoriesOpen((prev) => !prev)}
+              >
+                <span>Categorías</span>
+                <i className="bi bi-chevron-down" aria-hidden="true" />
+              </button>
+              <div className="editorial-nav__dropdown-menu editorial-nav__dropdown-menu--mega">
+                {categoriesLoading ? (
+                  <span>Cargando categorías...</span>
+                ) : categories.length ? (
+                  categoryColumns.map((column, columnIndex) => (
+                    <div className="editorial-nav__mega-column" key={`category-column-${columnIndex}`}>
+                      {column.map((category) => (
+                        <button
+                          key={category.id || category.slug}
+                          type="button"
+                          onClick={() => {
+                            closeEditorialMenu()
+                            onCategoryClick(category.slug)
+                          }}
+                        >
+                          {category.name}
+                        </button>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  <span>Sin categorías disponibles</span>
+                )}
+              </div>
+            </div>
+            <Link to="/productos" onClick={closeEditorialMenu}>Productos</Link>
+            <Link to="/ofertas" onClick={closeEditorialMenu}>Ofertas</Link>
+            {isAuthenticated ? (
+              <div
+                className={`editorial-nav__dropdown ${adminOpen ? "is-open" : ""}`}
+                onMouseEnter={() => setAdminOpen(true)}
+              onMouseLeave={() => setAdminOpen(false)}
+            >
+                <button
+                  type="button"
+                  className="editorial-nav__dropdown-toggle"
+                  onClick={() => setAdminOpen((prev) => !prev)}
+                >
+                  <span>{displayName || "Mi perfil"}</span>
+                  <i className="bi bi-chevron-down" aria-hidden="true" />
+                </button>
+                <div className="editorial-nav__dropdown-menu editorial-nav__dropdown-menu--simple editorial-nav__user-menu">
+                  <Link
+                    to="/mi-cuenta"
+                    onClick={closeEditorialMenu}
+                  >
+                    Mi perfil
+                  </Link>
+                  <Link to="/listas" onClick={closeEditorialMenu}>Mis listas</Link>
+                  <Link to="/mi-cuenta/pedidos" onClick={closeEditorialMenu}>Mis pedidos</Link>
+                  <button
+                    type="button"
+                    className="editorial-nav__logout"
+                    onClick={() => {
+                      closeEditorialMenu()
+                      onLogout()
+                    }}
+                  >
+                    Cerrar sesión
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link to="/login" onClick={closeEditorialMenu}>Ingresar</Link>
+            )}
+          </nav>
+
+          <Link to="/" className="editorial-nav__logo">
+            {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+          </Link>
+
+          <div className="editorial-nav__actions">
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Buscar">
+              <i className="bi bi-search" />
+            </button>
+            <Link to="/favoritos" aria-label="Favoritos" title="Favoritos">
+              <i className="bi bi-heart" />
+            </Link>
+            <Link to="/contacto" aria-label="Contacto" title="Contacto">
+              <i className="bi bi-chat-dots" />
+            </Link>
+            <Link to="/carrito" aria-label="Carrito" className="editorial-nav__cart">
+              <i className="bi bi-bag" />
+              {cartSummary.items_count > 0 ? <span>{cartSummary.items_count}</span> : null}
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {searchOpen ? (
+        <div className="editorial-search">
+          <div className="editorial-search__bar">
+            <Link to="/" className="editorial-search__logo" onClick={() => setSearchOpen(false)}>
+              {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+            </Link>
+
+            <div className="editorial-search__searchbar">
+              <SearchBar
+                onNavigate={() => setSearchOpen(false)}
+                onSearchSubmit={(value) => {
+                  setSearchOpen(false)
+                  navigate(`/productos?search=${encodeURIComponent(value)}`)
+                }}
+              />
+            </div>
+
+            <div className="editorial-search__actions">
+              <Link to={isAuthenticated ? "/mi-cuenta" : "/login"}><i className="bi bi-person" /></Link>
+              <Link to="/favoritos"><i className="bi bi-heart" /></Link>
+              <Link to="/carrito"><i className="bi bi-bag" /></Link>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="editorial-search__backdrop"
+            aria-label="Cerrar búsqueda"
+            onClick={() => setSearchOpen(false)}
+          />
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 function hasModule(modules = [], moduleName) {
   return Array.isArray(modules) && modules.some((module) => {
     if (typeof module === "string") return module === moduleName
     return module?.name === moduleName || module?.module === moduleName
   })
+}
+
+function chunkItems(items = [], size = 5) {
+  const chunks = []
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+
+  return chunks
+}
+
+function buildEditorialContactText(contactNumbers = [], email = "") {
+  const phone = contactNumbers[0] || ""
+  const mail = email || ""
+
+  if (phone && mail) return `${phone} | ${mail}`
+  return phone || mail || "Contáctanos"
 }
 
 function normalizeTaxBreakdown(taxBreakdown) {

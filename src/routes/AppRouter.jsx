@@ -113,6 +113,7 @@ function AppRouter() {
         {/* Layout público principal */}
         <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
+          <Route path="preview/ecommerce" element={<HomePage />} />
           <Route path="productos" element={<ProductsPage />} />
           <Route path="producto/:slug" element={<ProductDetailPage />} />
           <Route path="ofertas" element={<OffersPage />} />
@@ -208,6 +209,7 @@ const ADMIN_ROUTE_NAME_PATHS = {
   "admin.marketing.index": "/admin/marketing",
   "admin.sync.index": "/admin/sync",
   "admin.settings.index": "/admin/settings",
+  "admin.design.index": "/admin/design",
   "admin.notifications.index": "/admin/settings",
   "admin.users.index": "/admin/users",
   "admin.roles.index": "/admin/roles",
@@ -252,6 +254,8 @@ const ADMIN_MODULE_NAME_PATHS = {
   sincronizacion: "/admin/sync",
   sync: "/admin/sync",
   configuracion_ecommerce: "/admin/settings",
+  disena_ecommerce: "/admin/design",
+  design: "/admin/design",
   settings: "/admin/settings",
   notificaciones: "/admin/settings",
   notifications: "/admin/settings",

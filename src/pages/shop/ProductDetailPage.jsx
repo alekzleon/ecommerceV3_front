@@ -4,6 +4,7 @@ import { getProductDetail } from "../../services/api/productService"
 import { addCartItem } from "../../services/api/cartService"
 import { toggleAccountFavorite } from "../../services/api/accountService"
 import { useAuth } from "../../context/AuthContext"
+import { useSettings } from "../../context/SettingsContext"
 import { notifySuccess, notifyError } from "../../utils/toast"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
 import { trackMetaAddToCart, trackMetaViewContent } from "../../utils/metaPixel"
@@ -17,6 +18,7 @@ function ProductDetailPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
   const { isAuthenticated, sessionReady } = useAuth()
+  const { settings } = useSettings()
 
   const [productData, setProductData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -157,6 +159,7 @@ function ProductDetailPage() {
     !hasVariantAttributes ||
     product.variantOptions.every((option) => selectedAttributeValueIds[option.attribute.id])
   const missingVariantSelection = hasVariantAttributes && !hasSelectedAllVariantAttributes
+  const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -470,6 +473,259 @@ function ProductDetailPage() {
         title: product.name,
       }
     : product.mediaItems[activeMediaIndex] || product.mediaItems[0]
+  const promotionMessages = buildPromotionMessages(product.activePromotions)
+
+  if (isEditorialShop) {
+    return (
+      <section className="product-detail-page product-detail-page--editorial">
+        {promotionMessages.length ? (
+          <div className="editorial-product-promo-marquee" aria-label="Promociones del producto">
+            <div>
+              {Array.from({ length: 6 }).flatMap((_, groupIndex) =>
+                promotionMessages.map((message, index) => (
+                  <span key={`${groupIndex}-${index}`}>
+                    {message}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="editorial-product-show container-main">
+          <div className="editorial-product-show__gallery">
+            <button
+              type="button"
+              className="editorial-product-show__main-media"
+              onClick={() => openLightbox(activeMediaIndex)}
+              aria-label="Ver imagen completa"
+            >
+              {activeMedia?.type === "video" ? (
+                <video src={activeMedia.url} controls />
+              ) : (
+                <img src={activeMedia?.url || product.image} alt={product.name} />
+              )}
+            </button>
+
+            {product.mediaItems.length > 1 ? (
+              <div className="editorial-product-show__thumbs">
+                {product.mediaItems.map((media, index) => (
+                  <button
+                    key={media.id}
+                    type="button"
+                    className={`editorial-product-show__thumb ${activeMediaIndex === index ? "is-active" : ""}`}
+                    onClick={() => handleMediaSelect(index)}
+                  >
+                    {media.type === "video" ? (
+                      <video src={media.url} muted />
+                    ) : (
+                      <img src={media.url} alt={`${product.name} ${index + 1}`} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="editorial-product-show__info">
+            <div className="editorial-product-show__title-row">
+              <h1>{product.name}</h1>
+              <button
+                type="button"
+                className={`editorial-product-show__favorite ${isFavorite ? "is-active" : ""}`}
+                onClick={handleToggleFavorite}
+                disabled={togglingFavorite || !sessionReady}
+                aria-label={isFavorite ? "Quitar de favoritos" : "Agregar a favoritos"}
+                aria-pressed={isFavorite}
+              >
+                <i className={`bi ${isFavorite ? "bi-heart-fill" : "bi-heart"}`} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="editorial-product-show__price">
+              {canShowPrices && hasAvailablePrice ? (
+                <>
+                  <span>{formatMoney(displayPrice)}</span>
+                  {comparePrice > displayPrice ? <del>{formatMoney(comparePrice)}</del> : null}
+                </>
+              ) : (
+                <span className="is-note">
+                  {canShowPrices ? "Precio no disponible" : "Inicia sesión para ver precios"}
+                </span>
+              )}
+            </div>
+
+            {product.variantOptions.length ? (
+              <div className="editorial-product-show__variants">
+                {product.variantOptions.map((option) => {
+                  const isColor = isColorAttribute(option.attribute)
+                  const selectedValueId = selectedAttributeValueIds[option.attribute.id] || ""
+                  const selectedValue = option.values.find((value) => Number(value.id) === Number(selectedValueId))
+
+                  return (
+                    <div className="editorial-product-show__variant" key={option.attribute.id}>
+                      <label htmlFor={`editorial-variant-${option.attribute.id}`}>
+                        {option.attribute.name}: <strong>{selectedValue?.value || "Elige"}</strong>
+                      </label>
+                      {isColor ? (
+                        <div className="editorial-product-show__swatches">
+                          {option.values.map((value) => {
+                            const selected = Number(selectedValueId) === Number(value.id)
+                            const imageUrl = getVariantValueImage(value, product.variants, product.image)
+
+                            return (
+                              <button
+                                type="button"
+                                key={value.id}
+                                className={selected ? "is-selected" : ""}
+                                onClick={() => handleVariantOptionSelect(option.attribute.id, value.id)}
+                                disabled={!isVariantValueAvailable(option.values, value.id)}
+                                aria-label={`${option.attribute.name}: ${value.value}`}
+                              >
+                                {imageUrl ? <img src={imageUrl} alt="" /> : <span />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <select
+                          id={`editorial-variant-${option.attribute.id}`}
+                          value={selectedValueId}
+                          onChange={(event) => handleVariantOptionSelect(option.attribute.id, event.target.value)}
+                        >
+                          <option value="">Elige</option>
+                          {option.values.map((value) => (
+                            <option
+                              key={value.id}
+                              value={value.id}
+                              disabled={!isVariantValueAvailable(option.values, value.id)}
+                            >
+                              {value.value}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
+
+            <div className="editorial-product-show__purchase">
+              <label>Cantidad</label>
+              <div className="editorial-product-show__purchase-row">
+                <div className="editorial-product-show__qty">
+                  <button type="button" onClick={decreaseQty}>−</button>
+                  <span>{quantity}</span>
+                  <button type="button" onClick={increaseQty}>+</button>
+                </div>
+                {!sessionReady ? (
+                  <button type="button" className="editorial-product-show__cart" disabled>
+                    Cargando...
+                  </button>
+                ) : isAuthenticated ? (
+                  <button
+                    type="button"
+                    className="editorial-product-show__cart"
+                    onClick={handleAddToCart}
+                    disabled={
+                      addingToCart ||
+                      !hasAvailablePrice ||
+                      isOutOfStock ||
+                      isSelectedVariantOutOfStock ||
+                      hasInvalidStockQuantity ||
+                      missingVariantSelection ||
+                      (!hasVariantAttributes && product.variants.length > 0 && !selectedVariant)
+                    }
+                  >
+                    {addingToCart
+                      ? "Agregando..."
+                      : missingVariantSelection
+                      ? "Selecciona atributos"
+                      : isOutOfStock || isSelectedVariantOutOfStock
+                      ? "Producto sin inventario"
+                      : "Agregar al carrito"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="editorial-product-show__cart"
+                    onClick={() => navigate("/login")}
+                  >
+                    Inicia sesión para comprar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="editorial-product-show__tools">
+              <button ref={wishlistButtonRef} type="button" onClick={handleOpenWishlist} disabled={!sessionReady}>
+                <i className="bi bi-list-ul" /> Agregar a lista
+              </button>
+              <Link to="/contacto"><i className="bi bi-question-circle" /> Hacer una pregunta</Link>
+              <button type="button" onClick={() => navigator.share?.({ title: product.name, url: window.location.href })}>
+                <i className="bi bi-share" /> Compartir
+              </button>
+            </div>
+
+            <div className="editorial-product-show__delivery">
+              <div><i className="bi bi-truck" /> <strong>Entrega disponible:</strong> Envío según cobertura.</div>
+              <div><i className="bi bi-box-seam" /> <strong>Envío y devoluciones:</strong> Consulta condiciones al comprar.</div>
+            </div>
+
+            <div className="editorial-product-show__checkout">
+              <div>
+                <span>VISA</span>
+                <span>MC</span>
+                <span>AMEX</span>
+                <span>SPEI</span>
+              </div>
+              <strong>Compra segura y protegida</strong>
+            </div>
+          </div>
+
+          <div className="editorial-product-show__description">
+            <div className="editorial-product-show__tabs">
+              <span>Descripción del producto</span>
+            </div>
+            <p>{product.shortDescription}</p>
+            <div
+              className="editorial-product-show__html"
+              dangerouslySetInnerHTML={{ __html: product.descriptionHtml }}
+            />
+          </div>
+        </div>
+
+        {isLightboxOpen && (
+          <div className="product-lightbox" onClick={closeLightbox}>
+            <div className="product-lightbox__dialog" onClick={(e) => e.stopPropagation()}>
+              <button type="button" className="product-lightbox__close" onClick={closeLightbox} aria-label="Cerrar vista completa">
+                ×
+              </button>
+              <div className="product-lightbox__image-wrap">
+                {product.mediaItems[lightboxIndex]?.type === "video" ? (
+                  <video src={product.mediaItems[lightboxIndex].url} controls className="product-lightbox__image" />
+                ) : (
+                  <img
+                    src={product.mediaItems[lightboxIndex]?.url}
+                    alt={`${product.name} vista ${lightboxIndex + 1}`}
+                    className="product-lightbox__image"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <WishlistModal
+          isOpen={wishlistOpen}
+          product={product}
+          triggerRef={wishlistButtonRef}
+          onClose={() => setWishlistOpen(false)}
+        />
+      </section>
+    )
+  }
 
   return (
     <section className="product-detail-page">
@@ -1059,6 +1315,32 @@ function formatScaleDiscount(value) {
     : numberValue.toFixed(2)
 
   return `${formattedValue}% de descuento`
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0))
+}
+
+function buildPromotionMessages(promotions = []) {
+  if (!Array.isArray(promotions)) return []
+
+  return promotions
+    .map((promotion) => {
+      return (
+        promotion?.message ||
+        promotion?.label ||
+        promotion?.name ||
+        promotion?.description ||
+        ""
+      )
+    })
+    .map((message) => String(message).trim())
+    .filter(Boolean)
 }
 
 function formatStockMessage(status) {

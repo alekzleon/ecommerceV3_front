@@ -36,7 +36,9 @@ export async function createAdminPromotion(payload) {
 }
 
 export async function updateAdminPromotion(id, payload) {
-  const response = await api.put(`/admin/promotions/${id}`, payload)
+  const response = payload instanceof FormData
+    ? await api.post(`/admin/promotions/${id}`, payload)
+    : await api.put(`/admin/promotions/${id}`, payload)
   return response.data
 }
 

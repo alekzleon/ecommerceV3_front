@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import ProductGrid from "../../components/product/ProductGrid/ProductGrid"
 import ProductListSkeleton from "../../components/product/ProductListSkeleton/ProductListSkeleton"
 import CatalogSidebar from "../../components/product/CatalogSidebar/CatalogSidebar"
+import { useAuth } from "../../context/AuthContext"
+import { useSettings } from "../../context/SettingsContext"
+import { addCartItem } from "../../services/api/cartService"
 import { getCatalogSidebar, getProducts, getSmartSearchProducts } from "../../services/api/productService"
+import { notifyError, notifySuccess } from "../../utils/toast"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
+import { trackMetaAddToCart } from "../../utils/metaPixel"
 import "./productspage.css"
 
 const PRODUCTS_PER_PAGE = 16
 const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Producto"
+const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
+const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 const PAGINATION_SIBLINGS = 1
 const PAGINATION_BOUNDARIES = 1
 const PAGINATION_ELLIPSIS = "ellipsis"
@@ -64,6 +71,7 @@ function getPaginationItems(currentPage, lastPage) {
 
 function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { settings } = useSettings()
 
   const [loading, setLoading] = useState(true)
   const [sidebarLoading, setSidebarLoading] = useState(true)
@@ -86,6 +94,7 @@ function ProductsPage() {
   const selectedFamilySlug = useMemo(() => searchParams.get("family") || "", [searchParams])
   const selectedBrand = useMemo(() => searchParams.get("brand") || "", [searchParams])
   const searchTerm = useMemo(() => searchParams.get("search") || "", [searchParams])
+  const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
   const shouldUseSmartSearch = useMemo(
     () =>
       isSmartSearchQuery(searchTerm) &&
@@ -263,7 +272,7 @@ function ProductsPage() {
   }
 
   return (
-    <section className="products-page">
+    <section className={`products-page ${isEditorialShop ? "products-page--editorial" : ""}`}>
       <div className="container-main">
         <div className="products-page__top">
           <div className="products-page__heading">
@@ -344,7 +353,11 @@ function ProductsPage() {
                   </div>
                 ) : null}
 
-                <ProductGrid products={products} />
+                {isEditorialShop ? (
+                  <EditorialProductGrid products={products} />
+                ) : (
+                  <ProductGrid products={products} />
+                )}
 
                 {!loading && !error && products.length === 0 ? (
                   <div className="products-page__empty">
@@ -450,6 +463,127 @@ function ProductsPage() {
   )
 }
 
+function EditorialProductGrid({ products = [] }) {
+  return (
+    <div className="editorial-products-grid">
+      {products.map((product) => (
+        <EditorialProductCard key={product.id || product.slug} product={product} />
+      ))}
+    </div>
+  )
+}
+
+function EditorialProductCard({ product }) {
+  const [addingToCart, setAddingToCart] = useState(false)
+  const navigate = useNavigate()
+  const { isAuthenticated, sessionReady } = useAuth()
+  const productPrice = Number(product?.price ?? 0)
+  const productOldPrice = Number(product?.oldPrice ?? 0)
+  const productPriceInfo = product?.priceInfo || product?.price_info || {}
+  const stockStatus = product?.stockStatus || product?.stock_status || "untracked"
+  const stockMessage = product?.stockMessage || product?.stock_message || ""
+  const hasNoStockValue = product?.stock === null || product?.stock === undefined || product?.stock === ""
+  const blocksByStock = stockStatus === "out_of_stock" || hasNoStockValue || Number(product.stock) <= 0
+  const canShowPrices = sessionReady && isAuthenticated
+  const hasAvailablePrice =
+    productPrice > 0 && productPriceInfo.source !== PRICE_UNAVAILABLE_SOURCE
+
+  const handleAddToCart = async () => {
+    if (!product?.id || addingToCart) return
+
+    if (!isAuthenticated) {
+      navigate("/login")
+      return
+    }
+
+    if (!hasAvailablePrice) {
+      notifyError("Precio no disponible para este producto.")
+      return
+    }
+
+    if (blocksByStock) {
+      notifyError(stockMessage || "Producto sin inventario.")
+      return
+    }
+
+    try {
+      setAddingToCart(true)
+
+      const response = await addCartItem({
+        product_id: product.id,
+        quantity: 1,
+      })
+      const cartSummary =
+        response?.data?.cart ||
+        response?.data?.summary ||
+        response?.cart ||
+        response?.summary ||
+        response?.data
+
+      if (cartSummary && typeof cartSummary === "object") {
+        syncCartSummary(cartSummary)
+      }
+
+      trackMetaAddToCart(product, 1)
+      notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
+    } catch (error) {
+      notifyError(error?.response?.data?.message || "No fue posible agregar el producto al carrito.")
+      console.error("Error al agregar al carrito:", error?.response?.data || error)
+    } finally {
+      setAddingToCart(false)
+    }
+  }
+
+  return (
+    <article className="editorial-product-card">
+      <Link to={`/producto/${product.slug}`} className="editorial-product-card__media">
+        <img
+          src={product.image || PRODUCT_IMAGE_PLACEHOLDER}
+          alt={product.name}
+          loading="lazy"
+          decoding="async"
+        />
+      </Link>
+
+      <div className="editorial-product-card__body">
+        <Link to={`/producto/${product.slug}`} className="editorial-product-card__name">
+          {product.name}
+        </Link>
+
+        {canShowPrices && hasAvailablePrice ? (
+          <div className="editorial-product-card__prices">
+            <span className={productOldPrice > productPrice ? "is-sale" : ""}>
+              {formatMoneyWithDecimals(productPrice)}
+            </span>
+            {productOldPrice > productPrice ? (
+              <del>{formatMoneyWithDecimals(productOldPrice)}</del>
+            ) : null}
+          </div>
+        ) : (
+          <div className="editorial-product-card__price-note">
+            {canShowPrices ? "Precio no disponible" : "Inicia sesión para ver precios"}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="editorial-product-card__cart"
+          onClick={handleAddToCart}
+          disabled={!sessionReady || addingToCart || (isAuthenticated && (!hasAvailablePrice || blocksByStock))}
+        >
+          {!sessionReady
+            ? "Cargando..."
+            : addingToCart
+            ? "Agregando..."
+            : isAuthenticated && blocksByStock
+            ? "Sin inventario"
+            : "Agregar al carrito"}
+        </button>
+      </div>
+    </article>
+  )
+}
+
 function normalizeProduct(item = {}) {
   const price = Number(item?.default_price ?? 0)
   const activePromotions = Array.isArray(item?.active_promotions)
@@ -535,6 +669,35 @@ function formatMoney(value) {
     currency: "MXN",
     maximumFractionDigits: 0,
   }).format(Number(value || 0))
+}
+
+function formatMoneyWithDecimals(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0))
+}
+
+function syncCartSummary(payload) {
+  const summary = {
+    id: payload?.id ?? null,
+    items_count: Number(payload?.items_count ?? 0),
+    subtotal: Number(payload?.subtotal ?? 0),
+    discount: Number(payload?.discount ?? 0),
+    tax: Number(payload?.tax ?? 0),
+    tax_breakdown: payload?.tax_breakdown ?? null,
+    total: Number(payload?.total ?? 0),
+  }
+
+  localStorage.setItem(CART_SUMMARY_STORAGE_KEY, JSON.stringify(summary))
+
+  window.dispatchEvent(
+    new CustomEvent("cart:updated", {
+      detail: summary,
+    })
+  )
 }
 
 function getStockStatus(item = {}) {
