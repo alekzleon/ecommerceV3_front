@@ -55,7 +55,7 @@ function HomeHighlights() {
               <div className="highlight-card__badge">{card.badge}</div>
 
               <div className="highlight-card__image-wrap">
-                <img
+                <img loading="lazy"
                   src={card.image}
                   alt={card.title}
                   className="highlight-card__image"

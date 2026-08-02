@@ -1,0 +1,1 @@
+function e(n,r){if(!r)return!0;if(Array.isArray(r))return r.some(t=>e(n,t));let i=t(n);return i.includes(`*`)||i.includes(r)}function t(e){return e?.modules||e?.user?.modules||[]}export{e as t};

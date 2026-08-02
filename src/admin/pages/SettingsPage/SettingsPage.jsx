@@ -1395,7 +1395,7 @@ function AssetInput({ label, name, accept, previewUrl, onChange, compact = false
     <div className="settings-page__asset">
       <div className={`settings-page__asset-preview ${compact ? "is-compact" : ""}`}>
         {previewUrl ? (
-          <img src={previewUrl} alt={label} />
+          <img loading="lazy" src={previewUrl} alt={label} />
         ) : (
           <span>Sin archivo</span>
         )}

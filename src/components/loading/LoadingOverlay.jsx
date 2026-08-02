@@ -15,7 +15,7 @@ function LoadingOverlay({ show = false }) {
     >
       <div className="loading-overlay-box">
         {logoUrl ? (
-          <img src={logoUrl} alt={brandName} className="loading-overlay-logo" />
+          <img loading="lazy" src={logoUrl} alt={brandName} className="loading-overlay-logo" />
         ) : (
           <strong className="loading-overlay-brand">{brandName}</strong>
         )}

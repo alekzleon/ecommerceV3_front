@@ -4,7 +4,9 @@ export function can(user, moduleName) {
     return moduleName.some((name) => can(user, name))
   }
 
-  return Boolean(getUserModules(user).includes(moduleName))
+  const modules = getUserModules(user)
+
+  return modules.includes("*") || modules.includes(moduleName)
 }
 
 export function getUserModules(user) {

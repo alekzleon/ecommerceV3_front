@@ -2546,7 +2546,7 @@ function ProductsPage() {
                             onMouseLeave={() => setImagePreview(null)}
                           >
                             {product.image_url ? (
-                              <img src={product.image_url} alt={product.name} />
+                              <img loading="lazy" src={product.image_url} alt={product.name} />
                             ) : (
                               <span>Sin imagen</span>
                             )}
@@ -2803,7 +2803,7 @@ function ProductsPage() {
             top: imagePreview.y + 18,
           }}
         >
-          <img src={imagePreview.src} alt={imagePreview.alt} />
+          <img loading="lazy" src={imagePreview.src} alt={imagePreview.alt} />
         </div>
       ) : null}
 

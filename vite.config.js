@@ -8,6 +8,7 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: [
+      "demo.localhost",
       "caitlin-mousiest-beguilingly.ngrok-free.dev"
     ]
   }

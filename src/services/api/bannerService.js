@@ -1,4 +1,5 @@
 import api from "./api.js"
+import { normalizeMediaUrl } from "../../utils/mediaUrl.js"
 
 function getMultipartConfig(payload) {
   return payload instanceof FormData
@@ -20,7 +21,7 @@ export function normalizeBannerMediaUrl(banner) {
     banner?.url ||
     ""
 
-  if (mediaUrl) return normalizeBackendMediaUrl(mediaUrl)
+  if (mediaUrl) return normalizeMediaUrl(mediaUrl)
 
   const mediaPath =
     banner?.media_path ||
@@ -30,12 +31,7 @@ export function normalizeBannerMediaUrl(banner) {
 
   if (!mediaPath) return ""
 
-  const normalizedPath = String(mediaPath).replace(/^\/+/, "")
-  const storagePath = normalizedPath.startsWith("storage/")
-    ? normalizedPath
-    : `storage/${normalizedPath}`
-
-  return `${getMediaBaseUrl()}/${storagePath}`
+  return normalizeMediaUrl(mediaPath)
 }
 
 export function getBannerMediaType(banner) {
@@ -47,37 +43,6 @@ export function getBannerMediaType(banner) {
   if (/\.(mp4|webm|ogg|mov)(\?|$)/.test(url)) return "video"
 
   return "image"
-}
-
-function getMediaBaseUrl() {
-  return normalizeBaseUrl(
-    import.meta.env.MEDIA_BASE_URL ||
-      import.meta.env.VITE_MEDIA_BASE_URL ||
-      import.meta.env.VITE_API_URL ||
-      ""
-  )
-}
-
-function normalizeBackendMediaUrl(url) {
-  const value = String(url || "").trim()
-  const mediaBaseUrl = getMediaBaseUrl()
-
-  if (!value) return ""
-
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const parsedUrl = new URL(value)
-      return `${mediaBaseUrl}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
-    } catch {
-      return value
-    }
-  }
-
-  return `${mediaBaseUrl}/${value.replace(/^\/+/, "")}`
-}
-
-function normalizeBaseUrl(url) {
-  return String(url || "").replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "")
 }
 
 export async function getAdminBanners(params = {}) {

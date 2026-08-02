@@ -175,11 +175,10 @@ const TEMPLATE_VISUAL_DESIGN_OVERRIDES = {
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   const refreshSettings = async () => {
     try {
-      setLoading(true)
       const [
         settingsResponse,
         navTitleResponse,
@@ -218,6 +217,7 @@ export function SettingsProvider({ children }) {
       const storefront = storefrontResponse.status === "fulfilled"
         ? normalizeStorefrontResponse(storefrontResponse.value)
         : DEFAULT_SETTINGS.storefront
+      const rawSettingsData = getResponseData(settingsResponse.value)
 
       setSettings({
         ...nextSettings,
@@ -230,6 +230,13 @@ export function SettingsProvider({ children }) {
         logo_url: generalLogo.logo_url || nextSettings.logo_url,
         storefront: applyStorefrontPreview(storefront),
       })
+
+      if (import.meta.env.DEV) {
+        console.log({
+          logo: rawSettingsData?.logo_url || generalLogo.logo_url || nextSettings.logo_url,
+          icon: rawSettingsData?.favicon_url || nextSettings.favicon_url,
+        })
+      }
     } catch (error) {
       console.error("Error loading public settings:", error)
       setSettings(DEFAULT_SETTINGS)
@@ -305,7 +312,7 @@ export function useSettings() {
 }
 
 function normalizeSettingsResponse(response) {
-  const data = response?.data?.data || response?.data || response || {}
+  const data = getResponseData(response)
   const meta = data.meta && typeof data.meta === "object" ? data.meta : {}
   const socialLinks =
     data.social_links && typeof data.social_links === "object" ? data.social_links : {}
@@ -350,6 +357,10 @@ function normalizeSettingsResponse(response) {
       cashback_max_redeem_percentage: Number(loyalty.cashback_max_redeem_percentage ?? 100),
     },
   }
+}
+
+function getResponseData(response) {
+  return response?.data?.data || response?.data || response || {}
 }
 
 function normalizeContactFaqImageValue(value) {

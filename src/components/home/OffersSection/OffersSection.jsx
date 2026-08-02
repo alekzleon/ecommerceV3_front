@@ -153,7 +153,7 @@ function OffersSection() {
                 return (
               <>
                 <div className="daily-offer-card__image-wrap">
-                  <img
+                  <img loading="lazy"
                     src={dailyOffer.image}
                     alt={dailyOffer.title}
                     className="daily-offer-card__image"
@@ -238,7 +238,7 @@ function OffersSection() {
                   return (
                   <article className="offer-item-card" key={offer.id}>
                     <div className="offer-item-card__image-wrap">
-                      <img
+                      <img loading="lazy"
                         src={offer.image}
                         alt={offer.title}
                         className="offer-item-card__image"

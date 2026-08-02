@@ -172,7 +172,7 @@ function OffersPage() {
                   return (
                   <article className="offers-page__card" key={offer.id}>
                     <div className="offers-page__card-media">
-                      <img src={offer.image} alt={offer.title} />
+                      <img loading="lazy" src={offer.image} alt={offer.title} />
                     </div>
 
                     <div className="offers-page__card-body">
@@ -295,7 +295,7 @@ function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange
             onClick={() => onActiveIndexChange(sourceIndex)}
             aria-label={`Ver promoción ${offer.title}`}
           >
-            <img src={offer.image} alt={offer.productName || offer.title} />
+            <img loading="lazy" src={offer.image} alt={offer.productName || offer.title} />
           </button>
         ))}
 

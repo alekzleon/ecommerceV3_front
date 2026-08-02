@@ -5,14 +5,14 @@ import "./AdminSidebar.css"
 function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
   const { brandName, logoUrl } = useSettings()
   const brandInitial = brandName?.charAt(0)?.toUpperCase() || "T"
-  const visibleMenu = addDesignMenuItem(menu)
+  const visibleMenu = addStorefrontAdminMenuItems(menu)
 
   return (
     <aside className={`admin-sidebar ${isOpen ? "admin-sidebar--open" : ""}`}>
       <div className="admin-sidebar__top">
         <div className="admin-sidebar__brand">
           <div className="admin-sidebar__brand-logo">
-            {logoUrl ? <img src={logoUrl} alt={brandName} /> : brandInitial}
+            {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : brandInitial}
           </div>
 
           <div className="admin-sidebar__brand-copy">
@@ -91,25 +91,45 @@ function SidebarGroupLinks({ group, onClose }) {
   )
 }
 
-function addDesignMenuItem(menu) {
-  return menu.map((group) => {
+function addStorefrontAdminMenuItems(menu) {
+  const subscriptionItem = buildSubscriptionMenuItem()
+
+  if (!menu.length) {
+    return [
+      {
+        group_key: "account",
+        group_name: "Cuenta",
+        items: [subscriptionItem],
+      },
+    ]
+  }
+
+  const nextMenu = menu.map((group) => {
     const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
     const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
+    const hasSubscription = group.items.some((item) => item.name === "suscripcion")
 
-    if (!hasSettings || hasDesign) return group
+    if (!hasSettings && !hasDesign) return group
 
     const items = []
 
     group.items.forEach((item) => {
       items.push(item)
 
-      if (item.name === "configuracion_ecommerce") {
+      if (item.name === "configuracion_ecommerce" && !hasDesign) {
         items.push({
           ...item,
           name: "disena_ecommerce",
           display_name: "Diseña tu ecommerce",
           front_path: "/admin/design",
         })
+      }
+
+      const isDesignInsertionPoint = item.name === "disena_ecommerce"
+        || (item.name === "configuracion_ecommerce" && !hasDesign)
+
+      if (isDesignInsertionPoint && !hasSubscription) {
+        items.push(buildSubscriptionMenuItem(item))
       }
     })
 
@@ -118,6 +138,33 @@ function addDesignMenuItem(menu) {
       items,
     }
   })
+
+  const alreadyHasSubscription = nextMenu.some((group) =>
+    group.items.some((item) => item.name === "suscripcion")
+  )
+
+  if (alreadyHasSubscription) return nextMenu
+
+  return nextMenu.map((group, index) => {
+    if (index !== 0) return group
+
+    return {
+      ...group,
+      items: [
+        ...group.items,
+        subscriptionItem,
+      ],
+    }
+  })
+}
+
+function buildSubscriptionMenuItem(source = {}) {
+  return {
+    ...source,
+    name: "suscripcion",
+    display_name: "Suscripción",
+    front_path: "/admin/subscription",
+  }
 }
 
 function renderSidebarIcon(moduleName) {
@@ -150,6 +197,7 @@ function renderSidebarIcon(moduleName) {
     sincronizacion: "bi-arrow-repeat",
     configuracion_ecommerce: "bi-gear-fill",
     disena_ecommerce: "bi-palette-fill",
+    suscripcion: "bi-credit-card-fill",
     design: "bi-palette-fill",
     settings: "bi-gear-fill",
     notificaciones: "bi-bell-fill",

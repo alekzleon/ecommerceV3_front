@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom"
 import RegisterForm from "../../components/auth/RegisterForm/RegisterForm"
 import { useSettings } from "../../context/SettingsContext"
-import loginBusiness from "../../assets/images/auth/login-business.png"
+import loginBusiness from "../../assets/images/auth/login-business.webp"
 import "./loginpage.css"
 
 function RegisterPage() {
@@ -13,7 +13,7 @@ function RegisterPage() {
         <nav className="login-page__nav" aria-label="Navegación de registro">
           <Link to="/" className="login-page__brand" aria-label="Ir al inicio">
             {logoUrl ? (
-              <img src={logoUrl} alt={brandName} className="login-page__logo" />
+              <img loading="lazy" src={logoUrl} alt={brandName} className="login-page__logo" />
             ) : (
               <span className="login-page__brand-name">{brandName}</span>
             )}
@@ -36,7 +36,7 @@ function RegisterPage() {
             </div>
 
             <div className="login-page__illustration-wrap login-page__illustration-wrap--register">
-              <img
+              <img loading="lazy"
                 src={loginBusiness}
                 alt="Persona feliz en su negocio"
                 className="login-page__illustration"

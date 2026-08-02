@@ -1075,7 +1075,7 @@ function CartPage() {
                           </div>
 
                           <div className="cart_item_image">
-                            <img src={product.image} alt={product.name} />
+                            <img loading="lazy" src={product.image} alt={product.name} />
                           </div>
 
                           <div className="cart_item_main">
@@ -1351,7 +1351,7 @@ function CartPage() {
                             {selectedGiftItem ? (
                               <div className="summary_selected_gift">
                                 {selectedGiftItem.imageUrl ? (
-                                  <img
+                                  <img loading="lazy"
                                     src={normalizeMediaUrl(selectedGiftItem.imageUrl)}
                                     alt={selectedGiftItem.name}
                                   />
@@ -1400,7 +1400,7 @@ function CartPage() {
                                       disabled={selectingGift || clearingGift}
                                     >
                                       {giftItem.imageUrl ? (
-                                        <img
+                                        <img loading="lazy"
                                           src={normalizeMediaUrl(giftItem.imageUrl)}
                                           alt={giftItem.name}
                                         />

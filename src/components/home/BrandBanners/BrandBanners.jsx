@@ -102,7 +102,7 @@ function BrandBanners() {
   const media = (
     <div className="brand-banners__media">
       {activeBanner.type === "video" ? (
-        <video
+        <video preload="none"
           className="brand-banners__asset"
           src={activeBanner.src}
           poster={activeBanner.poster}
@@ -112,7 +112,7 @@ function BrandBanners() {
           playsInline
         />
       ) : (
-        <img className="brand-banners__asset" src={activeBanner.src} alt={activeBanner.alt} />
+        <img loading="lazy" className="brand-banners__asset" src={activeBanner.src} alt={activeBanner.alt} />
       )}
     </div>
   )

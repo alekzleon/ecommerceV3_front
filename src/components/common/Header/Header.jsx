@@ -227,7 +227,7 @@ function Header() {
             <>
               <Link to="/" onClick={closeMobileMenu}>
                 {visibleLogoUrl ? (
-                  <img src={visibleLogoUrl} alt={brandName} className="logo-img" />
+                  <img loading="lazy" src={visibleLogoUrl} alt={brandName} className="logo-img" />
                 ) : (
                   <span className="header-logo__text">{brandName}</span>
                 )}
@@ -627,7 +627,7 @@ function EditorialShopHeader({
           </nav>
 
           <Link to="/" className="editorial-nav__logo">
-            {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+            {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
           </Link>
 
           <div className="editorial-nav__actions">
@@ -652,7 +652,7 @@ function EditorialShopHeader({
         <div className="editorial-search">
           <div className="editorial-search__bar">
             <Link to="/" className="editorial-search__logo" onClick={() => setSearchOpen(false)}>
-              {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+              {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
             </Link>
 
             <div className="editorial-search__searchbar">

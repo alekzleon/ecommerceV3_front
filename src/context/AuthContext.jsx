@@ -76,12 +76,24 @@ export function AuthProvider({ children }) {
       setSessionReady(true)
 
       return response
-    } catch {
-      clearAuthSession()
-      setToken(null)
-      setUser(null)
-      setIsAuthenticated(false)
+    } catch (error) {
+      const storedUser = getAuthUser()
+      const shouldClearSession = error?.status === 401
+
+      if (shouldClearSession || !storedUser) {
+        clearAuthSession()
+        setToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
+        setSessionReady(true)
+        return null
+      }
+
+      setToken(currentToken)
+      setUser(storedUser)
+      setIsAuthenticated(true)
       setSessionReady(true)
+
       return null
     }
   }

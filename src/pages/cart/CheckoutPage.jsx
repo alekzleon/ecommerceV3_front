@@ -1860,7 +1860,7 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress, settings = {}) {
       <body>
         <header class="head">
           <div class="brand">
-            <img src="${escapeHtml(printableLogoUrl)}" alt="${escapeHtml(brandName)}" />
+            <img loading="lazy" src="${escapeHtml(printableLogoUrl)}" alt="${escapeHtml(brandName)}" />
             <div>
               <strong>${escapeHtml(brandName)}</strong>
               <span>Previa de pedido para validación</span>

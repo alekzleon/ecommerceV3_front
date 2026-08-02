@@ -302,7 +302,7 @@ function ProductDetailPanel({
 
               {form.image_url ? (
                 <div className="product-detail__media-preview">
-                  <img src={form.image_url} alt={form.name || "Vista previa del producto"} />
+                  <img loading="lazy" src={form.image_url} alt={form.name || "Vista previa del producto"} />
                 </div>
               ) : null}
 
@@ -424,9 +424,9 @@ function ProductDetailPanel({
                       >
                         <div className="product-detail__gallery-thumb">
                           {item.media_type === "video" ? (
-                            <video src={item.media_url} />
+                            <video preload="none" src={item.media_url} />
                           ) : (
-                            <img src={item.media_url} alt={item.title || "Archivo de galería"} />
+                            <img loading="lazy" src={item.media_url} alt={item.title || "Archivo de galería"} />
                           )}
                         </div>
 
@@ -707,7 +707,7 @@ function ProductDetailPanel({
                                 >
                                   {getVariantColorImageUrl(value) ? (
                                     <span className="product-detail__variant-swatch product-detail__variant-swatch--image">
-                                      <img src={getVariantColorImageUrl(value)} alt={value.value} />
+                                      <img loading="lazy" src={getVariantColorImageUrl(value)} alt={value.value} />
                                     </span>
                                   ) : value.metadata?.hex ? (
                                     <span
@@ -802,7 +802,7 @@ function ProductDetailPanel({
                                 </label>
                                 {getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).preview_url ? (
                                   <span className="product-detail__variant-draft-preview">
-                                    <img
+                                    <img loading="lazy"
                                       src={getVariantValueDraft(variantValueDrafts, activeVariantAttribute.id).preview_url}
                                       alt="Preview color"
                                     />
@@ -1078,9 +1078,9 @@ function ProductDetailPanel({
             <div className="product-detail__asset-editor">
               <div className="product-detail__asset-preview">
                 {selectedGalleryItem.media_type === "video" ? (
-                  <video src={selectedGalleryItem.media_url} controls />
+                  <video preload="none" src={selectedGalleryItem.media_url} controls />
                 ) : (
-                  <img
+                  <img loading="lazy"
                     src={selectedGalleryItem.media_url}
                     alt={selectedGalleryItem.title || "Recurso de galería"}
                   />

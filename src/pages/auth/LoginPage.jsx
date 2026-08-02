@@ -2,7 +2,7 @@ import { Link, useLocation } from "react-router-dom"
 import LoginForm from "../../components/auth/LoginForm/LoginForm"
 import { useSettings } from "../../context/SettingsContext"
 import { PENDING_CART_RECOVER_URL_KEY } from "../../utils/cartRecovery"
-import loginBusiness from "../../assets/images/auth/login-business.png"
+import loginBusiness from "../../assets/images/auth/login-business.webp"
 import "./loginpage.css"
 
 function LoginPage() {
@@ -20,7 +20,7 @@ function LoginPage() {
         <nav className="login-page__nav" aria-label="Navegación de login">
           <Link to="/" className="login-page__brand" aria-label="Ir al inicio">
             {logoUrl ? (
-              <img src={logoUrl} alt={brandName} className="login-page__logo" />
+              <img loading="lazy" src={logoUrl} alt={brandName} className="login-page__logo" />
             ) : (
               <span className="login-page__brand-name">{brandName}</span>
             )}
@@ -53,7 +53,7 @@ function LoginPage() {
             </div>
 
             <div className="login-page__illustration-wrap login-page__illustration-wrap--register">
-              <img
+              <img loading="lazy"
                 src={loginBusiness}
                 alt="Persona feliz en su negocio"
                 className="login-page__illustration"

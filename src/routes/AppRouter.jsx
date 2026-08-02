@@ -1,40 +1,42 @@
+import { lazy, Suspense, useEffect, useState } from "react"
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom"
 import MainLayout from "../layouts/MainLayout"
 import { useAuth } from "../context/AuthContext"
 
-import HomePage from "../pages/public/HomePage"
-import ContactPage from "../pages/public/ContactPage"
-import ProductsPage from "../pages/shop/ProductsPage"
-import ProductDetailPage from "../pages/shop/ProductDetailPage"
-import OffersPage from "../pages/shop/OffersPage"
-import CartPage from "../pages/cart/CartPage"
-import CheckoutPage from "../pages/cart/CheckoutPage"
-import CheckoutResultPage from "../pages/cart/CheckoutResultPage"
-import CartExcelImportPage from "../pages/cart/CartExcelImportPage"
-import RecoverCartPage from "../pages/cart/RecoverCartPage"
-import LoginPage from "../pages/auth/LoginPage"
-import RegisterPage from "../pages/auth/RegisterPage"
-import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage"
-import ResetPasswordPage from "../pages/auth/ResetPasswordPage"
-import AccountPage from "../pages/account/AccountHomePage"
-import NotFoundPage from "../pages/public/NotFoundPage"
-import PrivacyPolicyPage from "../pages/legal/PrivacyPolicyPage"
-import TermsPage from "../pages/legal/TermsPage"
 import ScrollToTop from "../components/common/ScrollToTop/ScrollToTop"
-import AccountProfilePage from "../pages/account/AccountProfilePage"
-import AccountAddressesPage from "../pages/account/AccountAddressesPage"
-import AccountOrdersPage from "../pages/account/AccountOrdersPage"
-import FavoritesPage from "../pages/account/FavoritesPage"
-import WishlistsPage from "../pages/account/WishlistsPage"
 
-import AdminRoutes from "../admin/routes/AdminRoutes"
 import { getAdminMenu } from "../admin/services/adminNavigationService"
-import { useEffect, useState } from "react"
 import { updateCartSalesChannel } from "../services/api/cartService"
 import {
   captureSalesTrackingFromSearch,
   getSalesTrackingPayload,
 } from "../utils/salesTracking"
+
+const HomePage = lazy(() => import("../pages/public/HomePage"))
+const ContactPage = lazy(() => import("../pages/public/ContactPage"))
+const NotFoundPage = lazy(() => import("../pages/public/NotFoundPage"))
+const PrivacyPolicyPage = lazy(() => import("../pages/legal/PrivacyPolicyPage"))
+const TermsPage = lazy(() => import("../pages/legal/TermsPage"))
+const ProductsPage = lazy(() => import("../pages/shop/ProductsPage"))
+const ProductDetailPage = lazy(() => import("../pages/shop/ProductDetailPage"))
+const OffersPage = lazy(() => import("../pages/shop/OffersPage"))
+const CartPage = lazy(() => import("../pages/cart/CartPage"))
+const CheckoutPage = lazy(() => import("../pages/cart/CheckoutPage"))
+const CheckoutResultPage = lazy(() => import("../pages/cart/CheckoutResultPage"))
+const CartExcelImportPage = lazy(() => import("../pages/cart/CartExcelImportPage"))
+const RecoverCartPage = lazy(() => import("../pages/cart/RecoverCartPage"))
+const LoginPage = lazy(() => import("../pages/auth/LoginPage"))
+const RegisterPage = lazy(() => import("../pages/auth/RegisterPage"))
+const ForgotPasswordPage = lazy(() => import("../pages/auth/ForgotPasswordPage"))
+const ResetPasswordPage = lazy(() => import("../pages/auth/ResetPasswordPage"))
+const BillingResultPage = lazy(() => import("../pages/billing/BillingResultPage"))
+const AccountPage = lazy(() => import("../pages/account/AccountHomePage"))
+const AccountProfilePage = lazy(() => import("../pages/account/AccountProfilePage"))
+const AccountAddressesPage = lazy(() => import("../pages/account/AccountAddressesPage"))
+const AccountOrdersPage = lazy(() => import("../pages/account/AccountOrdersPage"))
+const FavoritesPage = lazy(() => import("../pages/account/FavoritesPage"))
+const WishlistsPage = lazy(() => import("../pages/account/WishlistsPage"))
+const AdminRoutes = lazy(() => import("../admin/routes/AdminRoutes"))
 
 const HIDDEN_ADMIN_MODULES = new Set([
   "carga_masiva_productos",
@@ -94,6 +96,7 @@ function AppRouter() {
       <ScrollToTop />
       <SalesTrackingCapture />
 
+      <Suspense fallback={null}>
       <Routes>
         {/* Admin */}
         <Route
@@ -124,6 +127,8 @@ function AppRouter() {
           <Route path="checkout" element={<CheckoutPage />} />
           <Route path="checkout/success" element={<CheckoutResultPage type="success" />} />
           <Route path="checkout/cancel" element={<CheckoutResultPage type="cancel" />} />
+          <Route path="billing/success" element={<BillingResultPage type="success" />} />
+          <Route path="billing/cancel" element={<BillingResultPage type="cancel" />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="registro" element={<RegisterPage />} />
           <Route path="recuperar-password" element={<ForgotPasswordPage />} />
@@ -141,6 +146,7 @@ function AppRouter() {
         {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
@@ -198,18 +204,20 @@ const ADMIN_ROUTE_NAME_PATHS = {
   "admin.categories.index": "/admin/catalog/categories",
   "admin.families.index": "/admin/catalog/families",
   "admin.orders.index": "/admin/orders",
-  "admin.carts.index": "/admin/orders",
+  "admin.carts.index": "/admin/carts",
   "admin.customers.index": "/admin/customers",
   "admin.sales-channels.index": "/admin/sales-channels",
   "admin.credit.index": "/admin/credit",
   "admin.collections.index": "/admin/collections",
   "admin.promotions.index": "/admin/promotions",
   "admin.coupons.index": "/admin/coupons",
-  "admin.banners.index": "/admin/banners",
+  "admin.banners.index": "/admin/marketing",
   "admin.marketing.index": "/admin/marketing",
   "admin.sync.index": "/admin/sync",
   "admin.settings.index": "/admin/settings",
   "admin.design.index": "/admin/design",
+  "admin.subscription.index": "/admin/subscription",
+  "admin.subscriptions.index": "/admin/subscription",
   "admin.notifications.index": "/admin/settings",
   "admin.users.index": "/admin/users",
   "admin.roles.index": "/admin/roles",
@@ -236,8 +244,8 @@ const ADMIN_MODULE_NAME_PATHS = {
   products: "/admin/products",
   pedidos: "/admin/orders",
   orders: "/admin/orders",
-  carritos: "/admin/orders",
-  carts: "/admin/orders",
+  carritos: "/admin/carts",
+  carts: "/admin/carts",
   clientes: "/admin/customers",
   customers: "/admin/customers",
   credito: "/admin/credit",
@@ -245,7 +253,7 @@ const ADMIN_MODULE_NAME_PATHS = {
   cobranza: "/admin/collections",
   collections: "/admin/collections",
   marketing: "/admin/marketing",
-  banners: "/admin/banners",
+  banners: "/admin/marketing",
   promociones: "/admin/promotions",
   promotions: "/admin/promotions",
   cupones: "/admin/coupons",
@@ -256,6 +264,9 @@ const ADMIN_MODULE_NAME_PATHS = {
   configuracion_ecommerce: "/admin/settings",
   disena_ecommerce: "/admin/design",
   design: "/admin/design",
+  suscripcion: "/admin/subscription",
+  subscription: "/admin/subscription",
+  subscriptions: "/admin/subscription",
   settings: "/admin/settings",
   notificaciones: "/admin/settings",
   notifications: "/admin/settings",

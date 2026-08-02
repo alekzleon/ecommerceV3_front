@@ -32,7 +32,7 @@ export async function removeCartItem(itemId) {
 }
 
 export async function clearCart() {
-  const response = await api.delete("/cart/items")
+  const response = await api.delete("/cart")
   return response.data
 }
 

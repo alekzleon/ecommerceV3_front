@@ -501,9 +501,9 @@ function ProductDetailPage() {
               aria-label="Ver imagen completa"
             >
               {activeMedia?.type === "video" ? (
-                <video src={activeMedia.url} controls />
+                <video preload="none" src={activeMedia.url} controls />
               ) : (
-                <img src={activeMedia?.url || product.image} alt={product.name} />
+                <img loading="lazy" src={activeMedia?.url || product.image} alt={product.name} />
               )}
             </button>
 
@@ -517,9 +517,9 @@ function ProductDetailPage() {
                     onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
-                      <video src={media.url} muted />
+                      <video preload="none" src={media.url} muted />
                     ) : (
-                      <img src={media.url} alt={`${product.name} ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} ${index + 1}`} />
                     )}
                   </button>
                 ))}
@@ -582,7 +582,7 @@ function ProductDetailPage() {
                                 disabled={!isVariantValueAvailable(option.values, value.id)}
                                 aria-label={`${option.attribute.name}: ${value.value}`}
                               >
-                                {imageUrl ? <img src={imageUrl} alt="" /> : <span />}
+                                {imageUrl ? <img loading="lazy" src={imageUrl} alt="" /> : <span />}
                               </button>
                             )
                           })}
@@ -704,9 +704,9 @@ function ProductDetailPage() {
               </button>
               <div className="product-lightbox__image-wrap">
                 {product.mediaItems[lightboxIndex]?.type === "video" ? (
-                  <video src={product.mediaItems[lightboxIndex].url} controls className="product-lightbox__image" />
+                  <video preload="none" src={product.mediaItems[lightboxIndex].url} controls className="product-lightbox__image" />
                 ) : (
-                  <img
+                  <img loading="lazy"
                     src={product.mediaItems[lightboxIndex]?.url}
                     alt={`${product.name} vista ${lightboxIndex + 1}`}
                     className="product-lightbox__image"
@@ -749,11 +749,11 @@ function ProductDetailPage() {
                   >
                     {media.type === "video" ? (
                       <>
-                        <video src={media.url} muted />
+                        <video preload="none" src={media.url} muted />
                         <span className="product-detail__thumb-play">▶</span>
                       </>
                     ) : (
-                      <img src={media.url} alt={`${product.name} ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} ${index + 1}`} />
                     )}
                   </button>
                 ))}
@@ -771,9 +771,9 @@ function ProductDetailPage() {
                 }
               >
                 {activeMedia?.type === "video" ? (
-                  <video src={activeMedia.url} controls />
+                  <video preload="none" src={activeMedia.url} controls />
                 ) : (
-                  <img
+                  <img loading="lazy"
                     src={activeMedia?.url}
                     alt={product.name}
                     style={{
@@ -934,7 +934,7 @@ function ProductDetailPage() {
                                   aria-label={`${option.attribute.name}: ${value.value}`}
                                 >
                                   {imageUrl ? (
-                                    <img
+                                    <img loading="lazy"
                                       src={imageUrl}
                                       alt={value.value}
                                       onError={(event) => {
@@ -1189,13 +1189,13 @@ function ProductDetailPage() {
 
             <div className="product-lightbox__image-wrap">
               {product.mediaItems[lightboxIndex]?.type === "video" ? (
-                <video
+                <video preload="none"
                   src={product.mediaItems[lightboxIndex].url}
                   controls
                   className="product-lightbox__image"
                 />
               ) : (
-                <img
+                <img loading="lazy"
                   src={product.mediaItems[lightboxIndex]?.url}
                   alt={`${product.name} vista ${lightboxIndex + 1}`}
                   className="product-lightbox__image"
@@ -1215,9 +1215,9 @@ function ProductDetailPage() {
                     onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
-                      <video src={media.url} muted />
+                      <video preload="none" src={media.url} muted />
                     ) : (
-                      <img src={media.url} alt={`${product.name} miniatura ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} miniatura ${index + 1}`} />
                     )}
                   </button>
                 ))}

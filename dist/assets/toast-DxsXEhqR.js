@@ -1,0 +1,1 @@
+import{n as e}from"./dist-DTSG5i3q.js";var t=t=>{e.success(t)},n=t=>{e.error(t)},r=t=>{e.warning(t)},i=t=>{e(t)};export{r as i,i as n,t as r,n as t};
