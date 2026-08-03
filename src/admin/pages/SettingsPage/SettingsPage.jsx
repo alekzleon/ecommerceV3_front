@@ -26,6 +26,9 @@ import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import { useSettings } from "../../../context/SettingsContext"
 import "./SettingsPage.css"
 
+const PHONE_FORMAT_MESSAGE = "Formato de número inválido."
+const EMAIL_FORMAT_MESSAGE = "Formato de correo inválido."
+
 const EMPTY_FORM = {
   id: null,
   site_title: "",
@@ -179,6 +182,7 @@ function SettingsPage() {
   const { refreshSettings } = useSettings()
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [fieldErrors, setFieldErrors] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -238,6 +242,7 @@ function SettingsPage() {
         sale_notifications: saleNotifications,
         storefront,
       }))
+      setFieldErrors({})
     } catch (error) {
       console.error("Error al cargar configuración:", error)
       notifyError(error?.response?.data?.message || "No fue posible cargar la configuración.")
@@ -312,11 +317,14 @@ function SettingsPage() {
 
     if (name.startsWith("sale_notifications.")) {
       const key = name.replace("sale_notifications.", "")
+      const nextValue = key === "admin_whatsapp" ? normalizeTenDigitPhone(value) : value
+
+      updateFieldError(name, nextValue)
       setForm((prev) => ({
         ...prev,
         sale_notifications: {
           ...prev.sale_notifications,
-          [key]: type === "checkbox" ? checked : value,
+          [key]: type === "checkbox" ? checked : nextValue,
         },
       }))
       return
@@ -353,16 +361,37 @@ function SettingsPage() {
       ...prev,
       [name]: value,
     }))
+    updateFieldError(name, value)
   }
 
   function handleContactNumberChange(index, value) {
+    const nextValue = normalizeTenDigitPhone(value)
+
+    updateFieldError(`contact_numbers.${index}`, nextValue)
     setForm((prev) => {
       const nextNumbers = [...prev.contact_numbers]
-      nextNumbers[index] = value
+      nextNumbers[index] = nextValue
 
       return {
         ...prev,
         contact_numbers: nextNumbers.slice(0, 2),
+      }
+    })
+  }
+
+  function updateFieldError(name, value) {
+    const message = getSettingsFieldError(name, value)
+
+    setFieldErrors((prev) => {
+      if (!message) {
+        const nextErrors = { ...prev }
+        delete nextErrors[name]
+        return nextErrors
+      }
+
+      return {
+        ...prev,
+        [name]: message,
       }
     })
   }
@@ -374,6 +403,14 @@ function SettingsPage() {
 
     if (numbers.length > 2) {
       notifyWarning("Solo puedes guardar máximo 2 números de contacto.")
+      return
+    }
+
+    const validation = validateSettingsSection(form, activeSection)
+
+    if (validation.message) {
+      setFieldErrors((prev) => ({ ...prev, ...validation.errors }))
+      notifyWarning(validation.message)
       return
     }
 
@@ -394,16 +431,18 @@ function SettingsPage() {
           ...prev,
           abandoned_cart: normalizeAbandonedCartResponse(response),
         }))
+        setFieldErrors({})
         notifySuccess("Configuración de carrito abandonado guardada correctamente.")
         return
       }
 
       if (activeSection === "sale_notifications") {
         const payload = buildSaleNotificationPayload(form.sale_notifications)
-        const validationMessage = validateSaleNotificationPayload(payload)
+        const validation = validateSaleNotificationPayload(payload)
 
-        if (validationMessage) {
-          notifyWarning(validationMessage)
+        if (validation.message) {
+          setFieldErrors((prev) => ({ ...prev, ...validation.errors }))
+          notifyWarning(validation.message)
           return
         }
 
@@ -412,6 +451,7 @@ function SettingsPage() {
           ...prev,
           sale_notifications: normalizeSaleNotificationResponse(response),
         }))
+        setFieldErrors({})
         notifySuccess("Configuración de notificaciones guardada correctamente.")
         return
       }
@@ -431,6 +471,7 @@ function SettingsPage() {
           storefront: normalizeStorefrontResponse(response),
         }))
         refreshSettings()
+        setFieldErrors({})
         notifySuccess("Storefront guardado correctamente.")
         return
       }
@@ -462,6 +503,7 @@ function SettingsPage() {
         sale_notifications: form.sale_notifications,
       }))
       refreshSettings()
+      setFieldErrors({})
       notifySuccess("Configuración guardada correctamente.")
     } catch (error) {
       console.error("Error al guardar configuración:", error)
@@ -549,6 +591,7 @@ function SettingsPage() {
                   form={form}
                   onChange={handleFieldChange}
                   onContactNumberChange={handleContactNumberChange}
+                  errors={fieldErrors}
                 />
               ) : null}
 
@@ -557,7 +600,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "forms" ? (
-                <FormsSection form={form} onChange={handleFieldChange} />
+                <FormsSection form={form} onChange={handleFieldChange} errors={fieldErrors} />
               ) : null}
 
               {activeSection === "seo" ? (
@@ -581,7 +624,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "sale_notifications" ? (
-                <SaleNotificationsSection form={form} onChange={handleFieldChange} />
+                <SaleNotificationsSection form={form} onChange={handleFieldChange} errors={fieldErrors} />
               ) : null}
 
               {activeSection === "contact_faqs" ? (
@@ -691,7 +734,7 @@ function StorefrontSection({ form, onChange }) {
   )
 }
 
-function ContactSection({ form, onChange, onContactNumberChange }) {
+function ContactSection({ form, onChange, onContactNumberChange, errors = {} }) {
   return (
     <section className="settings-page__section">
       <div className="settings-page__grid settings-page__grid--two">
@@ -702,6 +745,8 @@ function ContactSection({ form, onChange, onContactNumberChange }) {
           value={form.email}
           onChange={onChange}
           placeholder="contacto@mitienda.com"
+          inputMode="email"
+          error={errors.email}
         />
 
         <Field
@@ -720,14 +765,25 @@ function ContactSection({ form, onChange, onContactNumberChange }) {
         </div>
         <div className="settings-page__grid settings-page__grid--two">
           {[0, 1].map((index) => (
-            <label className="settings-page__field" key={index}>
+            <label
+              className={`settings-page__field ${errors[`contact_numbers.${index}`] ? "is-error" : ""}`}
+              key={index}
+            >
               <span>Teléfono {index + 1}</span>
               <input
                 type="tel"
                 value={form.contact_numbers[index] || ""}
                 onChange={(event) => onContactNumberChange(index, event.target.value)}
                 placeholder={index === 0 ? "3312345678" : "3311223344"}
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\d{10}"
+                title="Escribe un teléfono de 10 dígitos."
+                aria-invalid={Boolean(errors[`contact_numbers.${index}`])}
               />
+              {errors[`contact_numbers.${index}`] ? (
+                <small className="settings-page__field-error">{errors[`contact_numbers.${index}`]}</small>
+              ) : null}
             </label>
           ))}
         </div>
@@ -766,7 +822,7 @@ function SocialSection({ form, onChange }) {
   )
 }
 
-function FormsSection({ form, onChange }) {
+function FormsSection({ form, onChange, errors = {} }) {
   return (
     <section className="settings-page__section">
       <Field
@@ -776,7 +832,9 @@ function FormsSection({ form, onChange }) {
         value={form.forms_recipient_email}
         onChange={onChange}
         placeholder="formularios@mitienda.com"
+        inputMode="email"
         helpText="Este correo decide a dónde llegan los mensajes de formularios."
+        error={errors.forms_recipient_email}
       />
     </section>
   )
@@ -970,7 +1028,7 @@ function AbandonedCartSection({ form, onChange }) {
   )
 }
 
-function SaleNotificationsSection({ form, onChange }) {
+function SaleNotificationsSection({ form, onChange, errors = {} }) {
   const settings = form.sale_notifications || EMPTY_FORM.sale_notifications
 
   return (
@@ -1010,7 +1068,9 @@ function SaleNotificationsSection({ form, onChange }) {
           onChange={onChange}
           placeholder="ventas@cloudishop.mx"
           required={settings.send_email}
+          inputMode="email"
           helpText="Requerido cuando el envío por correo está activo."
+          error={errors["sale_notifications.admin_email"]}
         />
 
         <Field
@@ -1019,9 +1079,14 @@ function SaleNotificationsSection({ form, onChange }) {
           type="tel"
           value={settings.admin_whatsapp}
           onChange={onChange}
-          placeholder="9612819842"
+          placeholder="5555555555"
           required={settings.send_whatsapp}
-          helpText="Requerido cuando WhatsApp está activo. Usa entre 10 y 15 dígitos."
+          inputMode="numeric"
+          maxLength={10}
+          pattern="\d{10}"
+          title="Escribe un WhatsApp de 10 dígitos."
+          helpText="Requerido cuando WhatsApp está activo. Usa 10 dígitos."
+          error={errors["sale_notifications.admin_whatsapp"]}
         />
       </div>
     </section>
@@ -1354,9 +1419,14 @@ function Field({
   min,
   max,
   step,
+  maxLength,
+  inputMode,
+  pattern,
+  title,
+  error = "",
 }) {
   return (
-    <label className="settings-page__field">
+    <label className={`settings-page__field ${error ? "is-error" : ""}`}>
       <span>
         {label}
         {required ? <b>*</b> : null}
@@ -1371,7 +1441,13 @@ function Field({
         min={min}
         max={max}
         step={step}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        pattern={pattern}
+        title={title}
+        aria-invalid={Boolean(error)}
       />
+      {error ? <small className="settings-page__field-error">{error}</small> : null}
       {helpText ? <small>{helpText}</small> : null}
     </label>
   )
@@ -1630,21 +1706,80 @@ function validateStorefrontPublicationPayload(payload) {
   return ""
 }
 
-function validateSaleNotificationPayload(payload) {
-  if (payload.send_email && !payload.admin_email) {
-    return "El correo administrador es requerido cuando el envío por correo está activo."
+function validateSettingsSection(form, section) {
+  const errors = {}
+
+  if (section === "contact") {
+    form.contact_numbers.forEach((number, index) => {
+      const value = String(number || "").trim()
+      if (value && !isValidTenDigitPhone(value)) {
+        errors[`contact_numbers.${index}`] = PHONE_FORMAT_MESSAGE
+      }
+    })
+
+    if (form.email && !isValidEmail(form.email)) {
+      errors.email = EMAIL_FORMAT_MESSAGE
+    }
   }
 
-  if (payload.admin_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.admin_email)) {
-    return "Escribe un correo administrador válido."
+  if (section === "forms" && form.forms_recipient_email && !isValidEmail(form.forms_recipient_email)) {
+    errors.forms_recipient_email = EMAIL_FORMAT_MESSAGE
+  }
+
+  return {
+    errors,
+    message: Object.values(errors)[0] || "",
+  }
+}
+
+function validateSaleNotificationPayload(payload) {
+  const errors = {}
+
+  if (payload.send_email && !payload.admin_email) {
+    errors["sale_notifications.admin_email"] = "Correo administrador requerido."
+  }
+
+  if (payload.admin_email && !isValidEmail(payload.admin_email)) {
+    errors["sale_notifications.admin_email"] = EMAIL_FORMAT_MESSAGE
   }
 
   if (payload.send_whatsapp && !payload.admin_whatsapp) {
-    return "El WhatsApp administrador es requerido cuando el envío por WhatsApp está activo."
+    errors["sale_notifications.admin_whatsapp"] = "WhatsApp administrador requerido."
   }
 
-  if (payload.admin_whatsapp && !/^\d{10,15}$/.test(payload.admin_whatsapp)) {
-    return "El WhatsApp administrador debe tener entre 10 y 15 dígitos."
+  if (payload.admin_whatsapp && !isValidTenDigitPhone(payload.admin_whatsapp)) {
+    errors["sale_notifications.admin_whatsapp"] = PHONE_FORMAT_MESSAGE
+  }
+
+  return {
+    errors,
+    message: Object.values(errors)[0] || "",
+  }
+}
+
+function normalizeTenDigitPhone(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 10)
+}
+
+function isValidTenDigitPhone(value = "") {
+  return /^\d{10}$/.test(String(value || "").trim())
+}
+
+function isValidEmail(value = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim())
+}
+
+function getSettingsFieldError(name, value) {
+  const normalizedValue = String(value || "").trim()
+
+  if (!normalizedValue) return ""
+
+  if (name === "email" || name === "forms_recipient_email" || name === "sale_notifications.admin_email") {
+    return isValidEmail(normalizedValue) ? "" : EMAIL_FORMAT_MESSAGE
+  }
+
+  if (name.startsWith("contact_numbers.") || name === "sale_notifications.admin_whatsapp") {
+    return isValidTenDigitPhone(normalizedValue) ? "" : PHONE_FORMAT_MESSAGE
   }
 
   return ""

@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { confirmTenantSubscriptionCheckout } from "../../services/api/subscriptionService"
+import {
+  confirmTenantSubscriptionCheckout,
+  getTenantSubscription,
+} from "../../services/api/subscriptionService"
+import { useAuth } from "../../context/AuthContext"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import "./BillingResultPage.css"
 
 function BillingResultPage({ type = "success" }) {
+  const { refreshMe } = useAuth()
   const [searchParams] = useSearchParams()
   const sessionId = searchParams.get("session_id")
   const confirmAttemptedRef = useRef(false)
   const [status, setStatus] = useState(type === "success" && sessionId ? "confirming" : "idle")
+  const [subscription, setSubscription] = useState(null)
   const copy = getBillingResultCopy(type)
 
   useEffect(() => {
@@ -20,6 +26,14 @@ function BillingResultPage({ type = "success" }) {
       try {
         setStatus("confirming")
         const response = await confirmTenantSubscriptionCheckout(sessionId)
+        const [subscriptionResponse] = await Promise.allSettled([
+          getTenantSubscription(),
+          refreshMe(),
+        ])
+
+        if (subscriptionResponse.status === "fulfilled") {
+          setSubscription(subscriptionResponse.value?.data || null)
+        }
 
         setStatus("confirmed")
         notifySuccess(response?.message || "Suscripción actualizada correctamente.")
@@ -44,7 +58,7 @@ function BillingResultPage({ type = "success" }) {
     }
 
     confirmCheckout()
-  }, [sessionId, type])
+  }, [refreshMe, sessionId, type])
 
   return (
     <main className="billing-result">
@@ -56,6 +70,12 @@ function BillingResultPage({ type = "success" }) {
         <span className="billing-result__eyebrow">{copy.eyebrow}</span>
         <h1>{getBillingTitle(copy, status)}</h1>
         <p>{getBillingMessage(copy, status)}</p>
+        {subscription ? (
+          <p>
+            Plan {subscription.plan?.name || subscription.plan_key || "-"} · Estado{" "}
+            {translateSubscriptionStatus(subscription.status)}
+          </p>
+        ) : null}
 
         <div className="billing-result__actions">
           <Link to="/admin/subscription" className="billing-result__primary">
@@ -108,6 +128,20 @@ function getBillingResultCopy(type) {
     title: "Tu suscripción está en proceso",
     message: "Estamos actualizando tu plan. Si no lo ves reflejado de inmediato, vuelve a revisar en unos segundos.",
   }
+}
+
+function translateSubscriptionStatus(status) {
+  const map = {
+    active: "activo",
+    trialing: "en prueba",
+    past_due: "con pago pendiente",
+    suspended: "suspendido",
+    canceled: "cancelado",
+    cancelled: "cancelado",
+    incomplete: "incompleto",
+  }
+
+  return map[String(status || "").toLowerCase()] || status || "sin estatus"
 }
 
 export default BillingResultPage

@@ -175,7 +175,7 @@ const TEMPLATE_VISUAL_DESIGN_OVERRIDES = {
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const refreshSettings = async () => {
     try {

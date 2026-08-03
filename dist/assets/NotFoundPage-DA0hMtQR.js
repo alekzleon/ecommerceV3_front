@@ -1,1 +1,0 @@
-import{t as e}from"./jsx-runtime-D-oznMWL.js";import"./react-DcCgrBX5.js";import{D as t}from"./index-Dk79XjYs.js";var n=e();function r(){return(0,n.jsxs)(`div`,{children:[(0,n.jsx)(`h1`,{children:`404`}),(0,n.jsx)(`p`,{children:`La página que buscas no existe.`}),(0,n.jsx)(t,{to:`/`,children:`Volver al inicio`})]})}export{r as default};

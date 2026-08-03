@@ -173,6 +173,25 @@
   box-shadow: 0 0 0 3px rgba(19, 66, 107, 0.12);
 }
 
+.settings-page__field.is-error input,
+.settings-page__field.is-error textarea,
+.settings-page__field.is-error select {
+  border-color: #dc2626;
+  background: #fff7f7;
+}
+
+.settings-page__field.is-error input:focus,
+.settings-page__field.is-error textarea:focus,
+.settings-page__field.is-error select:focus {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.settings-page__field .settings-page__field-error {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
 .settings-page__asset-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
