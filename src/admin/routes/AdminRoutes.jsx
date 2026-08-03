@@ -22,6 +22,7 @@ const LogsPage = lazy(() => import("../pages/LogsPage/LogsPage"))
 const SettingsPage = lazy(() => import("../pages/SettingsPage/SettingsPage"))
 const DesignEcommercePage = lazy(() => import("../pages/DesignEcommercePage/DesignEcommercePage"))
 const SubscriptionPage = lazy(() => import("../pages/SubscriptionPage/SubscriptionPage"))
+const PaymentsPage = lazy(() => import("../pages/PaymentsPage/PaymentsPage"))
 const CreditPage = lazy(() => import("../pages/CreditPage/CreditPage"))
 const CollectionsPage = lazy(() => import("../pages/CollectionsPage/CollectionsPage"))
 const SyncPage = lazy(() => import("../pages/SyncPage/SyncPage"))
@@ -77,6 +78,8 @@ function AdminRoutes({
           <Route path="/logs" element={withModule(currentUser, "logs", <LogsPage />)} />
           <Route path="/sync" element={withModule(currentUser, "sincronizacion", <SyncPage />)} />
           <Route path="/settings" element={withModule(currentUser, "configuracion_ecommerce", <SettingsPage />)} />
+          <Route path="/payments" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
+          <Route path="/payments/stripe/return" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
           <Route
             path="/design"
             element={withModule(currentUser, "configuracion_ecommerce", <DesignEcommercePage />)}

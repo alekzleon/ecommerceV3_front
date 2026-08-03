@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import AdminCard from "../../components/AdminCard/AdminCard"
 import {
   createAdminSettings,
@@ -21,6 +22,7 @@ import {
   toggleAdminContactFaq,
   updateAdminContactFaq,
 } from "../../../services/api/contactFaqService"
+import { getStripeConnectStatus } from "../../../services/api/stripeConnectService"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl"
 import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import { useSettings } from "../../../context/SettingsContext"
@@ -183,6 +185,7 @@ function SettingsPage() {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id)
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [stripeConnectStatus, setStripeConnectStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -212,12 +215,14 @@ function SettingsPage() {
         abandonedCartResponse,
         saleNotificationsResponse,
         storefrontResponse,
+        stripeConnectResponse,
       ] = await Promise.allSettled([
         getAdminSettings(),
         getAdminMetaPixel(),
         getAdminAbandonedCartSettings(),
         getAdminSaleNotificationSettings(),
         getAdminStorefront(),
+        getStripeConnectStatus(),
       ])
       const data = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -234,6 +239,9 @@ function SettingsPage() {
       const storefront = storefrontResponse.status === "fulfilled"
         ? normalizeStorefrontResponse(storefrontResponse.value)
         : EMPTY_FORM.storefront
+      const stripeStatus = stripeConnectResponse.status === "fulfilled"
+        ? normalizeStripeConnectStatus(stripeConnectResponse.value)
+        : null
 
       setForm(mapSettingsToForm({
         ...data,
@@ -242,6 +250,7 @@ function SettingsPage() {
         sale_notifications: saleNotifications,
         storefront,
       }))
+      setStripeConnectStatus(stripeStatus)
       setFieldErrors({})
     } catch (error) {
       console.error("Error al cargar configuración:", error)
@@ -396,6 +405,21 @@ function SettingsPage() {
     })
   }
 
+  async function refreshStripeConnectStatus() {
+    try {
+      const response = await getStripeConnectStatus()
+      const status = normalizeStripeConnectStatus(response)
+
+      setStripeConnectStatus(status)
+      return status
+    } catch (error) {
+      console.error("Error al validar Stripe Connect:", error?.response?.data || error)
+      setStripeConnectStatus(null)
+      notifyError(error?.response?.data?.message || "No fue posible validar el estado de Stripe.")
+      return null
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
@@ -463,6 +487,15 @@ function SettingsPage() {
         if (validationMessage) {
           notifyWarning(validationMessage)
           return
+        }
+
+        if (payload.is_published) {
+          const stripeStatus = await refreshStripeConnectStatus()
+
+          if (!stripeStatus?.ready_for_charges) {
+            notifyWarning(getStripePublicationBlockMessage(stripeStatus))
+            return
+          }
         }
 
         const response = await updateAdminStorefront(payload)
@@ -583,7 +616,11 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "storefront" ? (
-                <StorefrontSection form={form} onChange={handleFieldChange} />
+                <StorefrontSection
+                  form={form}
+                  onChange={handleFieldChange}
+                  stripeConnectStatus={stripeConnectStatus}
+                />
               ) : null}
 
               {activeSection === "contact" ? (
@@ -691,11 +728,34 @@ function IdentitySection({ form, onChange }) {
   )
 }
 
-function StorefrontSection({ form, onChange }) {
+function StorefrontSection({ form, onChange, stripeConnectStatus }) {
   const settings = form.storefront || EMPTY_FORM.storefront
+  const stripeGate = getStripePublicationGate(stripeConnectStatus)
 
   return (
     <section className="settings-page__section">
+      <div className={`settings-storefront__payment-gate settings-storefront__payment-gate--${stripeGate.tone}`}>
+        <span className="settings-storefront__payment-icon">
+          <i className={`bi ${stripeGate.icon}`} aria-hidden="true" />
+        </span>
+        <div>
+          <strong>{stripeGate.title}</strong>
+          <p>{stripeGate.message}</p>
+          {stripeGate.requirements.length ? (
+            <div className="settings-storefront__payment-requirements">
+              {stripeGate.requirements.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {!stripeGate.ready ? (
+          <Link to="/admin/payments" className="settings-storefront__payment-action">
+            {stripeGate.cta}
+          </Link>
+        ) : null}
+      </div>
+
       <div className="settings-storefront__status">
         <ToggleField
           label={settings.is_published ? "Ecommerce publicado" : "Ecommerce en construcción"}
@@ -1586,6 +1646,107 @@ function normalizeStorefrontResponse(response) {
   const value = data.value || data
 
   return normalizeStorefrontValue(value)
+}
+
+function normalizeStripeConnectStatus(response) {
+  const data = response?.data?.data || response?.data || response || {}
+
+  return data && typeof data === "object" ? data : null
+}
+
+function getStripePublicationGate(status) {
+  const requirements = buildStripeBlockingRequirementList(status)
+  const hasPendingReview = !status?.ready_for_charges && !requirements.length
+  const disabledReasonLabel = status?.requirements?.disabled_reason_label || ""
+
+  if (status?.ready_for_charges) {
+    return {
+      ready: true,
+      tone: "success",
+      icon: "bi-check-circle-fill",
+      title: "Stripe listo para recibir pagos",
+      message: "La tienda puede publicarse y procesar cobros con Stripe Connect.",
+      cta: "",
+      requirements,
+    }
+  }
+
+  const state = String(status?.status || "not_connected")
+
+  if (state === "onboarding_pending") {
+    return {
+      ready: false,
+      tone: "warning",
+      icon: "bi-exclamation-circle-fill",
+      title: "Completa la configuración de Stripe",
+      message: disabledReasonLabel || (hasPendingReview
+        ? "Stripe aún está revisando o activando la cuenta. Intenta actualizar el estado en unos minutos."
+        : "Para publicar la tienda y recibir pagos debes terminar el onboarding de Stripe Connect."),
+      cta: "Continuar configuración de Stripe",
+      requirements,
+    }
+  }
+
+  if (state === "restricted") {
+    return {
+      ready: false,
+      tone: "danger",
+      icon: "bi-slash-circle-fill",
+      title: "Stripe requiere información pendiente",
+      message: disabledReasonLabel || (hasPendingReview
+        ? "Stripe aún está revisando o activando la cuenta. Intenta actualizar el estado en unos minutos."
+        : "La tienda no puede recibir pagos hasta resolver los requisitos indicados por Stripe."),
+      cta: "Continuar configuración de Stripe",
+      requirements,
+    }
+  }
+
+  return {
+    ready: false,
+    tone: "warning",
+    icon: "bi-cash-stack",
+    title: "Conecta Stripe antes de publicar",
+    message: "Para recibir pagos, la tienda debe tener Stripe Connect conectado y listo.",
+    cta: "Conectar Stripe",
+    requirements,
+  }
+}
+
+function getStripePublicationBlockMessage(status) {
+  const state = String(status?.status || "not_connected")
+  const disabledReasonLabel = status?.requirements?.disabled_reason_label
+
+  if (disabledReasonLabel) return disabledReasonLabel
+
+  if (state === "onboarding_pending") {
+    return "Completa la configuración de Stripe antes de publicar la tienda."
+  }
+
+  if (state === "restricted") {
+    return "Stripe requiere información pendiente antes de publicar la tienda."
+  }
+
+  return "Conecta Stripe antes de publicar la tienda."
+}
+
+function buildStripeBlockingRequirementList(status) {
+  const requirements = status?.requirements || {}
+  const blockingItems = Array.isArray(requirements.items)
+    ? requirements.items.filter((item) => item?.blocking)
+    : []
+
+  if (blockingItems.length) {
+    return blockingItems
+      .map((item) => item.label || item.field)
+      .filter(Boolean)
+  }
+
+  return [
+    ...(Array.isArray(requirements.blocking) ? requirements.blocking : []),
+    ...(Array.isArray(requirements.past_due) ? requirements.past_due : []),
+    ...(Array.isArray(requirements.currently_due) ? requirements.currently_due : []),
+    ...(Array.isArray(requirements.eventually_due) ? requirements.eventually_due : []),
+  ].filter(Boolean)
 }
 
 function normalizeAbandonedCartValue(value = {}) {

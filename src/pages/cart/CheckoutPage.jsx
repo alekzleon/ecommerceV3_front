@@ -372,9 +372,14 @@ function CheckoutPage() {
       window.location.assign(stripeUrl)
     } catch (error) {
       console.error("Error al iniciar pago con Stripe:", error?.response?.data || error)
-      notifyError(
-        error?.response?.data?.message || "No fue posible iniciar el pago con Stripe."
-      )
+      const message = error?.response?.data?.message || "No fue posible iniciar el pago con Stripe."
+
+      if (error?.response?.status === 422) {
+        notifyWarning(message)
+        return
+      }
+
+      notifyError(message)
     } finally {
       setProcessingPayment(false)
     }

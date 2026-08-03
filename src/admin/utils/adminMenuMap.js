@@ -120,6 +120,12 @@ const adminMenuMap = [
     subtitle: "Ajustes generales del ecommerce.",
   },
   {
+    module: "pagos",
+    path: "/admin/payments",
+    title: "Pagos",
+    subtitle: "Conecta Stripe para recibir pagos en tu ecommerce.",
+  },
+  {
     module: "disena_ecommerce",
     path: "/admin/design",
     title: "Diseña tu ecommerce",

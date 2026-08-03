@@ -106,10 +106,11 @@ function addStorefrontAdminMenuItems(menu) {
 
   const nextMenu = menu.map((group) => {
     const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
+    const hasPayments = group.items.some((item) => item.name === "pagos")
     const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
     const hasSubscription = group.items.some((item) => item.name === "suscripcion")
 
-    if (!hasSettings && !hasDesign) return group
+    if (!hasSettings && !hasDesign && !hasPayments) return group
 
     const items = []
 
@@ -125,10 +126,20 @@ function addStorefrontAdminMenuItems(menu) {
         })
       }
 
-      const isDesignInsertionPoint = item.name === "disena_ecommerce"
-        || (item.name === "configuracion_ecommerce" && !hasDesign)
+      if (item.name === "configuracion_ecommerce" && !hasPayments) {
+        items.push({
+          ...item,
+          name: "pagos",
+          display_name: "Pagos",
+          front_path: "/admin/payments",
+        })
+      }
 
-      if (isDesignInsertionPoint && !hasSubscription) {
+      const isDesignInsertionPoint = item.name === "disena_ecommerce"
+        || (item.name === "configuracion_ecommerce" && !hasDesign && !hasPayments)
+      const isPaymentsInsertionPoint = item.name === "pagos"
+
+      if ((isDesignInsertionPoint || isPaymentsInsertionPoint) && !hasSubscription) {
         items.push(buildSubscriptionMenuItem(item))
       }
     })
@@ -196,6 +207,7 @@ function renderSidebarIcon(moduleName) {
     logs: "bi-list-check",
     sincronizacion: "bi-arrow-repeat",
     configuracion_ecommerce: "bi-gear-fill",
+    pagos: "bi-cash-stack",
     disena_ecommerce: "bi-palette-fill",
     suscripcion: "bi-credit-card-fill",
     design: "bi-palette-fill",
