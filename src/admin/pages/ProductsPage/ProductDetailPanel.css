@@ -93,6 +93,12 @@
   box-shadow: 0 0 0 2px rgba(44, 110, 203, 0.18);
 }
 
+.product-detail .form-control.is-selected {
+  border-color: #13426b;
+  background: #f8fbff;
+  font-weight: 700;
+}
+
 .product-detail textarea.form-control {
   min-height: 92px;
   resize: vertical;
@@ -903,6 +909,39 @@ button.product-detail__variant-chip {
   position: relative;
 }
 
+.product-detail__autocomplete-control {
+  position: relative;
+}
+
+.product-detail__autocomplete-control .form-control {
+  padding-right: 2.45rem;
+}
+
+.product-detail__autocomplete-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #13426b;
+  cursor: pointer;
+}
+
+.product-detail__autocomplete-toggle:hover {
+  background: #eef4fb;
+}
+
+.product-detail__autocomplete-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .product-detail__autocomplete-menu {
   position: absolute;
   top: calc(100% + 0.35rem);
@@ -942,6 +981,13 @@ button.product-detail__variant-chip {
 
 .product-detail__autocomplete-menu small {
   color: #616161;
+}
+
+.product-detail__autocomplete-empty {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.7rem 0.75rem;
 }
 
 .product-detail__autocomplete-menu .is-create {

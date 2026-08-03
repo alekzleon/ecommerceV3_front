@@ -46,6 +46,11 @@ export async function getPublicSaleNotificationSettings() {
   return data
 }
 
+export async function getPublicShippingSettings() {
+  const { data } = await api.get("/ecommerce-settings/shipping")
+  return data
+}
+
 export async function getPublicHomeBenefits() {
   const { data } = await api.get("/ecommerce-settings/home-benefits")
   return data
@@ -103,6 +108,11 @@ export async function getAdminAbandonedCartSettings() {
 
 export async function getAdminSaleNotificationSettings() {
   const { data } = await api.get("/admin/ecommerce-settings/sale-notifications")
+  return data
+}
+
+export async function getAdminShippingSettings() {
+  const { data } = await api.get("/admin/ecommerce-settings/shipping")
   return data
 }
 
@@ -187,6 +197,11 @@ export async function updateAdminAbandonedCartSettings(payload) {
 
 export async function updateAdminSaleNotificationSettings(payload) {
   const { data } = await api.patch("/admin/ecommerce-settings/sale-notifications", payload)
+  return data
+}
+
+export async function updateAdminShippingSettings(payload) {
+  const { data } = await api.patch("/admin/ecommerce-settings/shipping", payload)
   return data
 }
 

@@ -5,7 +5,12 @@ import {
   createStripeConnectOnboardingLink,
   getStripeConnectStatus,
 } from "../../../services/api/stripeConnectService"
-import { notifyError, notifySuccess } from "../../../utils/toast"
+import { getAdminStorefront } from "../../../services/api/settingsService"
+import {
+  getAdminPaymentMethods,
+  updateAdminPaymentMethods,
+} from "../../../services/api/paymentMethodsService"
+import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import "./PaymentsPage.css"
 
 const PAYMENT_GATEWAYS = [
@@ -30,17 +35,37 @@ function PaymentsPage() {
   const isStripeReturn = location.pathname === "/admin/payments/stripe/return"
   const [activeGateway, setActiveGateway] = useState("stripe")
   const [stripeStatus, setStripeStatus] = useState(null)
+  const [paymentMethods, setPaymentMethods] = useState(null)
+  const [storefrontPublished, setStorefrontPublished] = useState(false)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState("")
 
   const statusCopy = useMemo(() => getStripeStatusCopy(stripeStatus), [stripeStatus])
   const blockingRequirements = useMemo(() => buildBlockingRequirements(stripeStatus), [stripeStatus])
+  const stripeMethod = useMemo(() => getPaymentMethod(paymentMethods, "stripe"), [paymentMethods])
 
   const loadStatus = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await getStripeConnectStatus()
-      setStripeStatus(response?.data || null)
+      const [stripeResponse, methodsResponse, storefrontResponse] = await Promise.allSettled([
+        getStripeConnectStatus(),
+        getAdminPaymentMethods(),
+        getAdminStorefront(),
+      ])
+
+      if (stripeResponse.status === "fulfilled") {
+        setStripeStatus(stripeResponse.value?.data || null)
+      } else {
+        throw stripeResponse.reason
+      }
+
+      if (methodsResponse.status === "fulfilled") {
+        setPaymentMethods(normalizePaymentMethods(methodsResponse.value))
+      }
+
+      if (storefrontResponse.status === "fulfilled") {
+        setStorefrontPublished(Boolean(normalizeStorefrontValue(storefrontResponse.value)?.is_published))
+      }
     } catch (error) {
       console.error("Error cargando estado de Stripe Connect:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible consultar el estado de pagos.")
@@ -62,6 +87,37 @@ function PaymentsPage() {
     } catch (error) {
       console.error("Error preparando Stripe Connect:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible preparar la cuenta de Stripe.")
+    } finally {
+      setActionLoading("")
+    }
+  }
+
+  async function handleToggleStripePayment(nextEnabled) {
+    if (nextEnabled && !stripeStatus?.ready_for_charges) {
+      notifyWarning("Completa Stripe Connect antes de activar este método en checkout.")
+      return
+    }
+
+    if (!nextEnabled && storefrontPublished && countActivePaymentMethods(paymentMethods) <= 1) {
+      notifyWarning("No puedes desactivar el único método de pago mientras la tienda está publicada.")
+      return
+    }
+
+    try {
+      setActionLoading("stripe_enabled")
+      const response = await updateAdminPaymentMethods({
+        methods: {
+          stripe: {
+            enabled: nextEnabled,
+          },
+        },
+      })
+
+      setPaymentMethods(normalizePaymentMethods(response))
+      notifySuccess(nextEnabled ? "Stripe activado en checkout." : "Stripe desactivado en checkout.")
+    } catch (error) {
+      console.error("Error actualizando método de pago:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible actualizar el método de pago.")
     } finally {
       setActionLoading("")
     }
@@ -124,7 +180,9 @@ function PaymentsPage() {
           onPrepareAccount={handlePrepareAccount}
           onRefresh={loadStatus}
           onStartOnboarding={handleStartOnboarding}
+          onToggleStripePayment={handleToggleStripePayment}
           blockingRequirements={blockingRequirements}
+          stripeMethod={stripeMethod}
           statusCopy={statusCopy}
           stripeStatus={stripeStatus}
         />
@@ -141,12 +199,16 @@ function StripeGatewayPanel({
   onPrepareAccount,
   onRefresh,
   onStartOnboarding,
+  onToggleStripePayment,
   blockingRequirements,
+  stripeMethod,
   statusCopy,
   stripeStatus,
 }) {
   const canContinueOnboarding = Boolean(stripeStatus?.can_continue_onboarding)
   const disabledReasonLabel = stripeStatus?.requirements?.disabled_reason_label || ""
+  const stripeEnabled = Boolean(stripeMethod?.enabled || stripeMethod?.active)
+  const stripeAvailable = stripeStatus?.ready_for_charges && stripeMethod?.available !== false
 
   return (
     <>
@@ -189,6 +251,35 @@ function StripeGatewayPanel({
         <InfoCard label="Cobros" value={stripeStatus?.account?.charges_enabled ? "Habilitados" : "Pendientes"} />
         <InfoCard label="Depósitos" value={stripeStatus?.account?.payouts_enabled ? "Habilitados" : "Pendientes"} />
         <InfoCard label="Datos enviados" value={stripeStatus?.account?.details_submitted ? "Sí" : "No"} />
+      </section>
+
+      <section className="payments-panel">
+        <div className="payments-method-toggle">
+          <div>
+            <span>Método en checkout</span>
+            <h2>Tarjeta de crédito o débito</h2>
+            <p>
+              {stripeEnabled
+                ? "Stripe está visible para que los clientes paguen en checkout."
+                : "Stripe no se mostrará como método de pago en checkout."}
+            </p>
+            {!stripeAvailable ? (
+              <p className="payments-panel__message">
+                Completa Stripe Connect antes de activar este método.
+              </p>
+            ) : null}
+          </div>
+
+          <label className="payments-switch">
+            <input
+              type="checkbox"
+              checked={stripeEnabled}
+              onChange={(event) => onToggleStripePayment(event.target.checked)}
+              disabled={Boolean(actionLoading) || !stripeAvailable}
+            />
+            <span />
+          </label>
+        </div>
       </section>
 
       <section className="payments-panel">
@@ -363,6 +454,30 @@ function translateStripeStatus(status) {
   }
 
   return statuses[String(status || "")] || status || "Sin estado"
+}
+
+function normalizePaymentMethods(response) {
+  const value = response?.data?.value || response?.data?.data?.value || response?.value || {}
+
+  return {
+    default_method: value.default_method || null,
+    methods: Array.isArray(value.methods) ? value.methods : [],
+  }
+}
+
+function getPaymentMethod(paymentMethods, key) {
+  return paymentMethods?.methods?.find((method) => method.key === key) || null
+}
+
+function countActivePaymentMethods(paymentMethods) {
+  return paymentMethods?.methods?.filter((method) => method.active || method.enabled).length || 0
+}
+
+function normalizeStorefrontValue(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return value && typeof value === "object" ? value : {}
 }
 
 export default PaymentsPage

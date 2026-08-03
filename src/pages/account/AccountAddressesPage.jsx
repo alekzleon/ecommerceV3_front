@@ -28,6 +28,9 @@ const emptyAddressForm = {
   is_default: false,
 }
 
+const PHONE_LENGTH = 10
+const ZIP_CODE_LENGTH = 5
+
 function AccountAddressesPage() {
   const [addresses, setAddresses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -95,9 +98,15 @@ function AccountAddressesPage() {
 
   function handleFormChange(event) {
     const { name, value, type, checked } = event.target
+    const nextValue = name === "phone"
+      ? onlyDigits(value, PHONE_LENGTH)
+      : name === "zip_code"
+        ? onlyDigits(value, ZIP_CODE_LENGTH)
+        : value
+
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: type === "checkbox" ? checked : nextValue,
     }))
   }
 
@@ -106,6 +115,13 @@ function AccountAddressesPage() {
 
     if (!form.alias.trim() || !form.street.trim() || !form.zip_code.trim()) {
       notifyWarning("Completa alias, calle y código postal.")
+      return
+    }
+
+    const validationMessage = validateAddressForm(form)
+
+    if (validationMessage) {
+      notifyWarning(validationMessage)
       return
     }
 
@@ -314,7 +330,15 @@ function AccountAddressesPage() {
                 </label>
                 <label>
                   Teléfono
-                  <input name="phone" value={form.phone} onChange={handleFormChange} placeholder="3312345678" />
+                  <input
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleFormChange}
+                    placeholder="5555555555"
+                    inputMode="numeric"
+                    maxLength={PHONE_LENGTH}
+                    pattern="\d{10}"
+                  />
                 </label>
                 <label className="address_form_full">
                   Calle y número
@@ -326,7 +350,15 @@ function AccountAddressesPage() {
                 </label>
                 <label>
                   Código postal
-                  <input name="zip_code" value={form.zip_code} onChange={handleFormChange} placeholder="44100" />
+                  <input
+                    name="zip_code"
+                    value={form.zip_code}
+                    onChange={handleFormChange}
+                    placeholder="00000"
+                    inputMode="numeric"
+                    maxLength={ZIP_CODE_LENGTH}
+                    pattern="\d{5}"
+                  />
                 </label>
                 <label>
                   Colonia
@@ -380,6 +412,22 @@ function buildAddressPayload(form) {
     phone: form.phone.trim(),
     is_default: Boolean(form.is_default),
   }
+}
+
+function onlyDigits(value, maxLength) {
+  return String(value || "").replace(/\D/g, "").slice(0, maxLength)
+}
+
+function validateAddressForm(form) {
+  if (!/^\d{10}$/.test(form.phone)) {
+    return "El teléfono debe tener 10 dígitos numéricos."
+  }
+
+  if (!/^\d{5}$/.test(form.zip_code)) {
+    return "El código postal debe tener 5 dígitos numéricos."
+  }
+
+  return ""
 }
 
 export default AccountAddressesPage

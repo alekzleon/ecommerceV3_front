@@ -14,6 +14,7 @@ import {
   createAccountAddress,
   getAccountAddresses,
 } from "../../services/api/accountService.js"
+import { getPublicPaymentMethods } from "../../services/api/paymentMethodsService.js"
 import AdminSidePanel from "../../components/AdminSidePanel/AdminSidePanel.jsx"
 import { useSettings } from "../../context/SettingsContext.jsx"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
@@ -32,6 +33,9 @@ const emptyAddressForm = {
   delivery_note: "",
   is_default: false,
 }
+
+const ADDRESS_PHONE_LENGTH = 10
+const ADDRESS_ZIP_CODE_LENGTH = 5
 
 const emptyCheckout = {
   cart_id: null,
@@ -85,6 +89,8 @@ function CheckoutPage() {
   const [addressSaving, setAddressSaving] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressForm, setAddressForm] = useState(emptyAddressForm)
+  const [paymentMethods, setPaymentMethods] = useState(null)
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true)
   const [processingPayment, setProcessingPayment] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [documentNotes, setDocumentNotes] = useState("")
@@ -93,8 +99,22 @@ function CheckoutPage() {
 
   useEffect(() => {
     fetchPreview()
+    fetchPaymentMethods()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function fetchPaymentMethods() {
+    try {
+      setPaymentMethodsLoading(true)
+      const response = await getPublicPaymentMethods()
+      setPaymentMethods(normalizePaymentMethods(response))
+    } catch (error) {
+      console.error("Error al cargar métodos de pago:", error?.response?.data || error)
+      setPaymentMethods({ default_method: null, methods: [] })
+    } finally {
+      setPaymentMethodsLoading(false)
+    }
+  }
 
   async function fetchPreview() {
     try {
@@ -266,7 +286,9 @@ function CheckoutPage() {
   }, [checkout.blockers, invalidStockItems])
 
   const canContinue = Boolean(selectedAddress) && !hasPendingGiftSelection && insufficientStockBlockers.length === 0 && invalidStockItems.length === 0
-  const canPay = canContinue && acceptedTerms
+  const stripePaymentMethod = getActivePaymentMethod(paymentMethods, "stripe")
+  const hasStripePaymentMethod = Boolean(stripePaymentMethod)
+  const canPay = canContinue && acceptedTerms && hasStripePaymentMethod && !paymentMethodsLoading
 
   useEffect(() => {
     if (!checkout.items.length) return
@@ -287,6 +309,16 @@ function CheckoutPage() {
   }, [checkout, totals])
 
   async function handleStartStripeCheckout() {
+    if (paymentMethodsLoading) {
+      notifyWarning("Espera a que carguen los métodos de pago.")
+      return
+    }
+
+    if (!hasStripePaymentMethod) {
+      notifyWarning("El método de pago con Stripe no está activo para esta tienda.")
+      return
+    }
+
     if (!acceptedTerms) {
       notifyWarning("Acepta los términos y condiciones para continuar con el pago.")
       return
@@ -416,7 +448,13 @@ function CheckoutPage() {
   function handleAddressFormChange(event) {
     const { name, value, type, checked } = event.target
     const nextValue =
-      name === "delivery_note" ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH) : value
+      name === "delivery_note"
+        ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH)
+        : name === "phone"
+          ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
+          : name === "zip_code"
+            ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
+            : value
 
     setAddressForm((prev) => ({
       ...prev,
@@ -474,6 +512,13 @@ function CheckoutPage() {
 
     if (!addressForm.alias.trim() || !addressForm.street.trim() || !addressForm.zip_code.trim()) {
       notifyWarning("Completa alias, calle y código postal.")
+      return
+    }
+
+    const validationMessage = validateAddressForm(addressForm)
+
+    if (validationMessage) {
+      notifyWarning(validationMessage)
       return
     }
 
@@ -563,6 +608,8 @@ function CheckoutPage() {
             </button>
           )}
         </header>
+
+        {hasItems ? <CheckoutFreeShippingProgress shipping={checkout.shipping} /> : null}
 
         {!hasItems ? (
           <div className="checkout_empty_state">
@@ -851,6 +898,9 @@ function CheckoutPage() {
                 coupon={checkout.coupon || totals.coupon}
                 insufficientStockBlockers={insufficientStockBlockers}
                 invalidStockItems={invalidStockItems}
+                hasStripePaymentMethod={hasStripePaymentMethod}
+                paymentMethodsLoading={paymentMethodsLoading}
+                shipping={checkout.shipping}
               />
             </aside>
           </div>
@@ -864,14 +914,22 @@ function CheckoutPage() {
             <strong className="mobile_bar_total">{formatMoney(totals.amount_due)}</strong>
           </div>
 
-          <button
-            type="button"
-            className="btn btn_primary mobile_pay_btn"
-            onClick={handleStartStripeCheckout}
-            disabled={processingPayment || !canPay}
-          >
-            {processingPayment ? "Redirigiendo..." : "Pagar con Stripe"}
-          </button>
+          {paymentMethodsLoading ? (
+            <p className="checkout_muted">Cargando métodos de pago...</p>
+          ) : hasStripePaymentMethod ? (
+            <button
+              type="button"
+              className="btn btn_primary mobile_pay_btn"
+              onClick={handleStartStripeCheckout}
+              disabled={processingPayment || !canPay}
+            >
+              {processingPayment ? "Redirigiendo..." : "Pagar con tarjeta"}
+            </button>
+          ) : (
+            <p className="checkout_muted checkout_muted--warning">
+              No hay métodos de pago disponibles.
+            </p>
+          )}
 
           <label className="checkout_terms checkout_terms--mobile">
             <input
@@ -962,7 +1020,15 @@ function CheckoutPage() {
               </label>
               <label>
                 Teléfono
-                <input name="phone" value={addressForm.phone} onChange={handleAddressFormChange} placeholder="33 0000 0000" />
+                <input
+                  name="phone"
+                  value={addressForm.phone}
+                  onChange={handleAddressFormChange}
+                  placeholder="5555555555"
+                  inputMode="numeric"
+                  maxLength={ADDRESS_PHONE_LENGTH}
+                  pattern="\d{10}"
+                />
               </label>
               <label>
                 Calle y número
@@ -982,7 +1048,15 @@ function CheckoutPage() {
               </label>
               <label>
                 Código postal
-                <input name="zip_code" value={addressForm.zip_code} onChange={handleAddressFormChange} placeholder="00000" />
+                <input
+                  name="zip_code"
+                  value={addressForm.zip_code}
+                  onChange={handleAddressFormChange}
+                  placeholder="00000"
+                  inputMode="numeric"
+                  maxLength={ADDRESS_ZIP_CODE_LENGTH}
+                  pattern="\d{5}"
+                />
               </label>
               <label className="checkout_address_form_full">
                 Instrucciones de entrega
@@ -1030,7 +1104,12 @@ function InvoiceSummary({
   coupon,
   insufficientStockBlockers = [],
   invalidStockItems = [],
+  hasStripePaymentMethod,
+  paymentMethodsLoading,
+  shipping,
 }) {
+  const shippingLabel = shipping?.method?.label || "Envío"
+
   return (
     <div className="summary_card">
       <h2 className="summary_title">Totales</h2>
@@ -1063,6 +1142,11 @@ function InvoiceSummary({
         <div className="summary_row">
           <span>Impuestos</span>
           <span>{formatMoney(totals.tax)}</span>
+        </div>
+
+        <div className="summary_row">
+          <span>{shippingLabel}</span>
+          <span>{Number(totals.shipping || 0) > 0 ? formatMoney(totals.shipping) : "Gratis"}</span>
         </div>
 
       </div>
@@ -1114,14 +1198,22 @@ function InvoiceSummary({
           </button>
         ) : null}
 
-        <button
-          type="button"
-          className="btn btn_primary"
-          onClick={onPay}
-          disabled={processingPayment || !canCheckout || !acceptedTerms}
-        >
-          {processingPayment ? "Validando checkout..." : "Pagar con Stripe"}
-        </button>
+        {paymentMethodsLoading ? (
+          <p className="checkout_muted">Cargando métodos de pago...</p>
+        ) : hasStripePaymentMethod ? (
+          <button
+            type="button"
+            className="btn btn_primary"
+            onClick={onPay}
+            disabled={processingPayment || !canCheckout || !acceptedTerms}
+          >
+            {processingPayment ? "Validando checkout..." : "Pagar con tarjeta"}
+          </button>
+        ) : (
+          <p className="checkout_muted checkout_muted--warning">
+            No hay métodos de pago disponibles para esta tienda.
+          </p>
+        )}
 
         <button
           type="button"
@@ -1137,6 +1229,46 @@ function InvoiceSummary({
       </div>
     </div>
   )
+}
+
+function CheckoutFreeShippingProgress({ shipping }) {
+  const normalizedShipping = normalizeCheckoutShipping(shipping)
+  if (!normalizedShipping?.enabled || !normalizedShipping.free_shipping_minimum_enabled) return null
+
+  const minimum = Number(normalizedShipping.free_shipping_minimum || 0)
+  if (minimum <= 0) return null
+
+  const remaining = Math.max(Number(normalizedShipping.remaining_for_free_shipping || 0), 0)
+  const qualifyingAmount = Math.max(Number(normalizedShipping.qualifying_amount || 0), 0)
+  const progress = Math.max(0, Math.min(100, (qualifyingAmount / minimum) * 100))
+  const isFree = remaining <= 0 || toBoolean(normalizedShipping.is_free)
+
+  return (
+    <div className={`checkout_shipping_progress ${isFree ? "is-complete" : ""}`}>
+      <div className="checkout_shipping_progress_head">
+        <strong>{isFree ? "Alcanzaste el mínimo para envío gratis" : `Te falta ${formatMoney(remaining)} para envío gratis`}</strong>
+        <span>{formatMoney(qualifyingAmount)} / {formatMoney(minimum)}</span>
+      </div>
+      <div className="checkout_shipping_progress_track">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p>
+        {isFree
+          ? "El costo de envío ya está bonificado en este pedido."
+          : "El mínimo se calcula con subtotal menos descuentos, antes de sumar envío."}
+      </p>
+    </div>
+  )
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+  }
+
+  return false
 }
 
 function CheckoutLoyaltySummary({ loyalty }) {
@@ -1225,6 +1357,49 @@ function normalizeCheckout(response) {
     },
     coupon: normalizeCheckoutCoupon(data.coupon ?? data.totals?.coupon),
     loyalty: normalizeCheckoutLoyalty(data.loyalty),
+    shipping: normalizeCheckoutShipping(data.shipping),
+  }
+}
+
+function normalizeCheckoutShipping(shipping) {
+  if (!shipping || typeof shipping !== "object") return shipping ?? null
+
+  const value = shipping.value || shipping
+  const method = value.method || {}
+  const freeShippingMinimumEnabled =
+    value.free_shipping_minimum_enabled ??
+    value.freeShippingMinimumEnabled ??
+    value.free_minimum_enabled ??
+    value.freeMinimumEnabled
+  const freeShippingMinimum =
+    value.free_shipping_minimum ??
+    value.freeShippingMinimum ??
+    value.free_minimum ??
+    value.freeMinimum
+  const qualifyingAmount =
+    value.qualifying_amount ??
+    value.qualifyingAmount ??
+    value.free_shipping_basis_amount ??
+    value.freeShippingBasisAmount
+  const remainingForFreeShipping =
+    value.remaining_for_free_shipping ??
+    value.remainingForFreeShipping ??
+    value.amount_remaining_for_free_shipping ??
+    value.amountRemainingForFreeShipping
+
+  return {
+    ...value,
+    enabled: toBoolean(value.enabled),
+    method: {
+      ...method,
+      label: method.label || value.label || "Envío",
+    },
+    amount: Number(value.amount ?? value.shipping_amount ?? value.shippingAmount ?? 0),
+    is_free: toBoolean(value.is_free ?? value.isFree),
+    free_shipping_minimum_enabled: toBoolean(freeShippingMinimumEnabled),
+    free_shipping_minimum: Number(freeShippingMinimum ?? 0),
+    qualifying_amount: Number(qualifyingAmount ?? 0),
+    remaining_for_free_shipping: Number(remainingForFreeShipping ?? 0),
   }
 }
 
@@ -1488,6 +1663,37 @@ function buildAddressPayload(form, checkout) {
     phone: form.phone.trim(),
     is_default: Boolean(form.is_default),
   }
+}
+
+function onlyDigits(value, maxLength) {
+  return String(value || "").replace(/\D/g, "").slice(0, maxLength)
+}
+
+function validateAddressForm(form) {
+  if (!/^\d{10}$/.test(form.phone)) {
+    return "El teléfono debe tener 10 dígitos numéricos."
+  }
+
+  if (!/^\d{5}$/.test(form.zip_code)) {
+    return "El código postal debe tener 5 dígitos numéricos."
+  }
+
+  return ""
+}
+
+function normalizePaymentMethods(response) {
+  const value = response?.data?.value || response?.data?.data?.value || response?.value || {}
+
+  return {
+    default_method: value.default_method || null,
+    methods: Array.isArray(value.methods) ? value.methods : [],
+  }
+}
+
+function getActivePaymentMethod(paymentMethods, key) {
+  return paymentMethods?.methods?.find((method) => {
+    return method.key === key && method.active !== false
+  }) || null
 }
 
 function buildCheckoutAddressSelection(address) {

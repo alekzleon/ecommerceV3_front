@@ -20,6 +20,7 @@ function EntityAutocomplete({
   disabled = false,
 }) {
   const [query, setQuery] = useState(entity?.name || value || "")
+  const [menuOpen, setMenuOpen] = useState(false)
   const normalizedQuery = query.trim().toLowerCase()
   const filteredOptions = useMemo(() => {
     if (!normalizedQuery) return options.slice(0, 6)
@@ -39,13 +40,21 @@ function EntityAutocomplete({
 
   function handleSelect(option) {
     setQuery(option ? option.name : "")
+    setMenuOpen(false)
     onSelect(type, option)
   }
 
   function handleCreate() {
     if (!query.trim()) return
 
+    setMenuOpen(false)
     onCreate(type, query.trim())
+  }
+
+  function handleToggleMenu() {
+    if (disabled) return
+
+    setMenuOpen((prev) => !prev)
   }
 
   return (
@@ -53,21 +62,38 @@ function EntityAutocomplete({
       <label className="form-label">
         {label} {required ? <RequiredMark /> : null}
       </label>
-      <input
-        type="text"
-        className="form-control"
-        value={query}
-        onChange={(event) => {
-          setQuery(event.target.value)
-          if (!event.target.value.trim()) handleSelect(null)
-        }}
-        placeholder={placeholder}
-        required={required && !value}
-        disabled={disabled}
-      />
+      <div className="product-detail__autocomplete-control">
+        <input
+          type="text"
+          className={`form-control ${value ? "is-selected" : ""}`}
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setMenuOpen(true)
+            if (!event.target.value.trim()) handleSelect(null)
+          }}
+          onFocus={() => setMenuOpen(true)}
+          onBlur={() => {
+            setTimeout(() => setMenuOpen(false), 120)
+          }}
+          placeholder={placeholder}
+          required={required && !value}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="product-detail__autocomplete-toggle"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={handleToggleMenu}
+          disabled={disabled}
+          aria-label={`Mostrar opciones de ${label.toLowerCase()}`}
+        >
+          <i className={`bi ${menuOpen ? "bi-chevron-up" : "bi-chevron-down"}`} aria-hidden="true" />
+        </button>
+      </div>
       <input type="hidden" name={`${type}_id`} value={value || ""} readOnly />
 
-      {query.trim() ? (
+      {menuOpen ? (
         <div className="product-detail__autocomplete-menu">
           {filteredOptions.map((option) => (
             <button
@@ -82,7 +108,11 @@ function EntityAutocomplete({
             </button>
           ))}
 
-          {!hasExactMatch ? (
+          {!filteredOptions.length && !query.trim() ? (
+            <div className="product-detail__autocomplete-empty">No hay opciones disponibles.</div>
+          ) : null}
+
+          {query.trim() && !hasExactMatch ? (
             <button type="button" className="is-create" onClick={handleCreate} disabled={disabled}>
               Crear “{query.trim()}”
             </button>

@@ -123,7 +123,7 @@ const adminMenuMap = [
     module: "pagos",
     path: "/admin/payments",
     title: "Pagos",
-    subtitle: "Conecta Stripe para recibir pagos en tu ecommerce.",
+    subtitle: "Configura los métodos de pago para tu ecommerce.",
   },
   {
     module: "disena_ecommerce",

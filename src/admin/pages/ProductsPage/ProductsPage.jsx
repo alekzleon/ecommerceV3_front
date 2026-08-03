@@ -41,9 +41,9 @@ import {
   getAdminProductPriceScales,
   updateAdminProductPriceScales,
 } from "../../../services/api/adminProductPriceScaleService.js"
-import { getAdminCategories } from "../../../services/api/adminCategoryService.js"
-import { getAdminFamilies } from "../../../services/api/adminFamilyService.js"
-import { notifyError, notifySuccess } from "../../../utils/toast.js"
+import { createAdminCategory, getAdminCategories } from "../../../services/api/adminCategoryService.js"
+import { createAdminFamily, getAdminFamilies } from "../../../services/api/adminFamilyService.js"
+import { notifyError, notifyInfo, notifySuccess } from "../../../utils/toast.js"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl.js"
 import "./ProductsPage.css"
 
@@ -202,6 +202,7 @@ function ProductsPage() {
   const [bulkImportSaving, setBulkImportSaving] = useState(false)
   const [categoryCatalog, setCategoryCatalog] = useState([])
   const [familyCatalog, setFamilyCatalog] = useState([])
+  const [entityCreating, setEntityCreating] = useState("")
   const imagePreviewUrlRef = useRef("")
   const galleryPreviewUrlRef = useRef("")
   const gallerySaveTimersRef = useRef({})
@@ -649,10 +650,75 @@ function ProductsPage() {
     }))
   }
 
-  function handleEntityCreate(type, name) {
-    notifyError(
-      `Crea "${name}" desde Catálogos > ${type === "category" ? "Categorías" : "Familias"} y vuelve a seleccionarlo aquí.`
-    )
+  async function handleEntityCreate(type, name) {
+    const cleanName = name.trim()
+
+    if (!cleanName || entityCreating) return
+
+    if (type === "family" && !panelForm.category_id) {
+      notifyError("Selecciona una categoría antes de crear una familia.")
+      return
+    }
+
+    try {
+      setEntityCreating(type)
+
+      if (type === "category") {
+        const response = await createAdminCategory({
+          name: cleanName,
+          is_active: true,
+        })
+        const category = normalizeCreatedEntity(response)
+
+        if (!category?.id) {
+          notifyError("No fue posible seleccionar la categoría creada.")
+          return
+        }
+
+        setCategoryCatalog((prev) => upsertEntityCatalog(prev, category))
+        setFamilyCatalog([])
+        setPanelForm((prev) => ({
+          ...prev,
+          category_id: category.id,
+          category,
+          family_id: "",
+          family: null,
+        }))
+        notifySuccess(`Categoría "${category.name}" creada y seleccionada.`)
+        return
+      }
+
+      const selectedCategoryName = panelForm.category?.name
+        || categoryCatalog.find((category) => Number(category.id) === Number(panelForm.category_id))?.name
+        || `#${panelForm.category_id}`
+
+      notifyInfo(`Creará una familia dentro de la categoría "${selectedCategoryName}".`)
+
+      const response = await createAdminFamily({
+        category_id: Number(panelForm.category_id),
+        name: cleanName,
+        is_active: true,
+      })
+      const family = normalizeCreatedEntity(response)
+
+      if (!family?.id) {
+        notifyError("No fue posible seleccionar la familia creada.")
+        return
+      }
+
+      setFamilyCatalog((prev) => upsertEntityCatalog(prev, family))
+      setPanelForm((prev) => ({
+        ...prev,
+        family_id: family.id,
+        family,
+      }))
+      notifySuccess(`Familia "${family.name}" creada y seleccionada.`)
+    } catch (error) {
+      console.error("Error al crear entidad de catálogo desde producto:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || `No fue posible crear ${type === "category" ? "la categoría" : "la familia"}.`)
+    } finally {
+      setEntityCreating("")
+    }
   }
 
   async function handleGalleryToggle() {
@@ -2686,7 +2752,7 @@ function ProductsPage() {
       <ProductDetailPanel
         isOpen={panelOpen}
         loading={panelLoading}
-        saving={panelSaving}
+        saving={panelSaving || Boolean(entityCreating)}
         mode={panelMode}
         form={panelForm}
         title={buildPanelTitle(panelMode, panelForm)}
@@ -3329,6 +3395,40 @@ function normalizeEntityCatalog(response) {
         }))
         .filter((item) => item.id && item.name)
     : []
+}
+
+function normalizeCreatedEntity(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const item = Array.isArray(data) ? data[0] : data
+
+  return item?.id && item?.name
+    ? {
+        id: Number(item.id),
+        name: item.name,
+      }
+    : null
+}
+
+function upsertEntityCatalog(items = [], entity) {
+  if (!entity?.id || !entity?.name) return items
+
+  const map = new Map()
+
+  items.forEach((item) => {
+    if (!item?.id || !item?.name) return
+
+    map.set(Number(item.id), {
+      id: Number(item.id),
+      name: item.name,
+    })
+  })
+
+  map.set(Number(entity.id), {
+    id: Number(entity.id),
+    name: entity.name,
+  })
+
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
 }
 
 function sortGalleryItems(items = []) {

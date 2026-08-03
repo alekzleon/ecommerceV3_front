@@ -14,6 +14,7 @@ import {
   updateCartItem,
 } from "../../services/api/cartService.js"
 import { restoreRecoverableOrderCart } from "../../services/api/checkoutService.js"
+import { getPublicShippingSettings } from "../../services/api/settingsService.js"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast.js"
 import { normalizeMediaUrl } from "../../utils/mediaUrl.js"
 import "./cart.css"
@@ -58,6 +59,8 @@ function CartPage() {
   const [cashbackLoading, setCashbackLoading] = useState(false)
   const [couponCode, setCouponCode] = useState("")
   const [couponLoading, setCouponLoading] = useState(false)
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [shippingSettings, setShippingSettings] = useState(null)
   const restoringRecoverableRef = useRef(false)
   const recoveredNoticeShownRef = useRef(false)
 
@@ -97,6 +100,20 @@ function CartPage() {
     }
 
     return recoverableOrder
+  }
+
+  useEffect(() => {
+    loadShippingSettings()
+  }, [])
+
+  async function loadShippingSettings() {
+    try {
+      const response = await getPublicShippingSettings()
+      setShippingSettings(normalizeShippingSettings(response))
+    } catch (error) {
+      console.error("Error al cargar configuración de envío:", error?.response?.data || error)
+      setShippingSettings(null)
+    }
   }
 
   const shouldTryImplicitRecover = useCallback((payload) => {
@@ -922,6 +939,13 @@ function CartPage() {
     }, 0)
   }, [products])
 
+  const shippingEstimate = useMemo(() => {
+    return buildCartShippingProgress(cart, shippingSettings)
+  }, [cart, shippingSettings])
+  const cartEstimatedTotal = useMemo(() => {
+    return Number(cart.total || 0) + Number(shippingEstimate?.amount || 0)
+  }, [cart.total, shippingEstimate])
+
   const allVisibleSelected =
     filteredProducts.length > 0 &&
     filteredProducts.every((product) => selected.includes(product.id))
@@ -1020,6 +1044,13 @@ function CartPage() {
             )}
           </div>
         </div>
+
+        {products.length ? (
+          <FreeShippingProgress
+            shipping={shippingEstimate}
+            formatMoney={formatMoney}
+          />
+        ) : null}
 
         {!products.length ? (
           <div className="cart_empty cart_empty--full">
@@ -1482,16 +1513,6 @@ function CartPage() {
                   formatMoney={formatMoney}
                 />
 
-                <CartCouponBox
-                  coupon={cart.coupon}
-                  couponCode={couponCode}
-                  couponLoading={couponLoading}
-                  onCouponCodeChange={setCouponCode}
-                  onApplyCoupon={handleApplyCoupon}
-                  onClearCoupon={handleClearCoupon}
-                  formatMoney={formatMoney}
-                />
-
                 <div className="summary_rows">
                   <div className="summary_row">
                     <span>Productos ({cart.items_count || products.length})</span>
@@ -1512,12 +1533,31 @@ function CartPage() {
                     <span>{formatMoney(cart.tax)}</span>
                   </div>
 
+                  {shippingEstimate?.enabled ? (
+                    <div className="summary_row">
+                      <span>{shippingEstimate.label || "Envío"}</span>
+                      <span>{shippingEstimate.amount > 0 ? formatMoney(shippingEstimate.amount) : "Gratis"}</span>
+                    </div>
+                  ) : null}
+
                 </div>
 
                 <div className="summary_total">
-                  <span>Total</span>
-                  <strong>{formatMoney(cart.total)}</strong>
+                  <span>{shippingEstimate?.enabled ? "Total estimado" : "Total"}</span>
+                  <strong>{formatMoney(shippingEstimate?.enabled ? cartEstimatedTotal : cart.total)}</strong>
                 </div>
+
+                <CartCouponBox
+                  coupon={cart.coupon}
+                  couponCode={couponCode}
+                  couponLoading={couponLoading}
+                  isOpen={couponOpen}
+                  onToggle={() => setCouponOpen((current) => !current)}
+                  onCouponCodeChange={setCouponCode}
+                  onApplyCoupon={handleApplyCoupon}
+                  onClearCoupon={handleClearCoupon}
+                  formatMoney={formatMoney}
+                />
 
                 <div className="summary_actions">
                   <Link
@@ -1528,7 +1568,7 @@ function CartPage() {
                     onClick={handleCheckoutNavigation}
                     aria-disabled={hasPendingGiftSelection || hasInvalidStockItems}
                   >
-                    Continuar al checkout
+                    Continuar a pago
                   </Link>
 
                   <Link to="/productos" className="btn btn_ghost">
@@ -1544,8 +1584,10 @@ function CartPage() {
       {products.length ? (
         <div className="cart_mobile_bar">
           <div className="cart_mobile_bar_info">
-            <span className="mobile_bar_label">Total</span>
-            <strong className="mobile_bar_total">{formatMoney(cart.total)}</strong>
+            <span className="mobile_bar_label">{shippingEstimate?.enabled ? "Total estimado" : "Total"}</span>
+            <strong className="mobile_bar_total">
+              {formatMoney(shippingEstimate?.enabled ? cartEstimatedTotal : cart.total)}
+            </strong>
           </div>
 
           <Link
@@ -1764,6 +1806,8 @@ function CartCouponBox({
   coupon,
   couponCode,
   couponLoading,
+  isOpen,
+  onToggle,
   onCouponCodeChange,
   onApplyCoupon,
   onClearCoupon,
@@ -1771,18 +1815,11 @@ function CartCouponBox({
 }) {
   return (
     <div className={`summary_coupon ${coupon ? "has-coupon" : ""} ${coupon?.is_valid === false ? "is-invalid" : ""}`}>
-      <div className="summary_coupon_head">
-        <i className="bi bi-ticket-perforated" aria-hidden="true" />
-        <div>
-          <strong>Cupón</strong>
-          <span>{coupon ? coupon.message || "Cupón aplicado al carrito" : "Agrega un código promocional"}</span>
-        </div>
-      </div>
-
       {coupon ? (
         <div className="summary_coupon_applied">
           <div>
             <strong>{coupon.code}</strong>
+            <span>{coupon.message || coupon.name || "Cupón aplicado al carrito"}</span>
             {coupon.name ? <span>{coupon.name}</span> : null}
           </div>
           <div className="summary_coupon_amount">
@@ -1799,18 +1836,33 @@ function CartCouponBox({
           </button>
         </div>
       ) : (
-        <form className="summary_coupon_form" onSubmit={onApplyCoupon}>
-          <input
-            type="text"
-            value={couponCode}
-            onChange={(event) => onCouponCodeChange(event.target.value.toUpperCase())}
-            placeholder="VERANO10"
-            disabled={couponLoading}
-          />
-          <button type="submit" disabled={couponLoading}>
-            {couponLoading ? "Aplicando..." : "Aplicar"}
+        <>
+          <button
+            type="button"
+            className="summary_coupon_toggle"
+            onClick={onToggle}
+            aria-expanded={isOpen}
+          >
+            <i className="bi bi-ticket-perforated" aria-hidden="true" />
+            Aplicar cupón
           </button>
-        </form>
+
+          {isOpen ? (
+            <form className="summary_coupon_form" onSubmit={onApplyCoupon}>
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(event) => onCouponCodeChange(event.target.value.toUpperCase())}
+                placeholder="VERANO10"
+                disabled={couponLoading}
+                autoFocus
+              />
+              <button type="submit" disabled={couponLoading}>
+                {couponLoading ? "Aplicando..." : "Aplicar"}
+              </button>
+            </form>
+          ) : null}
+        </>
       )}
     </div>
   )
@@ -2112,6 +2164,90 @@ function buildNextScaleMessage(nextScale, currentQuantity) {
   return `Agrega ${missingQuantity} pza(s) más para ${formatCartScaleDiscount(
     nextScale.discount_percentage
   )}.`
+}
+
+function FreeShippingProgress({ shipping, formatMoney }) {
+  if (!shipping?.enabled || !shipping.free_shipping_minimum_enabled) return null
+
+  const minimum = Number(shipping.free_shipping_minimum || 0)
+  if (minimum <= 0) return null
+
+  const remaining = Math.max(Number(shipping.remaining_for_free_shipping || 0), 0)
+  const qualifyingAmount = Math.max(Number(shipping.qualifying_amount || 0), 0)
+  const progress = Math.max(0, Math.min(100, (qualifyingAmount / minimum) * 100))
+  const isFree = remaining <= 0
+
+  return (
+    <div className={`summary_shipping_progress ${isFree ? "is-complete" : ""}`}>
+      <div className="summary_shipping_progress_head">
+        <strong>{isFree ? "Alcanzaste el mínimo para envío gratis" : `Te falta ${formatMoney(remaining)} para envío gratis`}</strong>
+        <span>{formatMoney(qualifyingAmount)} / {formatMoney(minimum)}</span>
+      </div>
+      <div className="summary_shipping_progress_track">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p>
+        {isFree
+          ? "El envío gratis se aplicará al continuar al checkout."
+          : "El mínimo se calcula antes de sumar el envío."}
+      </p>
+    </div>
+  )
+}
+
+function buildCartShippingProgress(cart, shippingSettings) {
+  if (!shippingSettings?.enabled) {
+    return {
+      ...(shippingSettings || {}),
+      enabled: false,
+      amount: 0,
+      is_free: true,
+      qualifying_amount: 0,
+      remaining_for_free_shipping: 0,
+    }
+  }
+
+  const qualifyingAmount = Math.max(Number(cart.subtotal || 0) - Number(cart.discount || 0), 0)
+  const minimum = Number(shippingSettings.free_shipping_minimum || 0)
+  const hasFreeMinimum = toBoolean(shippingSettings.free_shipping_minimum_enabled) && minimum > 0
+  const remaining = hasFreeMinimum ? Math.max(minimum - qualifyingAmount, 0) : 0
+  const isFree = Number(shippingSettings.default_cost || 0) <= 0 || (hasFreeMinimum && remaining <= 0)
+  const amount = isFree ? 0 : Number(shippingSettings.default_cost || 0)
+
+  return {
+    ...shippingSettings,
+    amount,
+    is_free: isFree,
+    qualifying_amount: qualifyingAmount,
+    remaining_for_free_shipping: remaining,
+  }
+}
+
+function normalizeShippingSettings(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return {
+    enabled: toBoolean(value.enabled),
+    label: value.label || "Envío estándar",
+    default_cost: Number(value.default_cost ?? value.defaultCost ?? 0),
+    free_shipping_minimum_enabled: toBoolean(
+      value.free_shipping_minimum_enabled ?? value.freeShippingMinimumEnabled
+    ),
+    free_shipping_minimum: Number(
+      value.free_shipping_minimum ?? value.freeShippingMinimum ?? 0
+    ),
+  }
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+  }
+
+  return false
 }
 
 export default CartPage

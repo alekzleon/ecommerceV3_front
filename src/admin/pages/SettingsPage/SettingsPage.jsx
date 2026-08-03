@@ -8,10 +8,12 @@ import {
   getAdminMetaPixel,
   getAdminSaleNotificationSettings,
   getAdminSettings,
+  getAdminShippingSettings,
   getAdminStorefront,
   updateAdminAbandonedCartSettings,
   updateAdminMetaPixel,
   updateAdminSaleNotificationSettings,
+  updateAdminShippingSettings,
   updateAdminStorefront,
 } from "../../../services/api/settingsService"
 import {
@@ -23,6 +25,7 @@ import {
   updateAdminContactFaq,
 } from "../../../services/api/contactFaqService"
 import { getStripeConnectStatus } from "../../../services/api/stripeConnectService"
+import { getAdminPaymentMethods } from "../../../services/api/paymentMethodsService"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl"
 import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import { useSettings } from "../../../context/SettingsContext"
@@ -71,6 +74,13 @@ const EMPTY_FORM = {
     send_whatsapp: true,
     admin_email: "",
     admin_whatsapp: "",
+  },
+  shipping: {
+    enabled: true,
+    label: "Envío estándar",
+    default_cost: "99",
+    free_shipping_minimum_enabled: true,
+    free_shipping_minimum: "999",
   },
   storefront: {
     is_published: false,
@@ -186,10 +196,11 @@ function SettingsPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState({})
   const [stripeConnectStatus, setStripeConnectStatus] = useState(null)
+  const [paymentMethods, setPaymentMethods] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const canSubmitSection = !["contact_faqs", "envios"].includes(activeSection)
+  const canSubmitSection = !["contact_faqs"].includes(activeSection)
   const canDeleteSettings = ![
     "contact_faqs",
     "storefront",
@@ -214,15 +225,19 @@ function SettingsPage() {
         metaPixelResponse,
         abandonedCartResponse,
         saleNotificationsResponse,
+        shippingResponse,
         storefrontResponse,
         stripeConnectResponse,
+        paymentMethodsResponse,
       ] = await Promise.allSettled([
         getAdminSettings(),
         getAdminMetaPixel(),
         getAdminAbandonedCartSettings(),
         getAdminSaleNotificationSettings(),
+        getAdminShippingSettings(),
         getAdminStorefront(),
         getStripeConnectStatus(),
+        getAdminPaymentMethods(),
       ])
       const data = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -236,11 +251,17 @@ function SettingsPage() {
       const saleNotifications = saleNotificationsResponse.status === "fulfilled"
         ? normalizeSaleNotificationResponse(saleNotificationsResponse.value)
         : EMPTY_FORM.sale_notifications
+      const shipping = shippingResponse.status === "fulfilled"
+        ? normalizeShippingResponse(shippingResponse.value)
+        : EMPTY_FORM.shipping
       const storefront = storefrontResponse.status === "fulfilled"
         ? normalizeStorefrontResponse(storefrontResponse.value)
         : EMPTY_FORM.storefront
       const stripeStatus = stripeConnectResponse.status === "fulfilled"
         ? normalizeStripeConnectStatus(stripeConnectResponse.value)
+        : null
+      const paymentMethods = paymentMethodsResponse.status === "fulfilled"
+        ? normalizePaymentMethods(paymentMethodsResponse.value)
         : null
 
       setForm(mapSettingsToForm({
@@ -248,9 +269,11 @@ function SettingsPage() {
         meta_pixel_id: metaPixelId,
         abandoned_cart: abandonedCart,
         sale_notifications: saleNotifications,
+        shipping,
         storefront,
       }))
       setStripeConnectStatus(stripeStatus)
+      setPaymentMethods(paymentMethods)
       setFieldErrors({})
     } catch (error) {
       console.error("Error al cargar configuración:", error)
@@ -339,6 +362,18 @@ function SettingsPage() {
       return
     }
 
+    if (name.startsWith("shipping.")) {
+      const key = name.replace("shipping.", "")
+      setForm((prev) => ({
+        ...prev,
+        shipping: {
+          ...prev.shipping,
+          [key]: type === "checkbox" ? checked : value,
+        },
+      }))
+      return
+    }
+
     if (name.startsWith("storefront.theme.")) {
       const key = name.replace("storefront.theme.", "")
       setForm((prev) => ({
@@ -420,6 +455,21 @@ function SettingsPage() {
     }
   }
 
+  async function refreshPaymentMethods() {
+    try {
+      const response = await getAdminPaymentMethods()
+      const methods = normalizePaymentMethods(response)
+
+      setPaymentMethods(methods)
+      return methods
+    } catch (error) {
+      console.error("Error al validar métodos de pago:", error?.response?.data || error)
+      setPaymentMethods(null)
+      notifyError(error?.response?.data?.message || "No fue posible validar los métodos de pago.")
+      return null
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault()
 
@@ -480,6 +530,25 @@ function SettingsPage() {
         return
       }
 
+      if (activeSection === "envios") {
+        const payload = buildShippingPayload(form.shipping)
+        const validationMessage = validateShippingPayload(payload)
+
+        if (validationMessage) {
+          notifyWarning(validationMessage)
+          return
+        }
+
+        const response = await updateAdminShippingSettings(payload)
+        setForm((prev) => ({
+          ...prev,
+          shipping: normalizeShippingResponse(response),
+        }))
+        setFieldErrors({})
+        notifySuccess("Configuración de envíos guardada correctamente.")
+        return
+      }
+
       if (activeSection === "storefront") {
         const payload = buildStorefrontPublicationPayload(form.storefront)
         const validationMessage = validateStorefrontPublicationPayload(payload)
@@ -491,9 +560,15 @@ function SettingsPage() {
 
         if (payload.is_published) {
           const stripeStatus = await refreshStripeConnectStatus()
+          const paymentMethods = await refreshPaymentMethods()
 
           if (!stripeStatus?.ready_for_charges) {
             notifyWarning(getStripePublicationBlockMessage(stripeStatus))
+            return
+          }
+
+          if (!hasActivePaymentMethod(paymentMethods)) {
+            notifyWarning("Activa al menos un método de pago antes de publicar la tienda.")
             return
           }
         }
@@ -534,6 +609,7 @@ function SettingsPage() {
         meta_pixel_id: normalizeMetaPixelResponse(freshMetaPixelResponse),
         abandoned_cart: form.abandoned_cart,
         sale_notifications: form.sale_notifications,
+        shipping: form.shipping,
       }))
       refreshSettings()
       setFieldErrors({})
@@ -620,6 +696,7 @@ function SettingsPage() {
                   form={form}
                   onChange={handleFieldChange}
                   stripeConnectStatus={stripeConnectStatus}
+                  paymentMethods={paymentMethods}
                 />
               ) : null}
 
@@ -653,7 +730,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "envios" ? (
-                <ShippingSection />
+                <ShippingSection form={form} onChange={handleFieldChange} />
               ) : null}
 
               {activeSection === "abandoned_cart" ? (
@@ -728,9 +805,10 @@ function IdentitySection({ form, onChange }) {
   )
 }
 
-function StorefrontSection({ form, onChange, stripeConnectStatus }) {
+function StorefrontSection({ form, onChange, stripeConnectStatus, paymentMethods }) {
   const settings = form.storefront || EMPTY_FORM.storefront
   const stripeGate = getStripePublicationGate(stripeConnectStatus)
+  const activePaymentCount = countActivePaymentMethods(paymentMethods)
 
   return (
     <section className="settings-page__section">
@@ -752,6 +830,25 @@ function StorefrontSection({ form, onChange, stripeConnectStatus }) {
         {!stripeGate.ready ? (
           <Link to="/admin/payments" className="settings-storefront__payment-action">
             {stripeGate.cta}
+          </Link>
+        ) : null}
+      </div>
+
+      <div className={`settings-storefront__payment-gate ${activePaymentCount ? "settings-storefront__payment-gate--success" : "settings-storefront__payment-gate--danger"}`}>
+        <span className="settings-storefront__payment-icon">
+          <i className={`bi ${activePaymentCount ? "bi-credit-card-2-front-fill" : "bi-exclamation-triangle-fill"}`} aria-hidden="true" />
+        </span>
+        <div>
+          <strong>{activePaymentCount ? "Método de pago activo" : "Activa un método de pago"}</strong>
+          <p>
+            {activePaymentCount
+              ? "La tienda tiene al menos un método de pago disponible para checkout."
+              : "No puedes publicar la tienda si no hay al menos un método de pago activo."}
+          </p>
+        </div>
+        {!activePaymentCount ? (
+          <Link to="/admin/payments" className="settings-storefront__payment-action">
+            Configurar pagos
           </Link>
         ) : null}
       </div>
@@ -1153,39 +1250,62 @@ function SaleNotificationsSection({ form, onChange, errors = {} }) {
   )
 }
 
-function ShippingSection() {
+function ShippingSection({ form, onChange }) {
+  const settings = form.shipping || EMPTY_FORM.shipping
+
   return (
     <section className="settings-page__section">
-      <div className="settings-shipping__grid">
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-geo-alt" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Cobertura</h4>
-            <p>Zonas, códigos postales y regiones disponibles para entrega.</p>
-          </div>
-        </article>
+      <div className="settings-page__grid settings-page__grid--two">
+        <ToggleField
+          label="Activar envío"
+          name="shipping.enabled"
+          checked={settings.enabled}
+          onChange={onChange}
+          helpText="Si está apagado, el checkout calcula envío en $0."
+        />
 
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-currency-dollar" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Tarifas</h4>
-            <p>Costos por zona, mínimos de compra y condiciones por pedido.</p>
-          </div>
-        </article>
+        <ToggleField
+          label="Activar mínimo para envío gratis"
+          name="shipping.free_shipping_minimum_enabled"
+          checked={settings.free_shipping_minimum_enabled}
+          onChange={onChange}
+          helpText="El mínimo se calcula con subtotal menos descuentos, antes de sumar envío."
+        />
+      </div>
 
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-box-seam" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Paqueterías</h4>
-            <p>Opciones de entrega, tiempos estimados y métodos disponibles.</p>
-          </div>
-        </article>
+      <div className="settings-page__grid settings-page__grid--two">
+        <Field
+          label="Nombre del método"
+          name="shipping.label"
+          value={settings.label}
+          onChange={onChange}
+          placeholder="Envío estándar"
+          required
+        />
+
+        <Field
+          label="Costo default"
+          name="shipping.default_cost"
+          type="number"
+          value={settings.default_cost}
+          onChange={onChange}
+          min="0"
+          step="0.01"
+          placeholder="99"
+          helpText="Si el costo es 0, el checkout lo marcará como gratis."
+        />
+
+        <Field
+          label="Mínimo para envío gratis"
+          name="shipping.free_shipping_minimum"
+          type="number"
+          value={settings.free_shipping_minimum}
+          onChange={onChange}
+          min="0"
+          step="0.01"
+          placeholder="999"
+          helpText="Solo aplica cuando el mínimo para envío gratis está activo."
+        />
       </div>
     </section>
   )
@@ -1607,6 +1727,7 @@ function mapSettingsToForm(settings) {
     },
     abandoned_cart: normalizeAbandonedCartValue(settings.abandoned_cart),
     sale_notifications: normalizeSaleNotificationValue(settings.sale_notifications),
+    shipping: normalizeShippingValue(settings.shipping),
     storefront: normalizeStorefrontValue(settings.storefront),
     logo: null,
     logo_url: normalizeMediaUrl(settings.logo_url || settings.logo_path),
@@ -1641,6 +1762,13 @@ function normalizeSaleNotificationResponse(response) {
   return normalizeSaleNotificationValue(value)
 }
 
+function normalizeShippingResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return normalizeShippingValue(value)
+}
+
 function normalizeStorefrontResponse(response) {
   const data = response?.data?.data || response?.data || response || {}
   const value = data.value || data
@@ -1652,6 +1780,23 @@ function normalizeStripeConnectStatus(response) {
   const data = response?.data?.data || response?.data || response || {}
 
   return data && typeof data === "object" ? data : null
+}
+
+function normalizePaymentMethods(response) {
+  const value = response?.data?.value || response?.data?.data?.value || response?.value || {}
+
+  return {
+    default_method: value.default_method || null,
+    methods: Array.isArray(value.methods) ? value.methods : [],
+  }
+}
+
+function countActivePaymentMethods(paymentMethods) {
+  return paymentMethods?.methods?.filter((method) => method.active || method.enabled).length || 0
+}
+
+function hasActivePaymentMethod(paymentMethods) {
+  return countActivePaymentMethods(paymentMethods) > 0
 }
 
 function getStripePublicationGate(status) {
@@ -1770,6 +1915,20 @@ function normalizeSaleNotificationValue(value = {}) {
   }
 }
 
+function normalizeShippingValue(value = {}) {
+  return {
+    enabled: booleanOrDefault(value.enabled, EMPTY_FORM.shipping.enabled),
+    label: value.label || EMPTY_FORM.shipping.label,
+    default_cost: value.default_cost ?? EMPTY_FORM.shipping.default_cost,
+    free_shipping_minimum_enabled: booleanOrDefault(
+      value.free_shipping_minimum_enabled,
+      EMPTY_FORM.shipping.free_shipping_minimum_enabled
+    ),
+    free_shipping_minimum:
+      value.free_shipping_minimum ?? EMPTY_FORM.shipping.free_shipping_minimum,
+  }
+}
+
 function normalizeStorefrontValue(value = {}) {
   const construction = value.construction && typeof value.construction === "object"
     ? value.construction
@@ -1827,6 +1986,16 @@ function buildSaleNotificationPayload(settings) {
   }
 }
 
+function buildShippingPayload(settings) {
+  return {
+    enabled: Boolean(settings.enabled),
+    label: String(settings.label || "").trim(),
+    default_cost: Number(settings.default_cost || 0),
+    free_shipping_minimum_enabled: Boolean(settings.free_shipping_minimum_enabled),
+    free_shipping_minimum: Number(settings.free_shipping_minimum || 0),
+  }
+}
+
 function buildStorefrontPublicationPayload(settings) {
   return {
     is_published: Boolean(settings.is_published),
@@ -1862,6 +2031,25 @@ function validateStorefrontPublicationPayload(payload) {
 
   if (!payload.construction_message) {
     return "Escribe el mensaje de construcción."
+  }
+
+  return ""
+}
+
+function validateShippingPayload(payload) {
+  if (!payload.label) {
+    return "Escribe el nombre del método de envío."
+  }
+
+  if (!Number.isFinite(payload.default_cost) || payload.default_cost < 0) {
+    return "El costo default debe ser un número mayor o igual a 0."
+  }
+
+  if (
+    payload.free_shipping_minimum_enabled &&
+    (!Number.isFinite(payload.free_shipping_minimum) || payload.free_shipping_minimum < 0)
+  ) {
+    return "El mínimo para envío gratis debe ser un número mayor o igual a 0."
   }
 
   return ""

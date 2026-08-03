@@ -25,6 +25,7 @@
 }
 
 .checkout_header_left {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -477,6 +478,15 @@
   font-weight: 700;
 }
 
+.checkout_muted--success {
+  margin-top: 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #047857;
+  font-weight: 700;
+}
+
 .checkout_empty_state {
   min-height: 280px;
   display: flex;
@@ -531,6 +541,74 @@
 .summary_row span:last-child {
   text-align: right;
   font-weight: 700;
+}
+
+.checkout_shipping_progress {
+  display: grid;
+  gap: 9px;
+  margin: -2px 0 16px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff7f7;
+  padding: 12px;
+}
+
+.checkout_shipping_progress.is-complete {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.checkout_shipping_progress_head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.checkout_shipping_progress_head span {
+  flex: 0 0 auto;
+  color: #b91c1c;
+}
+
+.checkout_shipping_progress_track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #fee2e2;
+}
+
+.checkout_shipping_progress_track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #dc2626;
+  transition: width 0.2s ease;
+}
+
+.checkout_shipping_progress.is-complete .checkout_shipping_progress_track {
+  background: #bbf7d0;
+}
+
+.checkout_shipping_progress.is-complete .checkout_shipping_progress_track span {
+  background: #047857;
+}
+
+.checkout_shipping_progress p {
+  margin: 0;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.checkout_shipping_progress.is-complete .checkout_shipping_progress_head {
+  color: #047857;
+}
+
+.checkout_shipping_progress.is-complete .checkout_shipping_progress_head span,
+.checkout_shipping_progress.is-complete p {
+  color: #047857;
 }
 
 .summary_discount {
