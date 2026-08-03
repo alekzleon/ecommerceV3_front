@@ -163,7 +163,8 @@
   }
 
   .account_orders_filters,
-  .account_orders_layout {
+  .account_orders_layout,
+  .account_cashback_filters {
     grid-template-columns: 1fr;
   }
 
@@ -207,7 +208,11 @@
   }
 
   .account_orders_summary,
-  .account_order_detail__grid {
+  .account_order_detail__grid,
+  .account_cashback_balance,
+  .account_cashback_totals,
+  .account_cashback_settings,
+  .account_cashback_recent_grid {
     grid-template-columns: 1fr;
   }
 
@@ -977,6 +982,223 @@
   font-size: 1.05rem;
 }
 
+/* ACCOUNT CASHBACK */
+
+.account_cashback_balance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.account_cashback_balance_card,
+.account_cashback_settings,
+.account_cashback_recent,
+.account_cashback_statement {
+  border: 1px solid #d9d9d9;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.account_cashback_balance_card {
+  padding: 18px;
+}
+
+.account_cashback_balance_card--primary {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.account_cashback_balance_card span,
+.account_cashback_settings span {
+  display: block;
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.account_cashback_balance_card strong {
+  display: block;
+  margin-top: 8px;
+  color: #111827;
+  font-size: 2rem;
+  line-height: 1.1;
+  font-weight: 950;
+}
+
+.account_cashback_balance_card--primary strong {
+  color: #047857;
+}
+
+.account_cashback_balance_card small {
+  display: block;
+  margin-top: 8px;
+  color: #6b7280;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.account_cashback_totals {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.account_cashback_settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.account_cashback_settings div {
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+
+.account_cashback_settings strong {
+  display: block;
+  margin-top: 6px;
+  color: #111827;
+  font-size: 0.98rem;
+  font-weight: 900;
+}
+
+.account_cashback_recent,
+.account_cashback_statement {
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.account_cashback_section_head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.account_cashback_section_head h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 1.05rem;
+  font-weight: 950;
+}
+
+.account_cashback_section_head span {
+  color: #6b7280;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.account_cashback_recent_grid,
+.account_cashback_transactions {
+  display: grid;
+  gap: 10px;
+}
+
+.account_cashback_recent_grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account_cashback_transaction {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.account_cashback_transaction.is-compact {
+  grid-template-columns: 1fr;
+}
+
+.account_cashback_transaction_main {
+  min-width: 0;
+}
+
+.account_cashback_transaction_main strong {
+  display: block;
+  margin-top: 7px;
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.account_cashback_transaction_main small {
+  display: block;
+  margin-top: 5px;
+  color: #6b7280;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.account_cashback_badge {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 0 9px;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.account_cashback_badge--available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.account_cashback_badge--pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.account_cashback_badge--cancelled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.account_cashback_transaction_amount {
+  min-width: 130px;
+  text-align: right;
+}
+
+.account_cashback_transaction_amount strong {
+  display: block;
+  color: #111827;
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.account_cashback_transaction_amount strong.is-credit {
+  color: #047857;
+}
+
+.account_cashback_transaction_amount strong.is-debit {
+  color: #b91c1c;
+}
+
+.account_cashback_transaction_amount span {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.account_cashback_filters {
+  grid-template-columns: repeat(6, minmax(120px, 1fr)) auto auto;
+}
+
 .account_pfr_form {
   display: flex;
   flex-direction: column;
@@ -1254,8 +1476,22 @@
   .account_orders_summary,
   .account_orders_filters,
   .account_orders_layout,
-  .account_order_detail__grid {
+  .account_order_detail__grid,
+  .account_cashback_balance,
+  .account_cashback_totals,
+  .account_cashback_settings,
+  .account_cashback_recent_grid,
+  .account_cashback_filters {
     grid-template-columns: 1fr;
+  }
+
+  .account_cashback_transaction {
+    grid-template-columns: 1fr;
+  }
+
+  .account_cashback_transaction_amount {
+    min-width: 0;
+    text-align: left;
   }
 
   .account_order_detail {
@@ -1331,7 +1567,8 @@
 
 @media (max-width: 980px) and (min-width: 769px) {
   .account_orders_filters,
-  .account_orders_layout {
+  .account_orders_layout,
+  .account_cashback_filters {
     grid-template-columns: 1fr;
   }
 

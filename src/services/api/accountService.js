@@ -64,6 +64,16 @@ export async function getAccountOrder(orderId) {
   return response.data
 }
 
+export async function getAccountCashback() {
+  const response = await api.get("/account/cashback")
+  return response.data
+}
+
+export async function getAccountCashbackTransactions(params = {}) {
+  const response = await api.get("/account/cashback/transactions", { params })
+  return response.data
+}
+
 export async function getAccountFavorites(params = {}) {
   const response = await api.get("/account/favorites", { params })
   return response.data

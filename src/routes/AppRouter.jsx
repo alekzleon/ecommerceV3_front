@@ -34,6 +34,7 @@ const AccountPage = lazy(() => import("../pages/account/AccountHomePage"))
 const AccountProfilePage = lazy(() => import("../pages/account/AccountProfilePage"))
 const AccountAddressesPage = lazy(() => import("../pages/account/AccountAddressesPage"))
 const AccountOrdersPage = lazy(() => import("../pages/account/AccountOrdersPage"))
+const AccountCashbackPage = lazy(() => import("../pages/account/AccountCashbackPage"))
 const FavoritesPage = lazy(() => import("../pages/account/FavoritesPage"))
 const WishlistsPage = lazy(() => import("../pages/account/WishlistsPage"))
 const AdminRoutes = lazy(() => import("../admin/routes/AdminRoutes"))
@@ -137,6 +138,7 @@ function AppRouter() {
           <Route path="mi-cuenta/datos" element={<AccountProfilePage />} />
           <Route path="mi-cuenta/direcciones" element={<AccountAddressesPage />} />
           <Route path="mi-cuenta/pedidos" element={<AccountOrdersPage />} />
+          <Route path="mi-cuenta/cashback" element={<AccountCashbackPage />} />
           <Route path="favoritos" element={<FavoritesPage />} />
           <Route path="listas" element={<WishlistsPage />} />
           <Route path="aviso-privacidad" element={<PrivacyPolicyPage />} />

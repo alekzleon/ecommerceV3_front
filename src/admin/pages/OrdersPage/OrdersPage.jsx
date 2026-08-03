@@ -487,7 +487,7 @@ function OrderDetail({ order, saving, onCancelOrder }) {
         >
           Cancelar pedido
         </button>
-        {order.status === "paid" ? <span>Los pedidos pagados no se cancelan desde este endpoint.</span> : null}
+        {order.status === "paid" ? <span>Los pedidos pagados no se pueden cancelar, comunícate con el cliente.</span> : null}
       </div>
     </div>
   )
