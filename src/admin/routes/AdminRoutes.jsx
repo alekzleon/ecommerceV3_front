@@ -17,6 +17,7 @@ const PromotionsPage = lazy(() => import("../pages/PromotionsPage/PromotionsPage
 const GiftItemsPage = lazy(() => import("../pages/PromotionsPage/GiftItemsPage"))
 const CouponsPage = lazy(() => import("../pages/CouponsPage/CouponsPage"))
 const OrdersPage = lazy(() => import("../pages/OrdersPage/OrdersPage"))
+const AbandonedCartsPage = lazy(() => import("../pages/AbandonedCartsPage/AbandonedCartsPage"))
 const AdminForbiddenPage = lazy(() => import("../pages/AdminForbiddenPage/AdminForbiddenPage"))
 const LogsPage = lazy(() => import("../pages/LogsPage/LogsPage"))
 const SettingsPage = lazy(() => import("../pages/SettingsPage/SettingsPage"))
@@ -67,7 +68,7 @@ function AdminRoutes({
           <Route path="/catalog/categories" element={withModule(currentUser, "categorias", <CategoriesPage />)} />
           <Route path="/catalog/families" element={withModule(currentUser, "familias", <FamiliesPage />)} />
           <Route path="/orders" element={withModule(currentUser, "pedidos", <OrdersPage />)} />
-          <Route path="/carts" element={withModule(currentUser, "carritos", <OrdersPage />)} />
+          <Route path="/carts" element={withModule(currentUser, "carritos", <AbandonedCartsPage />)} />
           <Route path="/credit" element={withModule(currentUser, "credito", <CreditPage />)} />
           <Route path="/collections" element={withModule(currentUser, "cobranza", <CollectionsPage />)} />
           <Route path="/marketing" element={withModule(currentUser, ["marketing", "banners"], <MarketingPage />)} />

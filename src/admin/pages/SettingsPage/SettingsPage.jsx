@@ -1136,7 +1136,7 @@ function AbandonedCartSection({ form, onChange }) {
           name="abandoned_cart.enabled"
           checked={settings.enabled}
           onChange={onChange}
-          helpText="Permite que el backend detecte y notifique carritos abandonados."
+          helpText="Permite que tu ecommerce detecte y notifique carritos abandonados para recuperación de ventas."
         />
 
         <ToggleField
@@ -1152,7 +1152,7 @@ function AbandonedCartSection({ form, onChange }) {
           name="abandoned_cart.send_whatsapp"
           checked={settings.send_whatsapp}
           onChange={onChange}
-          helpText="Mantiene el canal WhatsApp activo para pruebas del backend."
+          helpText="Mantén activo el canal de WhatsApp para envío de notificaciones."
         />
       </div>
 

@@ -10,10 +10,16 @@ export async function getTenantSubscriptionPlans() {
   return data
 }
 
-export async function createTenantSubscriptionCheckout(planKey) {
+export async function createTenantSubscriptionCheckout(planKey, billingPeriod = "monthly") {
   const { data } = await api.post("/tenant/subscription/checkout", {
     plan_key: planKey,
+    billing_period: billingPeriod,
   })
+  return data
+}
+
+export async function cancelTenantSubscription(payload = { cancel_at_period_end: true }) {
+  const { data } = await api.post("/tenant/subscription/cancel", payload)
   return data
 }
 

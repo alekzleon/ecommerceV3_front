@@ -215,31 +215,82 @@ function WidgetHeader({ title, description }) {
 }
 
 function SalesByDayChart({ items, loading }) {
-  const maxSales = Math.max(...items.map((item) => item.sales), 1)
-
   if (loading) return <ChartSkeleton />
 
   if (!items.length) return <EmptyState text="Sin ventas en el periodo." />
 
+  const chart = buildLineChart(items)
+  const lastItem = items[items.length - 1]
+  const bestItem = items.reduce((best, item) => (item.sales > best.sales ? item : best), items[0])
+  const showEvery = Math.max(Math.ceil(items.length / 7), 1)
+
   return (
-    <div className="dashboard-chart dashboard-chart--sales">
-      {items.map((item) => (
-        <div className="dashboard-chart__day" key={item.date}>
-          <div className="dashboard-chart__bar-stack">
-            <span
-              className="dashboard-chart__bar is-sales"
-              style={{ height: `${Math.max((item.sales / maxSales) * 100, 5)}%` }}
-              title={`${formatDate(item.date)}: ${formatMoney(item.sales)}`}
-            />
-            <span
-              className="dashboard-chart__bar is-discount"
-              style={{ height: `${Math.max((item.discounts / maxSales) * 100, item.discounts ? 4 : 0)}%` }}
-              title={`Descuentos: ${formatMoney(item.discounts)}`}
-            />
-          </div>
-          <small>{formatShortDate(item.date)}</small>
+    <div className="dashboard-line-card">
+      <div className="dashboard-line-card__summary">
+        <div>
+          <span>Total del periodo</span>
+          <strong>{formatMoney(chart.totalSales)}</strong>
         </div>
-      ))}
+        <div>
+          <span>Mejor día</span>
+          <strong>{formatMoney(bestItem.sales)}</strong>
+          <small>{formatShortDate(bestItem.date)}</small>
+        </div>
+        <div>
+          <span>Último día</span>
+          <strong>{formatMoney(lastItem.sales)}</strong>
+          <small>{formatShortDate(lastItem.date)}</small>
+        </div>
+      </div>
+
+      <div className="dashboard-line-chart">
+        <div className="dashboard-line-chart__scale" aria-hidden="true">
+          {chart.ticks.map((tick) => (
+            <span key={tick}>{formatCompactMoney(tick)}</span>
+          ))}
+        </div>
+
+        <div className="dashboard-line-chart__canvas">
+          <svg viewBox={`0 0 ${chart.width} ${chart.height}`} preserveAspectRatio="none" role="img" aria-label="Ventas por día">
+            <defs>
+              <linearGradient id="salesLineFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.2" />
+                <stop offset="100%" stopColor="#2563eb" stopOpacity="0.02" />
+              </linearGradient>
+            </defs>
+            {chart.gridLines.map((line) => (
+              <line
+                key={line}
+                className="dashboard-line-chart__grid"
+                x1={chart.paddingX}
+                x2={chart.width - chart.paddingX}
+                y1={line}
+                y2={line}
+              />
+            ))}
+            <path className="dashboard-line-chart__area" d={chart.areaPath} />
+            <path className="dashboard-line-chart__line" d={chart.linePath} />
+            {chart.points.map((point) => (
+              <g key={point.date}>
+                <circle className="dashboard-line-chart__point-halo" cx={point.x} cy={point.y} r="8" />
+                <circle className="dashboard-line-chart__point" cx={point.x} cy={point.y} r="3.8">
+                  <title>{`${formatDate(point.date)}: ${formatMoney(point.sales)}`}</title>
+                </circle>
+              </g>
+            ))}
+          </svg>
+
+          <div className="dashboard-line-chart__labels">
+            {items.map((item, index) => (
+              index % showEvery === 0 || index === items.length - 1 ? (
+                <span key={item.date} style={{ left: `${chart.points[index]?.percentX || 0}%` }}>
+                  {formatShortDate(item.date)}
+                </span>
+              ) : null
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -654,6 +705,15 @@ function formatMoney(value) {
   }).format(Number(value || 0))
 }
 
+function formatCompactMoney(value) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(Number(value || 0))
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat("es-MX").format(Number(value || 0))
 }
@@ -711,6 +771,49 @@ function translateCartStatus(status) {
   }
 
   return map[String(status || "").toLowerCase()] || status || "Sin estatus"
+}
+
+function buildLineChart(items = []) {
+  const width = 720
+  const height = 260
+  const paddingX = 22
+  const paddingTop = 18
+  const paddingBottom = 34
+  const plotWidth = width - paddingX * 2
+  const plotHeight = height - paddingTop - paddingBottom
+  const maxSales = Math.max(...items.map((item) => item.sales), 1)
+  const bottomY = height - paddingBottom
+  const totalSales = items.reduce((total, item) => total + Number(item.sales || 0), 0)
+
+  const points = items.map((item, index) => {
+    const ratio = items.length > 1 ? index / (items.length - 1) : 0.5
+    const x = paddingX + ratio * plotWidth
+    const y = bottomY - (Number(item.sales || 0) / maxSales) * plotHeight
+
+    return {
+      ...item,
+      x,
+      y,
+      percentX: ((x - paddingX) / plotWidth) * 100,
+    }
+  })
+
+  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
+  const areaPath = `${linePath} L ${points[points.length - 1]?.x || paddingX} ${bottomY} L ${points[0]?.x || paddingX} ${bottomY} Z`
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map((ratio) => paddingTop + ratio * plotHeight)
+  const ticks = [maxSales, maxSales * 0.75, maxSales * 0.5, maxSales * 0.25, 0]
+
+  return {
+    width,
+    height,
+    paddingX,
+    totalSales,
+    points,
+    linePath,
+    areaPath,
+    gridLines,
+    ticks,
+  }
 }
 
 export default DashboardPage
