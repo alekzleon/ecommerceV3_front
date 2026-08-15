@@ -590,7 +590,7 @@
 
 .summary_cashback_form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: end;
   margin-top: 2px;
@@ -623,6 +623,16 @@
 .summary_cashback_form input:focus {
   border-color: #13426b;
   box-shadow: 0 0 0 3px rgba(19, 66, 107, 0.12);
+}
+
+@media (max-width: 520px) {
+  .summary_cashback_form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary_cashback_form label {
+    grid-column: 1 / -1;
+  }
 }
 
 .summary_coupon {
@@ -713,6 +723,24 @@
   width: 100%;
 }
 
+.summary_cashback {
+  margin-top: -0.4rem;
+}
+
+.summary_cashback_form_inline {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.summary_cashback_limits {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .summary_coupon_applied {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -736,6 +764,12 @@
   border-color: #d7dde5;
   background: #ffffff;
   color: #334155;
+}
+
+@media (max-width: 520px) {
+  .summary_cashback_form_inline {
+    grid-template-columns: 1fr;
+  }
 }
 
 .summary_rows {

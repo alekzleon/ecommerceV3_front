@@ -702,6 +702,52 @@
   white-space: nowrap;
 }
 
+.checkout_cashback_form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.checkout_cashback_form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.checkout_cashback_form label span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.checkout_cashback_form input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #111827;
+  font-size: 13px;
+  outline: none;
+}
+
+.checkout_cashback_form input:focus {
+  border-color: #13426b;
+  box-shadow: 0 0 0 3px rgba(19, 66, 107, 0.12);
+}
+
+.checkout_cashback_clear {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 520px) {
+  .checkout_cashback_form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 .summary_actions {
   display: flex;
   flex-direction: column;

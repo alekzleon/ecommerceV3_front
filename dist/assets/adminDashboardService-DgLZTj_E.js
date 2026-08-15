@@ -1,1 +1,0 @@
-import{t as e}from"./api-C68TkMaC.js";async function t(t={}){let{data:n}=await e.get(`/admin/dashboard`,{params:t});return n}async function n(t={}){let{data:n}=await e.get(`/admin/dashboard/sales-channels`,{params:t});return n}export{n,t};
