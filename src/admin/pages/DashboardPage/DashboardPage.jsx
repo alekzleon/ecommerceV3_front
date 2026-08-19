@@ -215,6 +215,8 @@ function WidgetHeader({ title, description }) {
 }
 
 function SalesByDayChart({ items, loading }) {
+  const [activePoint, setActivePoint] = useState(null)
+
   if (loading) return <ChartSkeleton />
 
   if (!items.length) return <EmptyState text="Sin ventas en el periodo." />
@@ -243,6 +245,11 @@ function SalesByDayChart({ items, loading }) {
         </div>
       </div>
 
+      <div className="dashboard-line-chart__legend">
+        <span aria-hidden="true" />
+        <strong>Ventas por día</strong>
+      </div>
+
       <div className="dashboard-line-chart">
         <div className="dashboard-line-chart__scale" aria-hidden="true">
           {chart.ticks.map((tick) => (
@@ -250,35 +257,85 @@ function SalesByDayChart({ items, loading }) {
           ))}
         </div>
 
-        <div className="dashboard-line-chart__canvas">
+        <div className="dashboard-line-chart__canvas" onMouseLeave={() => setActivePoint(null)}>
           <svg viewBox={`0 0 ${chart.width} ${chart.height}`} preserveAspectRatio="none" role="img" aria-label="Ventas por día">
-            <defs>
-              <linearGradient id="salesLineFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.2" />
-                <stop offset="100%" stopColor="#2563eb" stopOpacity="0.02" />
-              </linearGradient>
-            </defs>
             {chart.gridLines.map((line) => (
               <line
-                key={line}
-                className="dashboard-line-chart__grid"
+                key={`h-${line}`}
+                className="dashboard-line-chart__grid dashboard-line-chart__grid--horizontal"
                 x1={chart.paddingX}
                 x2={chart.width - chart.paddingX}
                 y1={line}
                 y2={line}
               />
             ))}
-            <path className="dashboard-line-chart__area" d={chart.areaPath} />
+            {chart.verticalGridLines.map((line) => (
+              <line
+                key={`v-${line}`}
+                className="dashboard-line-chart__grid dashboard-line-chart__grid--vertical"
+                x1={line}
+                x2={line}
+                y1={chart.paddingTop}
+                y2={chart.bottomY}
+              />
+            ))}
+            {activePoint ? (
+              <line
+                className="dashboard-line-chart__cursor-line"
+                x1={activePoint.x}
+                x2={activePoint.x}
+                y1={chart.paddingTop}
+                y2={chart.bottomY}
+              />
+            ) : null}
             <path className="dashboard-line-chart__line" d={chart.linePath} />
             {chart.points.map((point) => (
-              <g key={point.date}>
-                <circle className="dashboard-line-chart__point-halo" cx={point.x} cy={point.y} r="8" />
-                <circle className="dashboard-line-chart__point" cx={point.x} cy={point.y} r="3.8">
+              <g
+                key={point.date}
+                className="dashboard-line-chart__point-group"
+                onMouseEnter={() => setActivePoint(point)}
+                onFocus={() => setActivePoint(point)}
+                onBlur={() => setActivePoint(null)}
+                tabIndex={0}
+              >
+                <circle className="dashboard-line-chart__point-halo" cx={point.x} cy={point.y} r="10" />
+                <circle
+                  className={`dashboard-line-chart__point ${
+                    activePoint?.date === point.date ? "is-active" : ""
+                  }`}
+                  cx={point.x}
+                  cy={point.y}
+                  r="6"
+                >
                   <title>{`${formatDate(point.date)}: ${formatMoney(point.sales)}`}</title>
                 </circle>
+                <circle className="dashboard-line-chart__hit-area" cx={point.x} cy={point.y} r="16" />
               </g>
             ))}
           </svg>
+
+          {activePoint ? (
+            <div
+              className={`dashboard-line-chart__tooltip ${
+                activePoint.svgPercentX > 68 ? "is-left" : ""
+              } ${
+                activePoint.svgPercentY < 34 ? "is-below" : ""
+              } ${
+                activePoint.svgPercentY > 70 ? "is-above" : ""
+              }`}
+              style={{
+                left: `${activePoint.svgPercentX}%`,
+                top: `${activePoint.svgPercentY}%`,
+              }}
+            >
+              <strong>{formatShortDate(activePoint.date)}</strong>
+              <span>
+                <i aria-hidden="true" />
+                <em>Ventas</em>
+                <b>{formatMoney(activePoint.sales)}</b>
+              </span>
+            </div>
+          ) : null}
 
           <div className="dashboard-line-chart__labels">
             {items.map((item, index) => (
@@ -776,9 +833,9 @@ function translateCartStatus(status) {
 function buildLineChart(items = []) {
   const width = 720
   const height = 260
-  const paddingX = 22
-  const paddingTop = 18
-  const paddingBottom = 34
+  const paddingX = 18
+  const paddingTop = 22
+  const paddingBottom = 36
   const plotWidth = width - paddingX * 2
   const plotHeight = height - paddingTop - paddingBottom
   const maxSales = Math.max(...items.map((item) => item.sales), 1)
@@ -795,25 +852,49 @@ function buildLineChart(items = []) {
       x,
       y,
       percentX: ((x - paddingX) / plotWidth) * 100,
+      svgPercentX: (x / width) * 100,
+      svgPercentY: (y / height) * 100,
     }
   })
 
-  const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
-  const areaPath = `${linePath} L ${points[points.length - 1]?.x || paddingX} ${bottomY} L ${points[0]?.x || paddingX} ${bottomY} Z`
+  const linePath = buildSmoothLinePath(points)
   const gridLines = [0, 0.25, 0.5, 0.75, 1].map((ratio) => paddingTop + ratio * plotHeight)
+  const verticalGridLines = points.map((point) => point.x)
   const ticks = [maxSales, maxSales * 0.75, maxSales * 0.5, maxSales * 0.25, 0]
 
   return {
     width,
     height,
     paddingX,
+    paddingTop,
+    bottomY,
     totalSales,
     points,
     linePath,
-    areaPath,
     gridLines,
+    verticalGridLines,
     ticks,
   }
+}
+
+function buildSmoothLinePath(points = []) {
+  if (!points.length) return ""
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`
+
+  return points.reduce((path, point, index) => {
+    if (index === 0) return `M ${point.x} ${point.y}`
+
+    const previous = points[index - 1]
+    const previousControl = points[index - 2] || previous
+    const nextControl = points[index + 1] || point
+    const tension = 0.18
+    const controlX1 = previous.x + (point.x - previousControl.x) * tension
+    const controlY1 = previous.y + (point.y - previousControl.y) * tension
+    const controlX2 = point.x - (nextControl.x - previous.x) * tension
+    const controlY2 = point.y - (nextControl.y - previous.y) * tension
+
+    return `${path} C ${controlX1} ${controlY1}, ${controlX2} ${controlY2}, ${point.x} ${point.y}`
+  }, "")
 }
 
 export default DashboardPage

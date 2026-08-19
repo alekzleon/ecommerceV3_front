@@ -24,6 +24,7 @@ const SettingsPage = lazy(() => import("../pages/SettingsPage/SettingsPage"))
 const DesignEcommercePage = lazy(() => import("../pages/DesignEcommercePage/DesignEcommercePage"))
 const SubscriptionPage = lazy(() => import("../pages/SubscriptionPage/SubscriptionPage"))
 const PaymentsPage = lazy(() => import("../pages/PaymentsPage/PaymentsPage"))
+const CustomDomainsPage = lazy(() => import("../pages/CustomDomainsPage/CustomDomainsPage"))
 const CreditPage = lazy(() => import("../pages/CreditPage/CreditPage"))
 const CollectionsPage = lazy(() => import("../pages/CollectionsPage/CollectionsPage"))
 const SyncPage = lazy(() => import("../pages/SyncPage/SyncPage"))
@@ -81,6 +82,7 @@ function AdminRoutes({
           <Route path="/settings" element={withModule(currentUser, "configuracion_ecommerce", <SettingsPage />)} />
           <Route path="/payments" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
           <Route path="/payments/stripe/return" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
+          <Route path="/domains" element={withModule(currentUser, "configuracion_ecommerce", <CustomDomainsPage />)} />
           <Route
             path="/design"
             element={withModule(currentUser, "configuracion_ecommerce", <DesignEcommercePage />)}

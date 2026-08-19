@@ -1,1 +1,0 @@
-import{t as e}from"./api-DLYO2C0C.js";async function t(){let{data:t}=await e.get(`/tenant/stripe-connect/status`);return t}async function n(){let{data:t}=await e.post(`/tenant/stripe-connect/account`);return t}async function r(){let{data:t}=await e.post(`/tenant/stripe-connect/onboarding-link`);return t}export{r as n,t as r,n as t};

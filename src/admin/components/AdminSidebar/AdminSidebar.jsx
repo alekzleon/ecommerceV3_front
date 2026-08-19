@@ -27,7 +27,7 @@ function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
           aria-label="Cerrar menú"
           onClick={onClose}
         >
-          ✕
+          <i className="bi bi-layout-sidebar-inset" aria-hidden="true" />
         </button>
       </div>
 
@@ -93,8 +93,14 @@ function SidebarGroupLinks({ group, onClose }) {
 
 function addStorefrontAdminMenuItems(menu) {
   const subscriptionItem = buildSubscriptionMenuItem()
+  const sidebarMenu = menu
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.name !== "banners"),
+    }))
+    .filter((group) => group.items.length > 0)
 
-  if (!menu.length) {
+  if (!sidebarMenu.length) {
     return [
       {
         group_key: "account",
@@ -104,13 +110,14 @@ function addStorefrontAdminMenuItems(menu) {
     ]
   }
 
-  const nextMenu = menu.map((group) => {
+  const nextMenu = sidebarMenu.map((group) => {
     const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
     const hasPayments = group.items.some((item) => item.name === "pagos")
     const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
+    const hasDomains = group.items.some((item) => item.name === "dominios_personalizados")
     const hasSubscription = group.items.some((item) => item.name === "suscripcion")
 
-    if (!hasSettings && !hasDesign && !hasPayments) return group
+    if (!hasSettings && !hasDesign && !hasPayments && !hasDomains) return group
 
     const items = []
 
@@ -135,11 +142,21 @@ function addStorefrontAdminMenuItems(menu) {
         })
       }
 
-      const isDesignInsertionPoint = item.name === "disena_ecommerce"
-        || (item.name === "configuracion_ecommerce" && !hasDesign && !hasPayments)
-      const isPaymentsInsertionPoint = item.name === "pagos"
+      if (item.name === "configuracion_ecommerce" && !hasDomains) {
+        items.push({
+          ...item,
+          name: "dominios_personalizados",
+          display_name: "Dominios",
+          front_path: "/admin/domains",
+        })
+      }
 
-      if ((isDesignInsertionPoint || isPaymentsInsertionPoint) && !hasSubscription) {
+      const isDesignInsertionPoint = item.name === "disena_ecommerce"
+        || (item.name === "configuracion_ecommerce" && !hasDesign && !hasPayments && !hasDomains)
+      const isPaymentsInsertionPoint = item.name === "pagos"
+      const isDomainsInsertionPoint = item.name === "dominios_personalizados"
+
+      if ((isDesignInsertionPoint || isPaymentsInsertionPoint || isDomainsInsertionPoint) && !hasSubscription) {
         items.push(buildSubscriptionMenuItem(item))
       }
     })
@@ -180,40 +197,41 @@ function buildSubscriptionMenuItem(source = {}) {
 
 function renderSidebarIcon(moduleName) {
   const icons = {
-    dashboard: "bi-house-door-fill",
+    dashboard: "bi-grid",
     sales_channels: "bi-shop-window",
     canales_venta: "bi-shop-window",
-    usuarios: "bi-person-fill",
-    roles: "bi-shield-lock-fill",
-    productos: "bi-tag-fill",
-    categories: "bi-collection-fill",
-    categorias: "bi-collection-fill",
-    families: "bi-diagram-3-fill",
-    familias: "bi-diagram-3-fill",
-    pedidos: "bi-inbox-fill",
-    orders: "bi-inbox-fill",
-    carritos: "bi-cart-fill",
-    carts: "bi-cart-fill",
+    usuarios: "bi-people",
+    roles: "bi-shield-check",
+    productos: "bi-box-seam",
+    categories: "bi-ui-checks-grid",
+    categorias: "bi-ui-checks-grid",
+    families: "bi-diagram-3",
+    familias: "bi-diagram-3",
+    pedidos: "bi-receipt",
+    orders: "bi-receipt",
+    carritos: "bi-cart",
+    carts: "bi-cart",
     clientes: "bi-people-fill",
     customers: "bi-people-fill",
-    credito: "bi-credit-card-2-front-fill",
+    credito: "bi-credit-card-2-front",
     cobranza: "bi-bank2",
     marketing: "bi-bullseye",
-    banners: "bi-image-fill",
+    banners: "bi-image",
     promociones: "bi-percent",
     promotions: "bi-percent",
-    cupones: "bi-ticket-perforated-fill",
-    coupons: "bi-ticket-perforated-fill",
+    cupones: "bi-ticket-perforated",
+    coupons: "bi-ticket-perforated",
     logs: "bi-list-check",
     sincronizacion: "bi-arrow-repeat",
-    configuracion_ecommerce: "bi-gear-fill",
+    configuracion_ecommerce: "bi-gear",
     pagos: "bi-cash-stack",
-    disena_ecommerce: "bi-palette-fill",
-    suscripcion: "bi-credit-card-fill",
-    design: "bi-palette-fill",
-    settings: "bi-gear-fill",
-    notificaciones: "bi-bell-fill",
-    notifications: "bi-bell-fill",
+    dominios_personalizados: "bi-globe2",
+    disena_ecommerce: "bi-palette",
+    suscripcion: "bi-credit-card",
+    design: "bi-palette",
+    settings: "bi-gear",
+    notificaciones: "bi-bell",
+    notifications: "bi-bell",
   }
 
   return <i className={`bi ${icons[moduleName] || "bi-circle-fill"}`} aria-hidden="true" />
