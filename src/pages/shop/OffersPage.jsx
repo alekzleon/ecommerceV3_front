@@ -1,30 +1,22 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import ProductListSkeleton from "../../components/product/ProductListSkeleton/ProductListSkeleton"
-import { addCartItem } from "../../services/api/cartService"
 import { getAllPromotions } from "../../services/api/promotionsService"
-import { useAuth } from "../../context/AuthContext"
 import { useSettings } from "../../context/SettingsContext"
-import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
-import { trackMetaAddToCart } from "../../utils/metaPixel"
+import { notifyError } from "../../utils/toast"
 import "./offerspage.css"
 
 const OFFERS_PER_PAGE = 24
 const PROMOTION_IMAGE_PLACEHOLDER = "https://monocromia.com.mx/cdn/shop/files/Monocromia-04_6366367b-3cd5-4942-89f0-62fac4475a07_2048x.jpg?v=1742501692"
-const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 
 function OffersPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { isAuthenticated } = useAuth()
   const { settings } = useSettings()
   const page = Number(searchParams.get("page")) || 1
 
   const [offers, setOffers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [addingOfferId, setAddingOfferId] = useState(null)
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
-  const [expandedOfferId, setExpandedOfferId] = useState(null)
   const [meta, setMeta] = useState({
     current_page: 1,
     last_page: 1,
@@ -62,7 +54,6 @@ function OffersPage() {
 
   useEffect(() => {
     setActiveOfferIndex(0)
-    setExpandedOfferId(null)
   }, [page])
 
   const handlePageChange = (nextPage) => {
@@ -75,76 +66,6 @@ function OffersPage() {
     }
 
     setSearchParams(nextParams, { replace: true })
-  }
-
-  const syncCartSummary = (payload) => {
-    const summary = {
-      id: payload?.id ?? null,
-      items_count: Number(payload?.items_count ?? 0),
-      subtotal: Number(payload?.subtotal ?? 0),
-      discount: Number(payload?.discount ?? 0),
-      tax: Number(payload?.tax ?? 0),
-      tax_breakdown: payload?.tax_breakdown ?? null,
-      total: Number(payload?.total ?? 0),
-    }
-
-    localStorage.setItem(CART_SUMMARY_STORAGE_KEY, JSON.stringify(summary))
-    window.dispatchEvent(new CustomEvent("cart:updated", { detail: summary }))
-  }
-
-  const handleAddOfferToCart = async (offer) => {
-    if (!offer?.id || addingOfferId === offer.id) return
-
-    if (hasMultipleOfferProducts(offer)) {
-      setExpandedOfferId((currentId) => currentId === offer.id ? null : offer.id)
-      notifyWarning("Elige un producto de esta promoción para agregarlo al carrito.")
-      return
-    }
-
-    if (!isAuthenticated) {
-      navigate("/login")
-      return
-    }
-
-    if (!offer.productId) {
-      notifyWarning("Elige un producto de esta promoción para agregarlo al carrito.")
-      navigate(getOfferUrl(offer))
-      return
-    }
-
-    if (isOfferOutOfStock(offer)) {
-      notifyError(offer.stockMessage || "Producto sin inventario.")
-      return
-    }
-
-    try {
-      setAddingOfferId(offer.id)
-      const response = await addCartItem({
-        product_id: offer.productId,
-        quantity: 1,
-      })
-      const cartSummary =
-        response?.data?.cart ||
-        response?.data?.summary ||
-        response?.cart ||
-        response?.summary ||
-        response?.data
-
-      if (cartSummary && typeof cartSummary === "object") {
-        syncCartSummary(cartSummary)
-      }
-
-      trackMetaAddToCart({
-        id: offer.productId,
-        name: offer.productName || offer.title,
-        price: offer.price || 0,
-      }, 1)
-      notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
-    } catch (error) {
-      notifyError(error?.response?.data?.message || "No fue posible agregar el producto al carrito.")
-    } finally {
-      setAddingOfferId(null)
-    }
   }
 
   const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
@@ -175,9 +96,7 @@ function OffersPage() {
             ) : (
               <div className="offers-page__grid">
                 {offers.map((offer) => {
-                  const isOutOfStock = isOfferOutOfStock(offer)
                   const hasMultipleProducts = hasMultipleOfferProducts(offer)
-                  const isExpanded = expandedOfferId === offer.id
 
                   return (
                   <article className="offers-page__card" key={offer.id}>
@@ -197,36 +116,10 @@ function OffersPage() {
                         <strong>{offer.typeLabel}</strong>
                       </div>
                       <div className="offers-page__actions">
-                        {hasMultipleProducts ? (
-                          <button
-                            type="button"
-                            className="offers-page__action offers-page__action--secondary"
-                            onClick={() => setExpandedOfferId(isExpanded ? null : offer.id)}
-                            aria-expanded={isExpanded}
-                          >
-                            {isExpanded ? "Ocultar" : "Ver promoción"}
-                          </button>
-                        ) : (
-                          <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
-                            Ver
-                          </Link>
-                        )}
-                        <button
-                          type="button"
-                          className="offers-page__action offers-page__action--primary"
-                          onClick={() => handleAddOfferToCart(offer)}
-                          disabled={addingOfferId === offer.id || (!hasMultipleProducts && isOutOfStock)}
-                        >
-                          {addingOfferId === offer.id
-                            ? "Agregando..."
-                            : hasMultipleProducts
-                            ? "Elegir producto"
-                            : isOutOfStock
-                            ? "Producto sin inventario"
-                            : "Agregar al carrito"}
-                        </button>
+                        <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--primary">
+                          {hasMultipleProducts ? "Ver productos" : "Ver detalle"}
+                        </Link>
                       </div>
-                      {isExpanded ? <OfferProductsList offer={offer} /> : null}
                     </div>
                   </article>
                   )
@@ -288,12 +181,7 @@ function OffersPage() {
 function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange }) {
   const activeOffer = offers[activeIndex] || offers[0]
   const visibleOffers = getVisibleEditorialOffers(offers, activeIndex)
-  const [showProducts, setShowProducts] = useState(false)
   const hasMultipleProducts = hasMultipleOfferProducts(activeOffer)
-
-  useEffect(() => {
-    setShowProducts(false)
-  }, [activeOffer?.id])
 
   const goToPrevious = () => {
     onActiveIndexChange(activeIndex === 0 ? offers.length - 1 : activeIndex - 1)
@@ -343,49 +231,11 @@ function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange
           <h1>{hasMultipleProducts ? activeOffer.title : activeOffer.productName || activeOffer.title}</h1>
           {activeOffer.price > 0 ? <p>{formatMoney(activeOffer.price)}</p> : null}
           {activeOffer.description ? <small>{activeOffer.description}</small> : null}
-          {hasMultipleProducts ? (
-            <button
-              type="button"
-              onClick={() => setShowProducts((currentValue) => !currentValue)}
-              aria-expanded={showProducts}
-            >
-              {showProducts ? "Ocultar productos" : "Ver promoción"}
-            </button>
-          ) : (
-            <Link to={getOfferUrl(activeOffer)}>Ver promoción</Link>
-          )}
+          <Link to={getOfferUrl(activeOffer)}>
+            {hasMultipleProducts ? "Ver productos" : "Ver detalle"}
+          </Link>
         </div>
       </div>
-      {showProducts ? <OfferProductsList offer={activeOffer} variant="editorial" /> : null}
-    </div>
-  )
-}
-
-function OfferProductsList({ offer, variant = "default" }) {
-  const products = getOfferSelectableProducts(offer)
-
-  return (
-    <div className={`offers-page__products ${variant === "editorial" ? "offers-page__products--editorial" : ""}`}>
-      <h3>Productos de esta promoción</h3>
-      {products.length ? (
-        <div className="offers-page__products-grid">
-          {products.map((product) => (
-            <Link
-              to={`/producto/${product.slug}`}
-              className="offers-page__product-option"
-              key={product.id || product.slug}
-            >
-              <img loading="lazy" src={product.image} alt={product.name} />
-              <span>
-                <strong>{product.name}</strong>
-                {product.price > 0 ? <small>{formatMoney(product.price)}</small> : null}
-              </span>
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <p>No fue posible cargar los productos de esta promoción.</p>
-      )}
     </div>
   )
 }
@@ -442,6 +292,10 @@ function normalizePromotions(items = []) {
 
 function getOfferUrl(offer) {
   if (!hasMultipleOfferProducts(offer) && offer?.productSlug) return `/producto/${offer.productSlug}`
+
+  if (hasMultipleOfferProducts(offer) && (offer?.slug || offer?.id)) {
+    return `/ofertas/${encodeURIComponent(offer.slug || offer.id)}/productos`
+  }
 
   const params = new URLSearchParams()
 
@@ -547,13 +401,6 @@ function getPromotionProductStockMessage(item = {}) {
     item?.products?.[0]?.stockMessage ||
     ""
   )
-}
-
-function isOfferOutOfStock(offer = {}) {
-  const stockStatus = offer?.stockStatus || offer?.stock_status || "untracked"
-  const hasNoStockValue = offer?.stock === null || offer?.stock === undefined || offer?.stock === ""
-
-  return stockStatus === "out_of_stock" || hasNoStockValue || Number(offer.stock) <= 0
 }
 
 function normalizePromotionImage(value) {

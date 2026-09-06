@@ -20,6 +20,7 @@ const TermsPage = lazy(() => import("../pages/legal/TermsPage"))
 const ProductsPage = lazy(() => import("../pages/shop/ProductsPage"))
 const ProductDetailPage = lazy(() => import("../pages/shop/ProductDetailPage"))
 const OffersPage = lazy(() => import("../pages/shop/OffersPage"))
+const OfferProductsPage = lazy(() => import("../pages/shop/OfferProductsPage"))
 const CartPage = lazy(() => import("../pages/cart/CartPage"))
 const CheckoutPage = lazy(() => import("../pages/cart/CheckoutPage"))
 const CheckoutResultPage = lazy(() => import("../pages/cart/CheckoutResultPage"))
@@ -121,6 +122,7 @@ function AppRouter() {
           <Route path="productos" element={<ProductsPage />} />
           <Route path="producto/:slug" element={<ProductDetailPage />} />
           <Route path="ofertas" element={<OffersPage />} />
+          <Route path="ofertas/:promotionKey/productos" element={<OfferProductsPage />} />
           <Route path="contacto" element={<ContactPage />} />
           <Route path="carrito" element={<CartPage />} />
           <Route path="carrito/recuperar" element={<RecoverCartPage />} />
