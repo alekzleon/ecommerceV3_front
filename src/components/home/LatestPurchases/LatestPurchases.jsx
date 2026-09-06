@@ -212,7 +212,7 @@ function LatestPurchases({ source = "recent" }) {
                   </button>
 
                   <Link className="purchase-card__image-wrap" to={`/producto/${product.slug}`}>
-                    <img
+                    <img loading="lazy"
                       src={product.image}
                       alt={product.name}
                       className="purchase-card__image"

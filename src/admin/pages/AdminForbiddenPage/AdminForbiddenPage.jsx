@@ -5,7 +5,7 @@ function AdminForbiddenPage() {
   return (
     <div className="admin-forbidden">
       <section className="admin-forbidden__box" aria-labelledby="admin-forbidden-title">
-        <img
+        <img loading="lazy"
           className="admin-forbidden__image"
           src={forbiddenImage}
           alt=""

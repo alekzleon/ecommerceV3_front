@@ -16,9 +16,10 @@ function MainLayout() {
   ].includes(pathname)
   const isConstructionHome =
     pathname === "/" && settings.storefront?.is_published === false
-  const hideLayoutChrome = isFullscreenRoute || isConstructionHome
+  const isCloudiShopHome = pathname === "/" && isPlatformHost()
+  const hideLayoutChrome = isFullscreenRoute || isConstructionHome || isCloudiShopHome
 
-  if (loading && !isFullscreenRoute) {
+  if (loading && !hideLayoutChrome) {
     return <StorefrontLayoutSkeleton />
   }
 
@@ -65,3 +66,11 @@ function StorefrontLayoutSkeleton() {
 }
 
 export default MainLayout
+
+function isPlatformHost() {
+  if (typeof window === "undefined") return false
+
+  return ["localhost", "127.0.0.1", "cloudishop.mx", "www.cloudishop.mx"].includes(
+    window.location.hostname
+  )
+}

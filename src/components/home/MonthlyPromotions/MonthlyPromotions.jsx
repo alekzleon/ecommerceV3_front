@@ -43,7 +43,7 @@ function MonthlyPromotions() {
             : promotions.map((promo, index) => (
               <article className={`promo-card ${index % 2 === 0 ? "promo-card--violet" : "promo-card--light"}`} key={promo.id}>
                 <div className="promo-card__media">
-                  <img
+                  <img loading="lazy"
                     src={promo.image}
                     alt={promo.title}
                     className="promo-card__image"

@@ -590,7 +590,7 @@
 
 .summary_cashback_form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 8px;
   align-items: end;
   margin-top: 2px;
@@ -625,13 +625,27 @@
   box-shadow: 0 0 0 3px rgba(19, 66, 107, 0.12);
 }
 
+@media (max-width: 520px) {
+  .summary_cashback_form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary_cashback_form label {
+    grid-column: 1 / -1;
+  }
+}
+
 .summary_coupon {
+  display: grid;
+  gap: 0.8rem;
+  margin: 14px 0 1rem;
+}
+
+.summary_coupon.has-coupon,
+.summary_coupon.is-invalid {
   border: 1px solid #dbeafe;
   border-radius: 8px;
   background: #f8fbff;
-  display: grid;
-  gap: 0.8rem;
-  margin-bottom: 1rem;
   padding: 0.9rem;
 }
 
@@ -671,6 +685,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.55rem;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 0.9rem;
 }
 
 .summary_coupon_form input {
@@ -685,7 +703,8 @@
 }
 
 .summary_coupon_form button,
-.summary_coupon_clear {
+.summary_coupon_clear,
+.summary_coupon_toggle {
   min-height: 38px;
   border: 1px solid #13426b;
   border-radius: 8px;
@@ -694,6 +713,32 @@
   font-size: 0.82rem;
   font-weight: 900;
   padding: 0 0.85rem;
+}
+
+.summary_coupon_toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.summary_cashback {
+  margin-top: -0.4rem;
+}
+
+.summary_cashback_form_inline {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.summary_cashback_limits {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .summary_coupon_applied {
@@ -721,10 +766,84 @@
   color: #334155;
 }
 
+@media (max-width: 520px) {
+  .summary_cashback_form_inline {
+    grid-template-columns: 1fr;
+  }
+}
+
 .summary_rows {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.summary_shipping_progress {
+  display: grid;
+  gap: 9px;
+  margin: -4px 0 16px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+  padding: 12px;
+}
+
+.summary_shipping_progress.is-complete {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.summary_shipping_progress_head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary_shipping_progress_head span {
+  flex: 0 0 auto;
+  color: #b91c1c;
+}
+
+.summary_shipping_progress_track {
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: #fee2e2;
+}
+
+.summary_shipping_progress_track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #dc2626;
+  transition: width 0.2s ease;
+}
+
+.summary_shipping_progress.is-complete .summary_shipping_progress_track {
+  background: #bbf7d0;
+}
+
+.summary_shipping_progress.is-complete .summary_shipping_progress_track span {
+  background: #047857;
+}
+
+.summary_shipping_progress p {
+  margin: 0;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary_shipping_progress.is-complete .summary_shipping_progress_head {
+  color: #047857;
+}
+
+.summary_shipping_progress.is-complete .summary_shipping_progress_head span,
+.summary_shipping_progress.is-complete p {
+  color: #047857;
 }
 
 .summary_row {

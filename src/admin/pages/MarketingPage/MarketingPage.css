@@ -64,6 +64,52 @@
   font-size: 0.86rem;
 }
 
+.marketing-page__limit-badge {
+  display: grid;
+  gap: 0.18rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.65rem 0.8rem;
+  text-align: right;
+}
+
+.marketing-page__limit-badge strong {
+  color: #13426b;
+  font-size: 0.84rem;
+}
+
+.marketing-page__limit-badge span {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.marketing-page__limit-badge.is-unlimited strong {
+  color: #047857;
+}
+
+.marketing-page__limit-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid #fed7aa;
+  border-radius: 12px;
+  background: #fff7ed;
+  color: #9a3412;
+  padding: 0.8rem 0.9rem;
+}
+
+.marketing-page__limit-warning strong {
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.marketing-page__limit-warning span {
+  color: #9a3412;
+  font-size: 0.84rem;
+}
+
 .marketing-page__table-wrapper {
   width: 100%;
   overflow-x: auto;

@@ -382,7 +382,7 @@ function CategoriesPage() {
                     onClick={() => openEditPanel(category.id)}
                   >
                     <span className="categories-table__image">
-                      {category.image_url ? <img src={category.image_url} alt={category.name} /> : <i className="bi bi-image" aria-hidden="true" />}
+                      {category.image_url ? <img loading="lazy" src={category.image_url} alt={category.name} /> : <i className="bi bi-image" aria-hidden="true" />}
                     </span>
                     <strong>
                       {category.name}
@@ -492,7 +492,7 @@ function CategoriesPage() {
             <section className="categories-panel__image-block">
               <div className="categories-panel__preview">
                 {getCategoryPreviewImage(form, imagePreview) ? (
-                  <img src={getCategoryPreviewImage(form, imagePreview)} alt={form.name || "Categoría"} />
+                  <img loading="lazy" src={getCategoryPreviewImage(form, imagePreview)} alt={form.name || "Categoría"} />
                 ) : (
                   <i className="bi bi-image" aria-hidden="true" />
                 )}

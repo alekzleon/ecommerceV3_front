@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
+  applyCartCashback,
+  clearCartCashback,
   getCart,
   getCheckoutPreview,
   validateCheckout,
@@ -13,11 +15,14 @@ import {
 import {
   createAccountAddress,
   getAccountAddresses,
+  getAccountCashback,
 } from "../../services/api/accountService.js"
+import { getPublicPaymentMethods } from "../../services/api/paymentMethodsService.js"
 import AdminSidePanel from "../../components/AdminSidePanel/AdminSidePanel.jsx"
 import { useSettings } from "../../context/SettingsContext.jsx"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import { trackMetaInitiateCheckout } from "../../utils/metaPixel.js"
+import { hasAuthSession } from "../../services/storage/authStorage.js"
 import "./checkout.css"
 
 const emptyAddressForm = {
@@ -32,6 +37,23 @@ const emptyAddressForm = {
   delivery_note: "",
   is_default: false,
 }
+
+const emptyGuestCheckoutForm = {
+  name: "",
+  email: "",
+  phone: "",
+  street: "",
+  external_number: "",
+  internal_number: "",
+  neighborhood: "",
+  zip_code: "",
+  city: "",
+  state: "",
+  references: "",
+}
+
+const ADDRESS_PHONE_LENGTH = 10
+const ADDRESS_ZIP_CODE_LENGTH = 5
 
 const emptyCheckout = {
   cart_id: null,
@@ -77,6 +99,7 @@ const DOCUMENT_NOTE_MAX_LENGTH = 1000
 
 function CheckoutPage() {
   const { brandName, logoUrl } = useSettings()
+  const isGuestCheckout = !hasAuthSession()
   const [checkout, setCheckout] = useState(emptyCheckout)
   const [loading, setLoading] = useState(true)
   const [addressPanelOpen, setAddressPanelOpen] = useState(false)
@@ -85,16 +108,52 @@ function CheckoutPage() {
   const [addressSaving, setAddressSaving] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressForm, setAddressForm] = useState(emptyAddressForm)
+  const [guestForm, setGuestForm] = useState(emptyGuestCheckoutForm)
+  const [paymentMethods, setPaymentMethods] = useState(null)
+  const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true)
   const [processingPayment, setProcessingPayment] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [documentNotes, setDocumentNotes] = useState("")
+  const [accountCashback, setAccountCashback] = useState(null)
+  const [cashbackAmount, setCashbackAmount] = useState("")
+  const [cashbackLoading, setCashbackLoading] = useState(false)
   const restoringRecoverableRef = useRef(false)
   const trackedCheckoutRef = useRef("")
 
   useEffect(() => {
     fetchPreview()
+    fetchPaymentMethods()
+    fetchAccountCashback()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  async function fetchAccountCashback() {
+    if (!hasAuthSession()) {
+      setAccountCashback(null)
+      return
+    }
+
+    try {
+      const response = await getAccountCashback()
+      setAccountCashback(normalizeAccountCashback(response))
+    } catch (error) {
+      console.error("Error al cargar cashback de cuenta:", error?.response?.data || error)
+      setAccountCashback(null)
+    }
+  }
+
+  async function fetchPaymentMethods() {
+    try {
+      setPaymentMethodsLoading(true)
+      const response = await getPublicPaymentMethods()
+      setPaymentMethods(normalizePaymentMethods(response))
+    } catch (error) {
+      console.error("Error al cargar métodos de pago:", error?.response?.data || error)
+      setPaymentMethods({ default_method: null, methods: [] })
+    } finally {
+      setPaymentMethodsLoading(false)
+    }
+  }
 
   async function fetchPreview() {
     try {
@@ -180,6 +239,52 @@ function CheckoutPage() {
     }
   }
 
+  async function refreshCheckoutAfterCashback(response) {
+    syncCartSummary(response?.data?.cart ?? response?.data ?? response)
+    await fetchPreview()
+    await fetchAccountCashback()
+  }
+
+  async function handleApplyCashback(event) {
+    event.preventDefault()
+
+    const maxRedeemable = Number(checkout.loyalty?.cashback?.maxRedeemable ?? 0)
+    const amount = Math.min(Number(cashbackAmount), maxRedeemable || Number(cashbackAmount))
+
+    if (!amount || amount <= 0) {
+      notifyWarning("Ingresa un monto de cashback válido.")
+      return
+    }
+
+    try {
+      setCashbackLoading(true)
+      const response = await applyCartCashback({ amount })
+      setCashbackAmount("")
+      await refreshCheckoutAfterCashback(response)
+      notifySuccess(response?.message || "Cashback aplicado correctamente.")
+    } catch (error) {
+      console.error("Error al aplicar cashback:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible aplicar el cashback.")
+    } finally {
+      setCashbackLoading(false)
+    }
+  }
+
+  async function handleClearCashback() {
+    try {
+      setCashbackLoading(true)
+      const response = await clearCartCashback()
+      setCashbackAmount("")
+      await refreshCheckoutAfterCashback(response)
+      notifySuccess(response?.message || "Cashback removido correctamente.")
+    } catch (error) {
+      console.error("Error al quitar cashback:", error?.response?.data || error)
+      notifyError(error?.response?.data?.message || "No fue posible quitar el cashback.")
+    } finally {
+      setCashbackLoading(false)
+    }
+  }
+
   function applyCheckoutResponse(response, options = {}) {
     const nextCheckout = normalizeCheckout(response)
     const nextAddresses = normalizeShippingAddresses(nextCheckout.shipping)
@@ -241,8 +346,12 @@ function CheckoutPage() {
   }, [checkout])
 
   const selectedAddress = useMemo(() => {
+    if (isGuestCheckout) {
+      return isGuestCheckoutFormValid(guestForm) ? buildGuestAddress(guestForm) : null
+    }
+
     return addresses.find((address) => address.id === selectedAddressId) || null
-  }, [addresses, selectedAddressId])
+  }, [addresses, guestForm, isGuestCheckout, selectedAddressId])
 
   const hasPendingGiftSelection = useMemo(() => {
     return checkout.promotions_applied.some((promotion) => {
@@ -266,7 +375,9 @@ function CheckoutPage() {
   }, [checkout.blockers, invalidStockItems])
 
   const canContinue = Boolean(selectedAddress) && !hasPendingGiftSelection && insufficientStockBlockers.length === 0 && invalidStockItems.length === 0
-  const canPay = canContinue && acceptedTerms
+  const stripePaymentMethod = getActivePaymentMethod(paymentMethods, "stripe")
+  const hasStripePaymentMethod = Boolean(stripePaymentMethod)
+  const canPay = canContinue && acceptedTerms && hasStripePaymentMethod && !paymentMethodsLoading
 
   useEffect(() => {
     if (!checkout.items.length) return
@@ -287,13 +398,26 @@ function CheckoutPage() {
   }, [checkout, totals])
 
   async function handleStartStripeCheckout() {
+    if (paymentMethodsLoading) {
+      notifyWarning("Espera a que carguen los métodos de pago.")
+      return
+    }
+
+    if (!hasStripePaymentMethod) {
+      notifyWarning("El método de pago con Stripe no está activo para esta tienda.")
+      return
+    }
+
     if (!acceptedTerms) {
       notifyWarning("Acepta los términos y condiciones para continuar con el pago.")
       return
     }
 
     if (!selectedAddress) {
-      notifyWarning("Configura una dirección de envío para continuar.")
+      notifyWarning(isGuestCheckout
+        ? "Completa tus datos de invitado para continuar."
+        : "Configura una dirección de envío para continuar."
+      )
       handleOpenAddressPanel()
       return
     }
@@ -311,9 +435,10 @@ function CheckoutPage() {
     try {
       setProcessingPayment(true)
 
-      const validationResponse = await validateCheckout(
-        buildCheckoutPayload(selectedAddress, documentNotes)
-      )
+      const checkoutPayload = isGuestCheckout
+        ? buildGuestCheckoutPayload(guestForm, documentNotes)
+        : buildCheckoutPayload(selectedAddress, documentNotes)
+      const validationResponse = await validateCheckout(checkoutPayload)
       if (DEBUG_RECOVERABLE_CART) {
         console.log("[recoverable-cart][checkout] validate before Stripe response:", validationResponse)
       }
@@ -351,7 +476,7 @@ function CheckoutPage() {
         return
       }
 
-      const orderResponse = await createCheckoutOrder(buildCheckoutPayload(selectedAddress, documentNotes))
+      const orderResponse = await createCheckoutOrder(checkoutPayload)
       const order = orderResponse?.data
 
       if (!order?.id) {
@@ -372,9 +497,14 @@ function CheckoutPage() {
       window.location.assign(stripeUrl)
     } catch (error) {
       console.error("Error al iniciar pago con Stripe:", error?.response?.data || error)
-      notifyError(
-        error?.response?.data?.message || "No fue posible iniciar el pago con Stripe."
-      )
+      const message = error?.response?.data?.message || "No fue posible iniciar el pago con Stripe."
+
+      if (error?.response?.status === 422) {
+        notifyWarning(message)
+        return
+      }
+
+      notifyError(message)
     } finally {
       setProcessingPayment(false)
     }
@@ -411,11 +541,32 @@ function CheckoutPage() {
   function handleAddressFormChange(event) {
     const { name, value, type, checked } = event.target
     const nextValue =
-      name === "delivery_note" ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH) : value
+      name === "delivery_note"
+        ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH)
+        : name === "phone"
+          ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
+          : name === "zip_code"
+            ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
+            : value
 
     setAddressForm((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : nextValue,
+    }))
+  }
+
+  function handleGuestFormChange(event) {
+    const { name, value } = event.target
+    const nextValue =
+      name === "phone"
+        ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
+        : name === "zip_code"
+          ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
+          : value
+
+    setGuestForm((prev) => ({
+      ...prev,
+      [name]: nextValue,
     }))
   }
 
@@ -424,6 +575,8 @@ function CheckoutPage() {
   }
 
   async function fetchAddresses() {
+    if (isGuestCheckout) return
+
     try {
       setAddressesLoading(true)
       const shippingAddresses = normalizeShippingAddresses(checkout.shipping)
@@ -448,6 +601,8 @@ function CheckoutPage() {
   }
 
   function handleOpenAddressPanel() {
+    if (isGuestCheckout) return
+
     setAddressPanelOpen(true)
     fetchAddresses()
   }
@@ -469,6 +624,13 @@ function CheckoutPage() {
 
     if (!addressForm.alias.trim() || !addressForm.street.trim() || !addressForm.zip_code.trim()) {
       notifyWarning("Completa alias, calle y código postal.")
+      return
+    }
+
+    const validationMessage = validateAddressForm(addressForm)
+
+    if (validationMessage) {
+      notifyWarning(validationMessage)
       return
     }
 
@@ -559,6 +721,8 @@ function CheckoutPage() {
           )}
         </header>
 
+        {hasItems ? <CheckoutFreeShippingProgress shipping={checkout.shipping} /> : null}
+
         {!hasItems ? (
           <div className="checkout_empty_state">
             <h3>Tu carrito está vacío</h3>
@@ -592,7 +756,14 @@ function CheckoutPage() {
                         <button
                           type="button"
                           className="checkout_address_clear"
-                          onClick={() => setSelectedAddressId(null)}
+                          onClick={() => {
+                            if (isGuestCheckout) {
+                              setGuestForm(emptyGuestCheckoutForm)
+                              return
+                            }
+
+                            setSelectedAddressId(null)
+                          }}
                           aria-label="Quitar dirección seleccionada"
                         >
                           <i className="bi bi-x-lg" aria-hidden="true" />
@@ -610,12 +781,23 @@ function CheckoutPage() {
                   ) : (
                     <>
                       <strong>Dirección pendiente</strong>
-                      <small>Selecciona o agrega una dirección de envío para poder continuar.</small>
+                      <small>
+                        {isGuestCheckout
+                          ? "Completa tus datos de invitado para poder continuar."
+                          : "Selecciona o agrega una dirección de envío para poder continuar."}
+                      </small>
                     </>
                   )}
                 </div>
 
               </div>
+
+              {isGuestCheckout ? (
+                <GuestCheckoutForm
+                  form={guestForm}
+                  onChange={handleGuestFormChange}
+                />
+              ) : null}
 
               {actionableBlockers.length > 0 ? (
                 <div className="checkout_blockers">
@@ -843,9 +1025,18 @@ function CheckoutPage() {
                 acceptedTerms={acceptedTerms}
                 onAcceptedTermsChange={setAcceptedTerms}
                 loyalty={checkout.loyalty}
+                accountCashback={accountCashback}
+                cashbackAmount={cashbackAmount}
+                cashbackLoading={cashbackLoading}
+                onCashbackAmountChange={setCashbackAmount}
+                onApplyCashback={handleApplyCashback}
+                onClearCashback={handleClearCashback}
                 coupon={checkout.coupon || totals.coupon}
                 insufficientStockBlockers={insufficientStockBlockers}
                 invalidStockItems={invalidStockItems}
+                hasStripePaymentMethod={hasStripePaymentMethod}
+                paymentMethodsLoading={paymentMethodsLoading}
+                shipping={checkout.shipping}
               />
             </aside>
           </div>
@@ -859,14 +1050,22 @@ function CheckoutPage() {
             <strong className="mobile_bar_total">{formatMoney(totals.amount_due)}</strong>
           </div>
 
-          <button
-            type="button"
-            className="btn btn_primary mobile_pay_btn"
-            onClick={handleStartStripeCheckout}
-            disabled={processingPayment || !canPay}
-          >
-            {processingPayment ? "Redirigiendo..." : "Pagar con Stripe"}
-          </button>
+          {paymentMethodsLoading ? (
+            <p className="checkout_muted">Cargando métodos de pago...</p>
+          ) : hasStripePaymentMethod ? (
+            <button
+              type="button"
+              className="btn btn_primary mobile_pay_btn"
+              onClick={handleStartStripeCheckout}
+              disabled={processingPayment || !canPay}
+            >
+              {processingPayment ? "Redirigiendo..." : "Pagar con tarjeta"}
+            </button>
+          ) : (
+            <p className="checkout_muted checkout_muted--warning">
+              No hay métodos de pago disponibles.
+            </p>
+          )}
 
           <label className="checkout_terms checkout_terms--mobile">
             <input
@@ -957,7 +1156,15 @@ function CheckoutPage() {
               </label>
               <label>
                 Teléfono
-                <input name="phone" value={addressForm.phone} onChange={handleAddressFormChange} placeholder="33 0000 0000" />
+                <input
+                  name="phone"
+                  value={addressForm.phone}
+                  onChange={handleAddressFormChange}
+                  placeholder="5555555555"
+                  inputMode="numeric"
+                  maxLength={ADDRESS_PHONE_LENGTH}
+                  pattern="\d{10}"
+                />
               </label>
               <label>
                 Calle y número
@@ -977,7 +1184,15 @@ function CheckoutPage() {
               </label>
               <label>
                 Código postal
-                <input name="zip_code" value={addressForm.zip_code} onChange={handleAddressFormChange} placeholder="00000" />
+                <input
+                  name="zip_code"
+                  value={addressForm.zip_code}
+                  onChange={handleAddressFormChange}
+                  placeholder="00000"
+                  inputMode="numeric"
+                  maxLength={ADDRESS_ZIP_CODE_LENGTH}
+                  pattern="\d{5}"
+                />
               </label>
               <label className="checkout_address_form_full">
                 Instrucciones de entrega
@@ -1010,6 +1225,66 @@ function CheckoutPage() {
   )
 }
 
+function GuestCheckoutForm({ form, onChange }) {
+  return (
+    <section className="checkout_invoice_card">
+      <div className="checkout_invoice_card_head">
+        <div>
+          <h2>Datos de invitado</h2>
+          <p>Usaremos esta información para envío, pago y notificaciones del pedido.</p>
+        </div>
+      </div>
+
+      <div className="checkout_address_form">
+        <label>
+          <span>Nombre completo</span>
+          <input name="name" value={form.name} onChange={onChange} placeholder="Cliente Invitado" />
+        </label>
+        <label>
+          <span>Correo</span>
+          <input name="email" type="email" value={form.email} onChange={onChange} placeholder="cliente@correo.com" />
+        </label>
+        <label>
+          <span>Teléfono</span>
+          <input name="phone" value={form.phone} onChange={onChange} placeholder="9611234567" inputMode="numeric" maxLength={10} />
+        </label>
+        <label>
+          <span>Calle</span>
+          <input name="street" value={form.street} onChange={onChange} placeholder="Av. Central" />
+        </label>
+        <label>
+          <span>Número exterior</span>
+          <input name="external_number" value={form.external_number} onChange={onChange} placeholder="123" />
+        </label>
+        <label>
+          <span>Número interior</span>
+          <input name="internal_number" value={form.internal_number} onChange={onChange} placeholder="2B" />
+        </label>
+        <label>
+          <span>Colonia</span>
+          <input name="neighborhood" value={form.neighborhood} onChange={onChange} placeholder="Centro" />
+        </label>
+        <label>
+          <span>Código postal</span>
+          <input name="zip_code" value={form.zip_code} onChange={onChange} placeholder="29000" inputMode="numeric" maxLength={5} />
+        </label>
+        <label>
+          <span>Ciudad</span>
+          <input name="city" value={form.city} onChange={onChange} placeholder="Tuxtla" />
+        </label>
+        <label>
+          <span>Estado</span>
+          <input name="state" value={form.state} onChange={onChange} placeholder="Chiapas" />
+        </label>
+        <label className="checkout_address_form_full">
+          <span>Referencias</span>
+          <textarea name="references" value={form.references} onChange={onChange} placeholder="Casa azul" rows="3" />
+        </label>
+      </div>
+    </section>
+  )
+}
+
 function InvoiceSummary({
   totals,
   canCheckout,
@@ -1022,10 +1297,21 @@ function InvoiceSummary({
   acceptedTerms,
   onAcceptedTermsChange,
   loyalty,
+  accountCashback,
+  cashbackAmount,
+  cashbackLoading,
+  onCashbackAmountChange,
+  onApplyCashback,
+  onClearCashback,
   coupon,
   insufficientStockBlockers = [],
   invalidStockItems = [],
+  hasStripePaymentMethod,
+  paymentMethodsLoading,
+  shipping,
 }) {
+  const shippingLabel = shipping?.method?.label || "Envío"
+
   return (
     <div className="summary_card">
       <h2 className="summary_title">Totales</h2>
@@ -1050,14 +1336,23 @@ function InvoiceSummary({
           </div>
         ) : null}
 
-        <div className="summary_row">
-          <span>Regalos facturados</span>
-          <span>{formatMoney(totals.gift_accounting_total)}</span>
-        </div>
+        {Number(totals.gift_accounting_total || 0) > 0 ? (
+          <div className="summary_row">
+            <span>Regalos facturados</span>
+            <span>{formatMoney(totals.gift_accounting_total)}</span>
+          </div>
+        ) : null}
+
+        {Number(totals.tax || 0) > 0 ? (
+          <div className="summary_row">
+            <span>Impuestos</span>
+            <span>{formatMoney(totals.tax)}</span>
+          </div>
+        ) : null}
 
         <div className="summary_row">
-          <span>Impuestos</span>
-          <span>{formatMoney(totals.tax)}</span>
+          <span>{shippingLabel}</span>
+          <span>{Number(totals.shipping || 0) > 0 ? formatMoney(totals.shipping) : "Gratis"}</span>
         </div>
 
       </div>
@@ -1072,7 +1367,15 @@ function InvoiceSummary({
         <strong>{formatMoney(totals.amount_due)}</strong>
       </div>
 
-      <CheckoutLoyaltySummary loyalty={loyalty} />
+      <CheckoutLoyaltySummary
+        loyalty={loyalty}
+        accountCashback={accountCashback}
+        cashbackAmount={cashbackAmount}
+        cashbackLoading={cashbackLoading}
+        onCashbackAmountChange={onCashbackAmountChange}
+        onApplyCashback={onApplyCashback}
+        onClearCashback={onClearCashback}
+      />
 
       {hasPendingGiftSelection ? (
         <p className="checkout_muted">
@@ -1109,14 +1412,22 @@ function InvoiceSummary({
           </button>
         ) : null}
 
-        <button
-          type="button"
-          className="btn btn_primary"
-          onClick={onPay}
-          disabled={processingPayment || !canCheckout || !acceptedTerms}
-        >
-          {processingPayment ? "Validando checkout..." : "Pagar con Stripe"}
-        </button>
+        {paymentMethodsLoading ? (
+          <p className="checkout_muted">Cargando métodos de pago...</p>
+        ) : hasStripePaymentMethod ? (
+          <button
+            type="button"
+            className="btn btn_primary"
+            onClick={onPay}
+            disabled={processingPayment || !canCheckout || !acceptedTerms}
+          >
+            {processingPayment ? "Validando checkout..." : "Pagar con tarjeta"}
+          </button>
+        ) : (
+          <p className="checkout_muted checkout_muted--warning">
+            No hay métodos de pago disponibles para esta tienda.
+          </p>
+        )}
 
         <button
           type="button"
@@ -1134,16 +1445,76 @@ function InvoiceSummary({
   )
 }
 
-function CheckoutLoyaltySummary({ loyalty }) {
-  if (!loyalty) return null
+function CheckoutFreeShippingProgress({ shipping }) {
+  const normalizedShipping = normalizeCheckoutShipping(shipping)
+  if (!normalizedShipping?.enabled || !normalizedShipping.free_shipping_minimum_enabled) return null
 
-  const firstPurchase = loyalty.firstPurchaseDiscount
-  const cashback = loyalty.cashback
+  const minimum = Number(normalizedShipping.free_shipping_minimum || 0)
+  if (minimum <= 0) return null
+
+  const remaining = Math.max(Number(normalizedShipping.remaining_for_free_shipping || 0), 0)
+  const qualifyingAmount = Math.max(Number(normalizedShipping.qualifying_amount || 0), 0)
+  const progress = Math.max(0, Math.min(100, (qualifyingAmount / minimum) * 100))
+  const isFree = remaining <= 0 || toBoolean(normalizedShipping.is_free)
+
+  return (
+    <div className={`checkout_shipping_progress ${isFree ? "is-complete" : ""}`}>
+      <div className="checkout_shipping_progress_head">
+        <strong>{isFree ? "Alcanzaste el mínimo para envío gratis" : `Te falta ${formatMoney(remaining)} para envío gratis`}</strong>
+        <span>{formatMoney(qualifyingAmount)} / {formatMoney(minimum)}</span>
+      </div>
+      <div className="checkout_shipping_progress_track">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p>
+        {isFree
+          ? "El costo de envío ya está bonificado en este pedido."
+          : "El mínimo se calcula con subtotal menos descuentos, antes de sumar envío."}
+      </p>
+    </div>
+  )
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+  }
+
+  return false
+}
+
+function CheckoutLoyaltySummary({
+  loyalty,
+  accountCashback,
+  cashbackAmount,
+  cashbackLoading,
+  onCashbackAmountChange,
+  onApplyCashback,
+  onClearCashback,
+}) {
+  const firstPurchase = loyalty?.firstPurchaseDiscount ?? {}
+  const cartCashback = loyalty?.cashback ?? {}
+  const accountSettings = accountCashback?.settings
+  const accountBalance = accountCashback?.balance
+  const cashback = {
+    ...cartCashback,
+    availableBalance: Number(accountBalance?.available ?? cartCashback?.availableBalance ?? 0),
+  }
+  const maxRedeemable = Number(cartCashback?.maxRedeemable ?? 0)
+  const appliedAmount = Number(cartCashback?.appliedAmount ?? 0)
   const hasFirstPurchase = firstPurchase?.eligible && firstPurchase?.amount > 0
-  const hasCashbackApplied = cashback?.appliedAmount > 0
-  const hasCashbackEarn = cashback?.earn?.amount > 0
+  const hasCashbackApplied = appliedAmount > 0
+  const hasCashbackEarn = cartCashback?.earn?.amount > 0
+  const canShowCashback =
+    accountSettings?.cashbackEnabled === true &&
+    accountSettings?.redeemEnabled === true &&
+    cashback.availableBalance > 0 &&
+    maxRedeemable > 0
+  const cashbackInputMax = Math.min(cashback.availableBalance, maxRedeemable)
 
-  if (!hasFirstPurchase && !hasCashbackApplied && !hasCashbackEarn) return null
+  if (!hasFirstPurchase && !hasCashbackApplied && !hasCashbackEarn && !canShowCashback) return null
 
   return (
     <div className="checkout_loyalty_summary">
@@ -1162,15 +1533,58 @@ function CheckoutLoyaltySummary({ loyalty }) {
       {hasCashbackApplied ? (
         <div>
           <span>Cashback usado</span>
-          <strong>-{formatMoney(cashback.appliedAmount)}</strong>
+          <strong>-{formatMoney(appliedAmount)}</strong>
         </div>
       ) : null}
 
       {hasCashbackEarn ? (
         <div>
-          <span>Cashback a ganar · {cashback.earn.percentage}%</span>
-          <strong>{formatMoney(cashback.earn.amount)}</strong>
+          <span>Cashback a ganar · {cartCashback.earn.percentage}%</span>
+          <strong>{formatMoney(cartCashback.earn.amount)}</strong>
         </div>
+      ) : null}
+
+      {canShowCashback || hasCashbackApplied ? (
+        <div>
+          <span>Cashback disponible</span>
+          <strong>{formatMoney(cashback.availableBalance)}</strong>
+        </div>
+      ) : null}
+
+      {canShowCashback || hasCashbackApplied ? (
+        <form className="checkout_cashback_form" onSubmit={onApplyCashback}>
+          {canShowCashback ? (
+            <input
+              type="number"
+              min="0"
+              max={cashbackInputMax}
+              step="0.01"
+              value={cashbackAmount}
+              onChange={(event) => {
+                const value = event.target.value
+                const numericValue = Number(value)
+                onCashbackAmountChange(
+                  numericValue > cashbackInputMax ? String(cashbackInputMax) : value
+                )
+              }}
+              placeholder={String(cashbackInputMax)}
+              aria-label="Monto de cashback a usar"
+              disabled={cashbackLoading}
+            />
+          ) : null}
+
+          {canShowCashback ? (
+            <button type="submit" className="btn btn_secondary" disabled={cashbackLoading}>
+              {cashbackLoading ? "Aplicando..." : "Aplicar"}
+            </button>
+          ) : null}
+
+          {hasCashbackApplied ? (
+            <button type="button" className="btn btn_ghost checkout_cashback_clear" onClick={onClearCashback} disabled={cashbackLoading}>
+              Quitar
+            </button>
+          ) : null}
+        </form>
       ) : null}
     </div>
   )
@@ -1220,6 +1634,49 @@ function normalizeCheckout(response) {
     },
     coupon: normalizeCheckoutCoupon(data.coupon ?? data.totals?.coupon),
     loyalty: normalizeCheckoutLoyalty(data.loyalty),
+    shipping: normalizeCheckoutShipping(data.shipping),
+  }
+}
+
+function normalizeCheckoutShipping(shipping) {
+  if (!shipping || typeof shipping !== "object") return shipping ?? null
+
+  const value = shipping.value || shipping
+  const method = value.method || {}
+  const freeShippingMinimumEnabled =
+    value.free_shipping_minimum_enabled ??
+    value.freeShippingMinimumEnabled ??
+    value.free_minimum_enabled ??
+    value.freeMinimumEnabled
+  const freeShippingMinimum =
+    value.free_shipping_minimum ??
+    value.freeShippingMinimum ??
+    value.free_minimum ??
+    value.freeMinimum
+  const qualifyingAmount =
+    value.qualifying_amount ??
+    value.qualifyingAmount ??
+    value.free_shipping_basis_amount ??
+    value.freeShippingBasisAmount
+  const remainingForFreeShipping =
+    value.remaining_for_free_shipping ??
+    value.remainingForFreeShipping ??
+    value.amount_remaining_for_free_shipping ??
+    value.amountRemainingForFreeShipping
+
+  return {
+    ...value,
+    enabled: toBoolean(value.enabled),
+    method: {
+      ...method,
+      label: method.label || value.label || "Envío",
+    },
+    amount: Number(value.amount ?? value.shipping_amount ?? value.shippingAmount ?? 0),
+    is_free: toBoolean(value.is_free ?? value.isFree),
+    free_shipping_minimum_enabled: toBoolean(freeShippingMinimumEnabled),
+    free_shipping_minimum: Number(freeShippingMinimum ?? 0),
+    qualifying_amount: Number(qualifyingAmount ?? 0),
+    remaining_for_free_shipping: Number(remainingForFreeShipping ?? 0),
   }
 }
 
@@ -1351,20 +1808,44 @@ function isCheckoutItemStockInvalid(item = {}) {
 
 function normalizeCheckoutLoyalty(loyalty) {
   if (!loyalty || typeof loyalty !== "object") return null
+  const firstPurchase = loyalty.first_purchase_discount ?? loyalty.firstPurchaseDiscount ?? {}
+  const cashback = loyalty.cashback ?? {}
+  const earn = cashback.earn ?? {}
 
   return {
     firstPurchaseDiscount: {
-      eligible: Boolean(loyalty.first_purchase_discount?.eligible),
-      percentage: Number(loyalty.first_purchase_discount?.percentage ?? 0),
-      amount: Number(loyalty.first_purchase_discount?.amount ?? 0),
+      eligible: toBoolean(firstPurchase.eligible),
+      percentage: Number(firstPurchase.percentage ?? 0),
+      amount: Number(firstPurchase.amount ?? 0),
     },
     cashback: {
-      availableBalance: Number(loyalty.cashback?.available_balance ?? 0),
-      appliedAmount: Number(loyalty.cashback?.applied_amount ?? 0),
+      availableBalance: Number(cashback.available_balance ?? cashback.availableBalance ?? 0),
+      maxRedeemable: Number(cashback.max_redeemable ?? cashback.maxRedeemable ?? 0),
+      appliedAmount: Number(cashback.applied_amount ?? cashback.appliedAmount ?? 0),
       earn: {
-        percentage: Number(loyalty.cashback?.earn?.percentage ?? 0),
-        amount: Number(loyalty.cashback?.earn?.amount ?? 0),
+        percentage: Number(earn.percentage ?? 0),
+        amount: Number(earn.amount ?? 0),
       },
+    },
+  }
+}
+
+function normalizeAccountCashback(payload) {
+  const data = payload?.data ?? payload ?? {}
+  const settings = data.settings && typeof data.settings === "object" ? data.settings : {}
+  const balance = data.balance && typeof data.balance === "object" ? data.balance : {}
+
+  return {
+    currency: String(data.currency || "MXN").toUpperCase(),
+    settings: {
+      cashbackEnabled: toBoolean(settings.cashback_enabled ?? settings.cashbackEnabled),
+      earnPercentage: Number(settings.cashback_earn_percentage ?? settings.cashbackEarnPercentage ?? 0),
+      redeemEnabled: toBoolean(settings.cashback_redeem_enabled ?? settings.cashbackRedeemEnabled),
+      maxRedeemPercentage: Number(settings.cashback_max_redeem_percentage ?? settings.cashbackMaxRedeemPercentage ?? 0),
+    },
+    balance: {
+      available: Number(balance.available ?? 0),
+      pending: Number(balance.pending ?? 0),
     },
   }
 }
@@ -1485,6 +1966,37 @@ function buildAddressPayload(form, checkout) {
   }
 }
 
+function onlyDigits(value, maxLength) {
+  return String(value || "").replace(/\D/g, "").slice(0, maxLength)
+}
+
+function validateAddressForm(form) {
+  if (!/^\d{10}$/.test(form.phone)) {
+    return "El teléfono debe tener 10 dígitos numéricos."
+  }
+
+  if (!/^\d{5}$/.test(form.zip_code)) {
+    return "El código postal debe tener 5 dígitos numéricos."
+  }
+
+  return ""
+}
+
+function normalizePaymentMethods(response) {
+  const value = response?.data?.value || response?.data?.data?.value || response?.value || {}
+
+  return {
+    default_method: value.default_method || null,
+    methods: Array.isArray(value.methods) ? value.methods : [],
+  }
+}
+
+function getActivePaymentMethod(paymentMethods, key) {
+  return paymentMethods?.methods?.find((method) => {
+    return method.key === key && method.active !== false
+  }) || null
+}
+
 function buildCheckoutAddressSelection(address) {
   if (!address?.id) return {}
 
@@ -1500,6 +2012,63 @@ function buildCheckoutPayload(address, documentNotes = "") {
     ...buildCheckoutAddressSelection(address),
     ...(notes ? { document_notes: notes } : {}),
   }
+}
+
+function buildGuestCheckoutPayload(form, documentNotes = "") {
+  const notes = String(documentNotes || "").trim().slice(0, DOCUMENT_NOTE_MAX_LENGTH)
+  const address = buildGuestShippingAddress(form)
+
+  return {
+    guest: {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      shipping_address: address,
+    },
+    ...(notes ? { document_notes: notes } : {}),
+  }
+}
+
+function buildGuestAddress(form) {
+  return {
+    id: "guest",
+    alias: "Dirección de invitado",
+    contact_name: form.name.trim(),
+    phone: form.phone.trim(),
+    ...buildGuestShippingAddress(form),
+    address_line_2: [form.external_number, form.internal_number ? `Int. ${form.internal_number}` : ""]
+      .filter(Boolean)
+      .join(" "),
+  }
+}
+
+function buildGuestShippingAddress(form) {
+  return {
+    contact_name: form.name.trim(),
+    phone: form.phone.trim(),
+    street: form.street.trim(),
+    external_number: form.external_number.trim(),
+    internal_number: form.internal_number.trim(),
+    neighborhood: form.neighborhood.trim(),
+    zip_code: form.zip_code.trim(),
+    city: form.city.trim(),
+    state: form.state.trim(),
+    references: form.references.trim(),
+  }
+}
+
+function isGuestCheckoutFormValid(form) {
+  return Boolean(
+    form.name.trim() &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) &&
+      /^\d{10}$/.test(form.phone) &&
+      form.street.trim() &&
+      form.external_number.trim() &&
+      form.neighborhood.trim() &&
+      /^\d{5}$/.test(form.zip_code) &&
+      form.city.trim() &&
+      form.state.trim()
+  )
 }
 
 function getBlockerMessage(blockers = []) {
@@ -1818,6 +2387,14 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress, settings = {}) {
   const couponSummaryRow = coupon?.code
     ? `<div><span>Cupón ${escapeHtml(coupon.code)}</span><strong>${escapeHtml(formatMoney(coupon.discount_amount))}</strong></div>`
     : ""
+  const giftAccountingSummaryRow =
+    Number(totals.gift_accounting_total || 0) > 0
+      ? `<div><span>Regalos facturados</span><strong>${escapeHtml(formatMoney(totals.gift_accounting_total))}</strong></div>`
+      : ""
+  const taxSummaryRow =
+    Number(totals.tax || 0) > 0
+      ? `<div><span>Impuestos</span><strong>${escapeHtml(formatMoney(totals.tax))}</strong></div>`
+      : ""
 
   return `
     <!doctype html>
@@ -1860,7 +2437,7 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress, settings = {}) {
       <body>
         <header class="head">
           <div class="brand">
-            <img src="${escapeHtml(printableLogoUrl)}" alt="${escapeHtml(brandName)}" />
+            <img loading="lazy" src="${escapeHtml(printableLogoUrl)}" alt="${escapeHtml(brandName)}" />
             <div>
               <strong>${escapeHtml(brandName)}</strong>
               <span>Previa de pedido para validación</span>
@@ -1916,8 +2493,8 @@ function buildPreviewPdfHtml(checkout, totals, selectedAddress, settings = {}) {
             <div><span>Subtotal</span><strong>${escapeHtml(formatMoney(totals.subtotal))}</strong></div>
             ${discountSummaryRow}
             ${couponSummaryRow}
-            <div><span>Regalos facturados</span><strong>${escapeHtml(formatMoney(totals.gift_accounting_total))}</strong></div>
-            <div><span>Impuestos</span><strong>${escapeHtml(formatMoney(totals.tax))}</strong></div>
+            ${giftAccountingSummaryRow}
+            ${taxSummaryRow}
             <div class="due"><span>Importe a pagar</span><strong>${escapeHtml(formatMoney(totals.amount_due))}</strong></div>
           </aside>
         </section>

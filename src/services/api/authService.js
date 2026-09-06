@@ -1,7 +1,13 @@
 import api from "./api"
 
 function throwResponseData(error) {
-  throw error?.response?.data || error
+  const payload = error?.response?.data || error
+
+  if (payload && typeof payload === "object" && error?.response?.status) {
+    payload.status = payload.status || error.response.status
+  }
+
+  throw payload
 }
 
 export async function loginRequest(payload) {

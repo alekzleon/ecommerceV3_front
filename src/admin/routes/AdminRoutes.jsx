@@ -1,26 +1,33 @@
+import { lazy, Suspense } from "react"
 import { Route, Routes, Navigate } from "react-router-dom"
 import ProtectedAdminRoute, { ProtectedAdminModule } from "./ProtectedAdminRoute"
+import { can } from "../../utils/adminAccess"
 import AdminLayout from "../components/AdminLayout/AdminLayout"
-import DashboardPage from "../pages/DashboardPage/DashboardPage"
-import SalesChannelsPage from "../pages/SalesChannelsPage/SalesChannelsPage"
-import UsersPage from "../pages/UsersPage/UsersPage"
-import RolesPage from "../pages/RolesPage/RolesPage"
-import CustomerPage from "../pages/CustomersPage/CustomersPage"
-import ProductsPage from "../pages/ProductsPage/ProductsPage"
-import CategoriesPage from "../pages/CategoriesPage/CategoriesPage"
-import FamiliesPage from "../pages/FamiliesPage/FamiliesPage"
-import MarketingPage from "../pages/MarketingPage/MarketingPage"
-import PromotionsPage from "../pages/PromotionsPage/PromotionsPage"
-import GiftItemsPage from "../pages/PromotionsPage/GiftItemsPage"
-import CouponsPage from "../pages/CouponsPage/CouponsPage"
-import OrdersPage from "../pages/OrdersPage/OrdersPage"
-import AdminForbiddenPage from "../pages/AdminForbiddenPage/AdminForbiddenPage"
-import LogsPage from "../pages/LogsPage/LogsPage"
-import SettingsPage from "../pages/SettingsPage/SettingsPage"
-import DesignEcommercePage from "../pages/DesignEcommercePage/DesignEcommercePage"
-import CreditPage from "../pages/CreditPage/CreditPage"
-import CollectionsPage from "../pages/CollectionsPage/CollectionsPage"
-import SyncPage from "../pages/SyncPage/SyncPage"
+
+const DashboardPage = lazy(() => import("../pages/DashboardPage/DashboardPage"))
+const SalesChannelsPage = lazy(() => import("../pages/SalesChannelsPage/SalesChannelsPage"))
+const UsersPage = lazy(() => import("../pages/UsersPage/UsersPage"))
+const RolesPage = lazy(() => import("../pages/RolesPage/RolesPage"))
+const CustomerPage = lazy(() => import("../pages/CustomersPage/CustomersPage"))
+const ProductsPage = lazy(() => import("../pages/ProductsPage/ProductsPage"))
+const CategoriesPage = lazy(() => import("../pages/CategoriesPage/CategoriesPage"))
+const FamiliesPage = lazy(() => import("../pages/FamiliesPage/FamiliesPage"))
+const MarketingPage = lazy(() => import("../pages/MarketingPage/MarketingPage"))
+const PromotionsPage = lazy(() => import("../pages/PromotionsPage/PromotionsPage"))
+const GiftItemsPage = lazy(() => import("../pages/PromotionsPage/GiftItemsPage"))
+const CouponsPage = lazy(() => import("../pages/CouponsPage/CouponsPage"))
+const OrdersPage = lazy(() => import("../pages/OrdersPage/OrdersPage"))
+const AbandonedCartsPage = lazy(() => import("../pages/AbandonedCartsPage/AbandonedCartsPage"))
+const AdminForbiddenPage = lazy(() => import("../pages/AdminForbiddenPage/AdminForbiddenPage"))
+const LogsPage = lazy(() => import("../pages/LogsPage/LogsPage"))
+const SettingsPage = lazy(() => import("../pages/SettingsPage/SettingsPage"))
+const DesignEcommercePage = lazy(() => import("../pages/DesignEcommercePage/DesignEcommercePage"))
+const SubscriptionPage = lazy(() => import("../pages/SubscriptionPage/SubscriptionPage"))
+const PaymentsPage = lazy(() => import("../pages/PaymentsPage/PaymentsPage"))
+const CustomDomainsPage = lazy(() => import("../pages/CustomDomainsPage/CustomDomainsPage"))
+const CreditPage = lazy(() => import("../pages/CreditPage/CreditPage"))
+const CollectionsPage = lazy(() => import("../pages/CollectionsPage/CollectionsPage"))
+const SyncPage = lazy(() => import("../pages/SyncPage/SyncPage"))
 
 function AdminRoutes({
   sessionReady,
@@ -50,7 +57,7 @@ function AdminRoutes({
             />
           }
         >
-          <Route path="/" element={withModule(currentUser, "dashboard", <DashboardPage />)} />
+          <Route path="/" element={can(currentUser, "dashboard") ? lazyElement(<DashboardPage />) : <Navigate to="/admin/subscription" replace />} />
           <Route path="/sales-channels" element={withModule(currentUser, "canales_venta", <SalesChannelsPage />)} />
           <Route path="/users" element={withModule(currentUser, "usuarios", <UsersPage />)} />
           <Route path="/roles" element={withModule(currentUser, "roles", <RolesPage />)} />
@@ -61,22 +68,27 @@ function AdminRoutes({
           />
           <Route path="/catalog/categories" element={withModule(currentUser, "categorias", <CategoriesPage />)} />
           <Route path="/catalog/families" element={withModule(currentUser, "familias", <FamiliesPage />)} />
-          <Route path="/orders" element={withModule(currentUser, ["pedidos", "carritos"], <OrdersPage />)} />
+          <Route path="/orders" element={withModule(currentUser, "pedidos", <OrdersPage />)} />
+          <Route path="/carts" element={withModule(currentUser, "carritos", <AbandonedCartsPage />)} />
           <Route path="/credit" element={withModule(currentUser, "credito", <CreditPage />)} />
           <Route path="/collections" element={withModule(currentUser, "cobranza", <CollectionsPage />)} />
           <Route path="/marketing" element={withModule(currentUser, ["marketing", "banners"], <MarketingPage />)} />
-          <Route path="/banners" element={withModule(currentUser, "banners", <MarketingPage />)} />
+          <Route path="/banners" element={<Navigate to="/admin/marketing" replace />} />
           <Route path="/promotions" element={withModule(currentUser, "promociones", <PromotionsPage />)} />
           <Route path="/promotions/gift-items" element={withModule(currentUser, "promociones", <GiftItemsPage />)} />
           <Route path="/coupons" element={withModule(currentUser, "cupones", <CouponsPage />)} />
           <Route path="/logs" element={withModule(currentUser, "logs", <LogsPage />)} />
           <Route path="/sync" element={withModule(currentUser, "sincronizacion", <SyncPage />)} />
           <Route path="/settings" element={withModule(currentUser, "configuracion_ecommerce", <SettingsPage />)} />
+          <Route path="/payments" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
+          <Route path="/payments/stripe/return" element={withModule(currentUser, "configuracion_ecommerce", <PaymentsPage />)} />
+          <Route path="/domains" element={withModule(currentUser, "configuracion_ecommerce", <CustomDomainsPage />)} />
           <Route
             path="/design"
             element={withModule(currentUser, "configuracion_ecommerce", <DesignEcommercePage />)}
           />
-          <Route path="/forbidden" element={<AdminForbiddenPage />} />
+          <Route path="/subscription" element={lazyElement(<SubscriptionPage />)} />
+          <Route path="/forbidden" element={lazyElement(<AdminForbiddenPage />)} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </Route>
       </Route>
@@ -87,9 +99,13 @@ function AdminRoutes({
 function withModule(user, module, element) {
   return (
     <ProtectedAdminModule user={user} module={module}>
-      {element}
+      <Suspense fallback={null}>{element}</Suspense>
     </ProtectedAdminModule>
   )
+}
+
+function lazyElement(element) {
+  return <Suspense fallback={null}>{element}</Suspense>
 }
 
 export default AdminRoutes

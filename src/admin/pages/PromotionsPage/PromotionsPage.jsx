@@ -1021,7 +1021,7 @@ function PromotionsPage() {
                         <div className="promotion-main-cell">
                           <span className={`promotion-image-thumb ${promotion.image_url ? "" : "is-empty"}`}>
                             {promotion.image_url ? (
-                              <img src={normalizeMediaUrl(promotion.image_url || promotion.image_path)} alt={promotion.name} />
+                              <img loading="lazy" src={normalizeMediaUrl(promotion.image_url || promotion.image_path)} alt={promotion.name} />
                             ) : (
                               <i className="bi bi-image" aria-hidden="true" />
                             )}
@@ -1223,7 +1223,7 @@ function PromotionsPage() {
                         />
                         <span className="promotion-image-upload__preview">
                           {imagePreview || form.image_url ? (
-                            <img src={imagePreview || form.image_url} alt={form.name || "Promoción"} />
+                            <img loading="lazy" src={imagePreview || form.image_url} alt={form.name || "Promoción"} />
                           ) : (
                             <i className="bi bi-image" aria-hidden="true" />
                           )}

@@ -151,6 +151,8 @@ function ProductDetailPage() {
   const comparePrice = Number(product?.oldPrice ?? 0)
   const selectedVariantStock = selectedVariant?.stock
   const selectedVariantHasTrackedStock = selectedVariantStock !== null && selectedVariantStock !== undefined && selectedVariantStock !== ""
+  const displayStock = selectedVariantHasTrackedStock ? selectedVariantStock : product?.stock
+  const hasDisplayStock = displayStock !== null && displayStock !== undefined && displayStock !== ""
   const canShowPrices = sessionReady && isAuthenticated
   const hasAvailablePrice =
     displayPrice > 0 && product?.priceInfo?.source !== PRICE_UNAVAILABLE_SOURCE
@@ -205,19 +207,21 @@ function ProductDetailPage() {
     }
   }, [product])
 
-  const hasNoStockValue = product?.stock === null || product?.stock === undefined || product?.stock === ""
-  const isOutOfStock = product?.stockStatus === "out_of_stock" || hasNoStockValue || Number(product?.stock) <= 0
-  const effectiveStockStatus = isOutOfStock ? "out_of_stock" : product?.stockStatus
+  const stockLimit = hasDisplayStock ? Number(displayStock) : 0
+  const hasNoStockValue = !hasDisplayStock
+  const isOutOfStock = product?.stockStatus === "out_of_stock" || hasNoStockValue || stockLimit <= 0
+  const effectiveStockStatus =
+    hasDisplayStock && Number(displayStock) <= 0 ? "out_of_stock" : isOutOfStock ? "out_of_stock" : product?.stockStatus
   const isSelectedVariantOutOfStock =
     !hasVariantAttributes &&
     Boolean(selectedVariant) &&
     (!selectedVariantHasTrackedStock || Number(selectedVariantStock) <= 0)
   const hasInvalidStockQuantity =
-    !isOutOfStock && Number(product?.stock) > 0 && quantity > Number(product.stock)
+    !isOutOfStock && stockLimit > 0 && quantity > stockLimit
   const increaseQty = () =>
     setQuantity((prev) => {
-      if (!isOutOfStock && Number(product?.stock) > 0) {
-        return Math.min(prev + 1, Number(product.stock))
+      if (!isOutOfStock && stockLimit > 0) {
+        return Math.min(prev + 1, stockLimit)
       }
 
       return prev + 1
@@ -241,11 +245,6 @@ function ProductDetailPage() {
   const handleAddToCart = async () => {
     if (!product?.id || addingToCart) return
 
-    if (!isAuthenticated) {
-      navigate("/login")
-      return
-    }
-
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")
       return
@@ -262,7 +261,7 @@ function ProductDetailPage() {
     }
 
     if (hasInvalidStockQuantity) {
-      notifyError(`Solo hay ${product.stock} pieza(s) disponibles.`)
+      notifyError(`Solo hay ${formatNumber(stockLimit)} pieza(s) disponibles.`)
       return
     }
 
@@ -501,9 +500,9 @@ function ProductDetailPage() {
               aria-label="Ver imagen completa"
             >
               {activeMedia?.type === "video" ? (
-                <video src={activeMedia.url} controls />
+                <video preload="none" src={activeMedia.url} controls />
               ) : (
-                <img src={activeMedia?.url || product.image} alt={product.name} />
+                <img loading="lazy" src={activeMedia?.url || product.image} alt={product.name} />
               )}
             </button>
 
@@ -517,9 +516,9 @@ function ProductDetailPage() {
                     onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
-                      <video src={media.url} muted />
+                      <video preload="none" src={media.url} muted />
                     ) : (
-                      <img src={media.url} alt={`${product.name} ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} ${index + 1}`} />
                     )}
                   </button>
                 ))}
@@ -555,6 +554,12 @@ function ProductDetailPage() {
               )}
             </div>
 
+            <div className={`product-detail__stock product-detail__stock--${effectiveStockStatus}`}>
+              {hasDisplayStock && Number(displayStock) > 0
+                ? `Disponibilidad: ${formatNumber(displayStock)} pieza(s)`
+                : product.stockMessage || "Producto sin inventario"}
+            </div>
+
             {product.variantOptions.length ? (
               <div className="editorial-product-show__variants">
                 {product.variantOptions.map((option) => {
@@ -582,7 +587,7 @@ function ProductDetailPage() {
                                 disabled={!isVariantValueAvailable(option.values, value.id)}
                                 aria-label={`${option.attribute.name}: ${value.value}`}
                               >
-                                {imageUrl ? <img src={imageUrl} alt="" /> : <span />}
+                                {imageUrl ? <img loading="lazy" src={imageUrl} alt="" /> : <span />}
                               </button>
                             )
                           })}
@@ -704,9 +709,9 @@ function ProductDetailPage() {
               </button>
               <div className="product-lightbox__image-wrap">
                 {product.mediaItems[lightboxIndex]?.type === "video" ? (
-                  <video src={product.mediaItems[lightboxIndex].url} controls className="product-lightbox__image" />
+                  <video preload="none" src={product.mediaItems[lightboxIndex].url} controls className="product-lightbox__image" />
                 ) : (
-                  <img
+                  <img loading="lazy"
                     src={product.mediaItems[lightboxIndex]?.url}
                     alt={`${product.name} vista ${lightboxIndex + 1}`}
                     className="product-lightbox__image"
@@ -749,11 +754,11 @@ function ProductDetailPage() {
                   >
                     {media.type === "video" ? (
                       <>
-                        <video src={media.url} muted />
+                        <video preload="none" src={media.url} muted />
                         <span className="product-detail__thumb-play">▶</span>
                       </>
                     ) : (
-                      <img src={media.url} alt={`${product.name} ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} ${index + 1}`} />
                     )}
                   </button>
                 ))}
@@ -771,9 +776,9 @@ function ProductDetailPage() {
                 }
               >
                 {activeMedia?.type === "video" ? (
-                  <video src={activeMedia.url} controls />
+                  <video preload="none" src={activeMedia.url} controls />
                 ) : (
-                  <img
+                  <img loading="lazy"
                     src={activeMedia?.url}
                     alt={product.name}
                     style={{
@@ -857,15 +862,17 @@ function ProductDetailPage() {
                   <span>{selectedVariant.name || selectedVariant.sku}</span>
                   <span>SKU: {selectedVariant.sku}</span>
                   {selectedVariantStock !== null && selectedVariantStock !== undefined ? (
-                    <span>{Number(selectedVariantStock) > 0 ? `${selectedVariantStock} disponibles` : "Sin stock"}</span>
+                    <span>{Number(selectedVariantStock) > 0 ? `Disponibilidad: ${formatNumber(selectedVariantStock)} pieza(s)` : "Sin inventario"}</span>
                   ) : null}
                 </div>
               ) : null}
               {effectiveStockStatus !== "untracked" ? (
                 <div className={`product-detail__stock product-detail__stock--${effectiveStockStatus}`}>
-                  {product.stockMessage || formatStockMessage(effectiveStockStatus)}
-                  {product.stock !== null && product.stock !== undefined && effectiveStockStatus !== "out_of_stock"
-                    ? ` Stock: ${product.stock}`
+                  {hasDisplayStock && Number(displayStock) > 0
+                    ? `Disponibilidad: ${formatNumber(displayStock)} pieza(s)`
+                    : product.stockMessage || formatStockMessage(effectiveStockStatus)}
+                  {!hasDisplayStock && product.stock !== null && product.stock !== undefined && effectiveStockStatus !== "out_of_stock"
+                    ? ` Disponibilidad: ${formatNumber(product.stock)} pieza(s)`
                     : ""}
                 </div>
               ) : null}
@@ -934,7 +941,7 @@ function ProductDetailPage() {
                                   aria-label={`${option.attribute.name}: ${value.value}`}
                                 >
                                   {imageUrl ? (
-                                    <img
+                                    <img loading="lazy"
                                       src={imageUrl}
                                       alt={value.value}
                                       onError={(event) => {
@@ -1189,13 +1196,13 @@ function ProductDetailPage() {
 
             <div className="product-lightbox__image-wrap">
               {product.mediaItems[lightboxIndex]?.type === "video" ? (
-                <video
+                <video preload="none"
                   src={product.mediaItems[lightboxIndex].url}
                   controls
                   className="product-lightbox__image"
                 />
               ) : (
-                <img
+                <img loading="lazy"
                   src={product.mediaItems[lightboxIndex]?.url}
                   alt={`${product.name} vista ${lightboxIndex + 1}`}
                   className="product-lightbox__image"
@@ -1215,9 +1222,9 @@ function ProductDetailPage() {
                     onClick={() => handleMediaSelect(index)}
                   >
                     {media.type === "video" ? (
-                      <video src={media.url} muted />
+                      <video preload="none" src={media.url} muted />
                     ) : (
-                      <img src={media.url} alt={`${product.name} miniatura ${index + 1}`} />
+                      <img loading="lazy" src={media.url} alt={`${product.name} miniatura ${index + 1}`} />
                     )}
                   </button>
                 ))}
@@ -1323,6 +1330,12 @@ function formatMoney(value) {
     currency: "MXN",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+  }).format(Number(value || 0))
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("es-MX", {
+    maximumFractionDigits: 0,
   }).format(Number(value || 0))
 }
 

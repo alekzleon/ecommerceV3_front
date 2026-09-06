@@ -1,0 +1,1 @@
+import{t as e}from"./api-DLYO2C0C.js";async function t(t={}){let{data:n}=await e.get(`/admin/dashboard`,{params:t});return n}async function n(t={}){let{data:n}=await e.get(`/admin/dashboard/sales-channels`,{params:t});return n}export{n,t};

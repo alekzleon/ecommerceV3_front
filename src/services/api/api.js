@@ -3,6 +3,18 @@ import { getAuthToken, clearAuthSession } from "../storage/authStorage"
 
 const API_BASE_URL  = `${import.meta.env.VITE_API_URL}/api/v1`
 
+function getTenantHost() {
+  if (typeof window === "undefined") return ""
+
+  return window.location.hostname
+}
+
+function getStoreOrigin() {
+  if (typeof window === "undefined") return ""
+
+  return window.location.origin
+}
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: false, 
@@ -21,6 +33,18 @@ api.interceptors.request.use(
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+
+    const tenantHost = getTenantHost()
+
+    if (tenantHost) {
+      config.headers["X-Tenant-Host"] = tenantHost
+    }
+
+    const storeOrigin = getStoreOrigin()
+
+    if (storeOrigin) {
+      config.headers["X-Store-Origin"] = storeOrigin
     }
 
     if (config.data instanceof FormData) {

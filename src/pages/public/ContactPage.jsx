@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import contactImage from "../../assets/images/contact-faq-delivery.png"
+import contactImage from "../../assets/images/contact-faq-delivery.webp"
 import InlineImageSettingEditor from "../../components/common/InlineImageSettingEditor/InlineImageSettingEditor"
 import InlineSettingEditor from "../../components/common/InlineSettingEditor/InlineSettingEditor"
 import { useAuth } from "../../context/AuthContext"
@@ -263,7 +263,7 @@ function ContactPage() {
               <div className="contact-photo__skeleton" aria-hidden="true" />
             ) : (
               <>
-                <img src={faqImageUrl} alt={brandName} />
+                <img loading="lazy" src={faqImageUrl} alt={brandName} />
                 <InlineImageSettingEditor
                   canEdit={canEditContactSettings}
                   uploadImage={updateAdminContactFaqImage}

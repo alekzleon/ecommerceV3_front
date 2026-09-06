@@ -394,7 +394,7 @@ function GiftItemsPage() {
               </label>
               {imagePreview ? (
                 <div className="gift-preview">
-                  <img src={imagePreview} alt="Vista previa del regalo" />
+                  <img loading="lazy" src={imagePreview} alt="Vista previa del regalo" />
                 </div>
               ) : null}
             </section>
@@ -438,7 +438,7 @@ function GiftImage({ item }) {
 
   return (
     <div className="gift-image">
-      <img src={image} alt={item.name} />
+      <img loading="lazy" src={image} alt={item.name} />
     </div>
   )
 }

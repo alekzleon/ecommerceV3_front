@@ -61,9 +61,9 @@ const adminMenuMap = [
   },
   {
     module: "carritos",
-    path: "/admin/orders",
-    title: "Pedidos",
-    subtitle: "Consulta pedidos y carritos del ecommerce.",
+    path: "/admin/carts",
+    title: "Carritos abandonados",
+    subtitle: "Consulta carritos del ecommerce.",
   },
   {
     module: "clientes",
@@ -91,9 +91,9 @@ const adminMenuMap = [
   },
   {
     module: "banners",
-    path: "/admin/banners",
-    title: "Banners",
-    subtitle: "Administra banners y espacios destacados.",
+    path: "/admin/marketing",
+    title: "Marketing",
+    subtitle: "Administra banners y espacios destacados desde marketing.",
   },
   {
     module: "cupones",
@@ -120,10 +120,22 @@ const adminMenuMap = [
     subtitle: "Ajustes generales del ecommerce.",
   },
   {
+    module: "pagos",
+    path: "/admin/payments",
+    title: "Pagos",
+    subtitle: "Configura los métodos de pago para tu ecommerce.",
+  },
+  {
     module: "disena_ecommerce",
     path: "/admin/design",
     title: "Diseña tu ecommerce",
     subtitle: "Plantilla, theme y vista previa del storefront.",
+  },
+  {
+    module: "suscripcion",
+    path: "/admin/subscription",
+    title: "Suscripción",
+    subtitle: "Plan actual, módulos incluidos y cambio de plan.",
   },
 ]
 

@@ -1,28 +1,21 @@
 import { useEffect, useState } from "react"
-import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import ProductListSkeleton from "../../components/product/ProductListSkeleton/ProductListSkeleton"
-import { addCartItem } from "../../services/api/cartService"
 import { getAllPromotions } from "../../services/api/promotionsService"
-import { useAuth } from "../../context/AuthContext"
 import { useSettings } from "../../context/SettingsContext"
-import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
-import { trackMetaAddToCart } from "../../utils/metaPixel"
+import { notifyError } from "../../utils/toast"
 import "./offerspage.css"
 
 const OFFERS_PER_PAGE = 24
 const PROMOTION_IMAGE_PLACEHOLDER = "https://monocromia.com.mx/cdn/shop/files/Monocromia-04_6366367b-3cd5-4942-89f0-62fac4475a07_2048x.jpg?v=1742501692"
-const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
 
 function OffersPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { isAuthenticated } = useAuth()
   const { settings } = useSettings()
   const page = Number(searchParams.get("page")) || 1
 
   const [offers, setOffers] = useState([])
   const [loading, setLoading] = useState(true)
-  const [addingOfferId, setAddingOfferId] = useState(null)
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
   const [meta, setMeta] = useState({
     current_page: 1,
@@ -75,70 +68,6 @@ function OffersPage() {
     setSearchParams(nextParams, { replace: true })
   }
 
-  const syncCartSummary = (payload) => {
-    const summary = {
-      id: payload?.id ?? null,
-      items_count: Number(payload?.items_count ?? 0),
-      subtotal: Number(payload?.subtotal ?? 0),
-      discount: Number(payload?.discount ?? 0),
-      tax: Number(payload?.tax ?? 0),
-      tax_breakdown: payload?.tax_breakdown ?? null,
-      total: Number(payload?.total ?? 0),
-    }
-
-    localStorage.setItem(CART_SUMMARY_STORAGE_KEY, JSON.stringify(summary))
-    window.dispatchEvent(new CustomEvent("cart:updated", { detail: summary }))
-  }
-
-  const handleAddOfferToCart = async (offer) => {
-    if (!offer?.id || addingOfferId === offer.id) return
-
-    if (!isAuthenticated) {
-      navigate("/login")
-      return
-    }
-
-    if (!offer.productId) {
-      notifyWarning("Elige un producto de esta promoción para agregarlo al carrito.")
-      navigate(getOfferUrl(offer))
-      return
-    }
-
-    if (isOfferOutOfStock(offer)) {
-      notifyError(offer.stockMessage || "Producto sin inventario.")
-      return
-    }
-
-    try {
-      setAddingOfferId(offer.id)
-      const response = await addCartItem({
-        product_id: offer.productId,
-        quantity: 1,
-      })
-      const cartSummary =
-        response?.data?.cart ||
-        response?.data?.summary ||
-        response?.cart ||
-        response?.summary ||
-        response?.data
-
-      if (cartSummary && typeof cartSummary === "object") {
-        syncCartSummary(cartSummary)
-      }
-
-      trackMetaAddToCart({
-        id: offer.productId,
-        name: offer.productName || offer.title,
-        price: offer.price || 0,
-      }, 1)
-      notifySuccess(response?.message || "Producto agregado al carrito correctamente.")
-    } catch (error) {
-      notifyError(error?.response?.data?.message || "No fue posible agregar el producto al carrito.")
-    } finally {
-      setAddingOfferId(null)
-    }
-  }
-
   const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
 
   return (
@@ -167,12 +96,12 @@ function OffersPage() {
             ) : (
               <div className="offers-page__grid">
                 {offers.map((offer) => {
-                  const isOutOfStock = isOfferOutOfStock(offer)
+                  const hasMultipleProducts = hasMultipleOfferProducts(offer)
 
                   return (
                   <article className="offers-page__card" key={offer.id}>
                     <div className="offers-page__card-media">
-                      <img src={offer.image} alt={offer.title} />
+                      <img loading="lazy" src={offer.image} alt={offer.title} />
                     </div>
 
                     <div className="offers-page__card-body">
@@ -187,21 +116,9 @@ function OffersPage() {
                         <strong>{offer.typeLabel}</strong>
                       </div>
                       <div className="offers-page__actions">
-                        <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
-                          Ver
+                        <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--primary">
+                          {hasMultipleProducts ? "Ver productos" : "Ver detalle"}
                         </Link>
-                        <button
-                          type="button"
-                          className="offers-page__action offers-page__action--primary"
-                          onClick={() => handleAddOfferToCart(offer)}
-                          disabled={addingOfferId === offer.id || isOutOfStock}
-                        >
-                          {addingOfferId === offer.id
-                            ? "Agregando..."
-                            : isOutOfStock
-                            ? "Producto sin inventario"
-                            : "Agregar al carrito"}
-                        </button>
                       </div>
                     </div>
                   </article>
@@ -264,6 +181,7 @@ function OffersPage() {
 function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange }) {
   const activeOffer = offers[activeIndex] || offers[0]
   const visibleOffers = getVisibleEditorialOffers(offers, activeIndex)
+  const hasMultipleProducts = hasMultipleOfferProducts(activeOffer)
 
   const goToPrevious = () => {
     onActiveIndexChange(activeIndex === 0 ? offers.length - 1 : activeIndex - 1)
@@ -295,7 +213,7 @@ function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange
             onClick={() => onActiveIndexChange(sourceIndex)}
             aria-label={`Ver promoción ${offer.title}`}
           >
-            <img src={offer.image} alt={offer.productName || offer.title} />
+            <img loading="lazy" src={offer.image} alt={offer.productName || offer.title} />
           </button>
         ))}
 
@@ -310,10 +228,12 @@ function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange
 
         <div className="editorial-offers-showcase__info">
           <span>{activeOffer.label}</span>
-          <h1>{activeOffer.productName || activeOffer.title}</h1>
+          <h1>{hasMultipleProducts ? activeOffer.title : activeOffer.productName || activeOffer.title}</h1>
           {activeOffer.price > 0 ? <p>{formatMoney(activeOffer.price)}</p> : null}
           {activeOffer.description ? <small>{activeOffer.description}</small> : null}
-          <Link to={getOfferUrl(activeOffer)}>Ver promoción</Link>
+          <Link to={getOfferUrl(activeOffer)}>
+            {hasMultipleProducts ? "Ver productos" : "Ver detalle"}
+          </Link>
         </div>
       </div>
     </div>
@@ -342,30 +262,40 @@ function getVisibleEditorialOffers(offers = [], activeIndex = 0) {
 }
 
 function normalizePromotions(items = []) {
-  return items.map((item) => ({
-    id: item?.id,
-    title: item?.name || "Oferta disponible",
-    slug: item?.slug || "",
-    label: item?.label || formatPromotionType(item?.type),
-    description: item?.description || "",
-    image: normalizePromotionImage(item?.image_url || item?.image_path),
-    productsCount: Number(item?.products_count || 0),
-    typeLabel: formatPromotionType(item?.type),
-    isFavorite: Boolean(item?.is_favorite),
-    productId: getPromotionProductId(item),
-    productName: getPromotionProductName(item),
-    productSlug: getPromotionProductSlug(item),
-    price: getPromotionProductPrice(item),
-    stock: getPromotionProductStock(item),
-    stockStatus: getPromotionProductStockStatus(item),
-    stockMessage: getPromotionProductStockMessage(item),
-    productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
-    products: Array.isArray(item?.products) ? item.products : [],
-  }))
+  return items.map((item) => {
+    const products = normalizePromotionProducts(item)
+    const productsCount = getPromotionProductsCount(item, products)
+    const hasMultipleProducts = productsCount > 1
+
+    return {
+      id: item?.id,
+      title: item?.name || "Oferta disponible",
+      slug: item?.slug || "",
+      label: item?.label || formatPromotionType(item?.type),
+      description: item?.description || "",
+      image: normalizePromotionImage(item?.image_url || item?.image_path),
+      productsCount,
+      typeLabel: formatPromotionType(item?.type),
+      isFavorite: Boolean(item?.is_favorite),
+      productId: hasMultipleProducts ? null : getPromotionProductId(item),
+      productName: hasMultipleProducts ? "" : getPromotionProductName(item),
+      productSlug: hasMultipleProducts ? "" : getPromotionProductSlug(item),
+      price: hasMultipleProducts ? 0 : getPromotionProductPrice(item),
+      stock: hasMultipleProducts ? null : getPromotionProductStock(item),
+      stockStatus: hasMultipleProducts ? "untracked" : getPromotionProductStockStatus(item),
+      stockMessage: hasMultipleProducts ? "" : getPromotionProductStockMessage(item),
+      productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
+      products,
+    }
+  })
 }
 
 function getOfferUrl(offer) {
-  if (offer?.productSlug) return `/producto/${offer.productSlug}`
+  if (!hasMultipleOfferProducts(offer) && offer?.productSlug) return `/producto/${offer.productSlug}`
+
+  if (hasMultipleOfferProducts(offer) && (offer?.slug || offer?.id)) {
+    return `/ofertas/${encodeURIComponent(offer.slug || offer.id)}/productos`
+  }
 
   const params = new URLSearchParams()
 
@@ -376,6 +306,41 @@ function getOfferUrl(offer) {
   }
 
   return `/productos${params.toString() ? `?${params.toString()}` : ""}`
+}
+
+function hasMultipleOfferProducts(offer = {}) {
+  return Number(offer?.productsCount || 0) > 1 || getOfferSelectableProducts(offer).length > 1
+}
+
+function getOfferSelectableProducts(offer = {}) {
+  return Array.isArray(offer?.products)
+    ? offer.products.filter((product) => product?.slug)
+    : []
+}
+
+function normalizePromotionProducts(item = {}) {
+  const products = Array.isArray(item?.products) ? item.products : []
+
+  return products.map((product) => ({
+    id: product?.id ?? null,
+    name: product?.name || "Producto sin nombre",
+    slug: product?.slug || "",
+    image: normalizePromotionImage(product?.image_url || product?.image_path || product?.image),
+    price: Number(product?.final_price || product?.default_price || product?.price || 0),
+    stock: product?.stock ?? null,
+    stockStatus: product?.stock_status || product?.stockStatus || "untracked",
+    stockMessage: product?.stock_message || product?.stockMessage || "",
+  }))
+}
+
+function getPromotionProductsCount(item = {}, products = []) {
+  const explicitCount = Number(item?.products_count || 0)
+
+  if (explicitCount > 0) return explicitCount
+  if (products.length > 0) return products.length
+  if (getPromotionProductId(item)) return 1
+
+  return 0
 }
 
 function getPromotionProductId(item = {}) {
@@ -436,13 +401,6 @@ function getPromotionProductStockMessage(item = {}) {
     item?.products?.[0]?.stockMessage ||
     ""
   )
-}
-
-function isOfferOutOfStock(offer = {}) {
-  const stockStatus = offer?.stockStatus || offer?.stock_status || "untracked"
-  const hasNoStockValue = offer?.stock === null || offer?.stock === undefined || offer?.stock === ""
-
-  return stockStatus === "out_of_stock" || hasNoStockValue || Number(offer.stock) <= 0
 }
 
 function normalizePromotionImage(value) {

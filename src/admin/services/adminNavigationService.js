@@ -1,11 +1,18 @@
 const API_URL = import.meta.env.VITE_API_URL
 
+function getTenantHost() {
+  if (typeof window === "undefined") return ""
+
+  return window.location.hostname
+}
+
 export async function getAdminMenu(token) {
   const response = await fetch(`${API_URL}/api/v1/admin/navigation/menu`, {
     method: "GET",
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
+      "X-Tenant-Host": getTenantHost(),
     },
   })
 

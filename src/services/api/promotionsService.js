@@ -1,5 +1,10 @@
 import api from "./api"
 
+export async function getPromotions(params = {}) {
+  const response = await api.get("/promotions", { params })
+  return response.data
+}
+
 export async function getRandomPromotion() {
   const response = await api.get("/promotions/random")
   return response.data

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import AdminCard from "../../components/AdminCard/AdminCard"
 import {
   createAdminSettings,
@@ -7,10 +8,12 @@ import {
   getAdminMetaPixel,
   getAdminSaleNotificationSettings,
   getAdminSettings,
+  getAdminShippingSettings,
   getAdminStorefront,
   updateAdminAbandonedCartSettings,
   updateAdminMetaPixel,
   updateAdminSaleNotificationSettings,
+  updateAdminShippingSettings,
   updateAdminStorefront,
 } from "../../../services/api/settingsService"
 import {
@@ -21,10 +24,15 @@ import {
   toggleAdminContactFaq,
   updateAdminContactFaq,
 } from "../../../services/api/contactFaqService"
+import { getStripeConnectStatus } from "../../../services/api/stripeConnectService"
+import { getAdminPaymentMethods } from "../../../services/api/paymentMethodsService"
 import { normalizeMediaUrl } from "../../../utils/mediaUrl"
 import { notifyError, notifySuccess, notifyWarning } from "../../../utils/toast"
 import { useSettings } from "../../../context/SettingsContext"
 import "./SettingsPage.css"
+
+const PHONE_FORMAT_MESSAGE = "Formato de número inválido."
+const EMAIL_FORMAT_MESSAGE = "Formato de correo inválido."
 
 const EMPTY_FORM = {
   id: null,
@@ -67,12 +75,28 @@ const EMPTY_FORM = {
     admin_email: "",
     admin_whatsapp: "",
   },
+  shipping: {
+    enabled: true,
+    label: "Envío estándar",
+    default_cost: "99",
+    free_shipping_minimum_enabled: true,
+    free_shipping_minimum: "999",
+  },
   storefront: {
     is_published: false,
     construction_title: "Ecommerce en construcción",
     construction_message: "Estamos preparando la tienda. Vuelve pronto.",
     template: "classic",
     available_home_templates: ["classic"],
+    access_rules: {
+      requires_login_to_purchase: false,
+      hide_prices_for_guests: false,
+      is_authenticated: false,
+      can_view_price: true,
+      can_purchase: true,
+      price_visibility_reason: null,
+      purchase_block_reason: null,
+    },
     theme: {
       primary_color: "#111827",
       secondary_color: "#2563eb",
@@ -112,6 +136,12 @@ const SECTIONS = [
     icon: "bi-broadcast",
     title: "Publicación",
     description: "Estado público y mensaje visible cuando la tienda está en construcción.",
+  },
+  {
+    id: "client_session",
+    icon: "bi-person-lock",
+    title: "Sesión Clientes",
+    description: "Acceso de invitados, compras y visibilidad de precios.",
   },
   {
     id: "contact",
@@ -179,10 +209,13 @@ function SettingsPage() {
   const { refreshSettings } = useSettings()
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const [stripeConnectStatus, setStripeConnectStatus] = useState(null)
+  const [paymentMethods, setPaymentMethods] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const canSubmitSection = !["contact_faqs", "envios"].includes(activeSection)
+  const canSubmitSection = !["contact_faqs"].includes(activeSection)
   const canDeleteSettings = ![
     "contact_faqs",
     "storefront",
@@ -207,13 +240,19 @@ function SettingsPage() {
         metaPixelResponse,
         abandonedCartResponse,
         saleNotificationsResponse,
+        shippingResponse,
         storefrontResponse,
+        stripeConnectResponse,
+        paymentMethodsResponse,
       ] = await Promise.allSettled([
         getAdminSettings(),
         getAdminMetaPixel(),
         getAdminAbandonedCartSettings(),
         getAdminSaleNotificationSettings(),
+        getAdminShippingSettings(),
         getAdminStorefront(),
+        getStripeConnectStatus(),
+        getAdminPaymentMethods(),
       ])
       const data = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -227,17 +266,30 @@ function SettingsPage() {
       const saleNotifications = saleNotificationsResponse.status === "fulfilled"
         ? normalizeSaleNotificationResponse(saleNotificationsResponse.value)
         : EMPTY_FORM.sale_notifications
+      const shipping = shippingResponse.status === "fulfilled"
+        ? normalizeShippingResponse(shippingResponse.value)
+        : EMPTY_FORM.shipping
       const storefront = storefrontResponse.status === "fulfilled"
         ? normalizeStorefrontResponse(storefrontResponse.value)
         : EMPTY_FORM.storefront
+      const stripeStatus = stripeConnectResponse.status === "fulfilled"
+        ? normalizeStripeConnectStatus(stripeConnectResponse.value)
+        : null
+      const paymentMethods = paymentMethodsResponse.status === "fulfilled"
+        ? normalizePaymentMethods(paymentMethodsResponse.value)
+        : null
 
       setForm(mapSettingsToForm({
         ...data,
         meta_pixel_id: metaPixelId,
         abandoned_cart: abandonedCart,
         sale_notifications: saleNotifications,
+        shipping,
         storefront,
       }))
+      setStripeConnectStatus(stripeStatus)
+      setPaymentMethods(paymentMethods)
+      setFieldErrors({})
     } catch (error) {
       console.error("Error al cargar configuración:", error)
       notifyError(error?.response?.data?.message || "No fue posible cargar la configuración.")
@@ -312,10 +364,25 @@ function SettingsPage() {
 
     if (name.startsWith("sale_notifications.")) {
       const key = name.replace("sale_notifications.", "")
+      const nextValue = key === "admin_whatsapp" ? normalizeTenDigitPhone(value) : value
+
+      updateFieldError(name, nextValue)
       setForm((prev) => ({
         ...prev,
         sale_notifications: {
           ...prev.sale_notifications,
+          [key]: type === "checkbox" ? checked : nextValue,
+        },
+      }))
+      return
+    }
+
+    if (name.startsWith("shipping.")) {
+      const key = name.replace("shipping.", "")
+      setForm((prev) => ({
+        ...prev,
+        shipping: {
+          ...prev.shipping,
           [key]: type === "checkbox" ? checked : value,
         },
       }))
@@ -331,6 +398,21 @@ function SettingsPage() {
           theme: {
             ...prev.storefront.theme,
             [key]: value,
+          },
+        },
+      }))
+      return
+    }
+
+    if (name.startsWith("storefront.access_rules.")) {
+      const key = name.replace("storefront.access_rules.", "")
+      setForm((prev) => ({
+        ...prev,
+        storefront: {
+          ...prev.storefront,
+          access_rules: {
+            ...prev.storefront.access_rules,
+            [key]: type === "checkbox" ? checked : value,
           },
         },
       }))
@@ -353,18 +435,69 @@ function SettingsPage() {
       ...prev,
       [name]: value,
     }))
+    updateFieldError(name, value)
   }
 
   function handleContactNumberChange(index, value) {
+    const nextValue = normalizeTenDigitPhone(value)
+
+    updateFieldError(`contact_numbers.${index}`, nextValue)
     setForm((prev) => {
       const nextNumbers = [...prev.contact_numbers]
-      nextNumbers[index] = value
+      nextNumbers[index] = nextValue
 
       return {
         ...prev,
         contact_numbers: nextNumbers.slice(0, 2),
       }
     })
+  }
+
+  function updateFieldError(name, value) {
+    const message = getSettingsFieldError(name, value)
+
+    setFieldErrors((prev) => {
+      if (!message) {
+        const nextErrors = { ...prev }
+        delete nextErrors[name]
+        return nextErrors
+      }
+
+      return {
+        ...prev,
+        [name]: message,
+      }
+    })
+  }
+
+  async function refreshStripeConnectStatus() {
+    try {
+      const response = await getStripeConnectStatus()
+      const status = normalizeStripeConnectStatus(response)
+
+      setStripeConnectStatus(status)
+      return status
+    } catch (error) {
+      console.error("Error al validar Stripe Connect:", error?.response?.data || error)
+      setStripeConnectStatus(null)
+      notifyError(error?.response?.data?.message || "No fue posible validar el estado de Stripe.")
+      return null
+    }
+  }
+
+  async function refreshPaymentMethods() {
+    try {
+      const response = await getAdminPaymentMethods()
+      const methods = normalizePaymentMethods(response)
+
+      setPaymentMethods(methods)
+      return methods
+    } catch (error) {
+      console.error("Error al validar métodos de pago:", error?.response?.data || error)
+      setPaymentMethods(null)
+      notifyError(error?.response?.data?.message || "No fue posible validar los métodos de pago.")
+      return null
+    }
   }
 
   async function handleSubmit(event) {
@@ -374,6 +507,14 @@ function SettingsPage() {
 
     if (numbers.length > 2) {
       notifyWarning("Solo puedes guardar máximo 2 números de contacto.")
+      return
+    }
+
+    const validation = validateSettingsSection(form, activeSection)
+
+    if (validation.message) {
+      setFieldErrors((prev) => ({ ...prev, ...validation.errors }))
+      notifyWarning(validation.message)
       return
     }
 
@@ -394,16 +535,18 @@ function SettingsPage() {
           ...prev,
           abandoned_cart: normalizeAbandonedCartResponse(response),
         }))
+        setFieldErrors({})
         notifySuccess("Configuración de carrito abandonado guardada correctamente.")
         return
       }
 
       if (activeSection === "sale_notifications") {
         const payload = buildSaleNotificationPayload(form.sale_notifications)
-        const validationMessage = validateSaleNotificationPayload(payload)
+        const validation = validateSaleNotificationPayload(payload)
 
-        if (validationMessage) {
-          notifyWarning(validationMessage)
+        if (validation.message) {
+          setFieldErrors((prev) => ({ ...prev, ...validation.errors }))
+          notifyWarning(validation.message)
           return
         }
 
@@ -412,7 +555,27 @@ function SettingsPage() {
           ...prev,
           sale_notifications: normalizeSaleNotificationResponse(response),
         }))
+        setFieldErrors({})
         notifySuccess("Configuración de notificaciones guardada correctamente.")
+        return
+      }
+
+      if (activeSection === "envios") {
+        const payload = buildShippingPayload(form.shipping)
+        const validationMessage = validateShippingPayload(payload)
+
+        if (validationMessage) {
+          notifyWarning(validationMessage)
+          return
+        }
+
+        const response = await updateAdminShippingSettings(payload)
+        setForm((prev) => ({
+          ...prev,
+          shipping: normalizeShippingResponse(response),
+        }))
+        setFieldErrors({})
+        notifySuccess("Configuración de envíos guardada correctamente.")
         return
       }
 
@@ -425,13 +588,43 @@ function SettingsPage() {
           return
         }
 
+        if (payload.is_published) {
+          const stripeStatus = await refreshStripeConnectStatus()
+          const paymentMethods = await refreshPaymentMethods()
+
+          if (!stripeStatus?.ready_for_charges) {
+            notifyWarning(getStripePublicationBlockMessage(stripeStatus))
+            return
+          }
+
+          if (!hasActivePaymentMethod(paymentMethods)) {
+            notifyWarning("Activa al menos un método de pago antes de publicar la tienda.")
+            return
+          }
+        }
+
         const response = await updateAdminStorefront(payload)
         setForm((prev) => ({
           ...prev,
           storefront: normalizeStorefrontResponse(response),
         }))
         refreshSettings()
+        setFieldErrors({})
         notifySuccess("Storefront guardado correctamente.")
+        return
+      }
+
+      if (activeSection === "client_session") {
+        const payload = buildStorefrontAccessRulesPayload(form.storefront)
+        const response = await updateAdminStorefront(payload)
+
+        setForm((prev) => ({
+          ...prev,
+          storefront: normalizeStorefrontResponse(response),
+        }))
+        refreshSettings()
+        setFieldErrors({})
+        notifySuccess("Configuración de sesión de clientes guardada correctamente.")
         return
       }
 
@@ -460,8 +653,10 @@ function SettingsPage() {
         meta_pixel_id: normalizeMetaPixelResponse(freshMetaPixelResponse),
         abandoned_cart: form.abandoned_cart,
         sale_notifications: form.sale_notifications,
+        shipping: form.shipping,
       }))
       refreshSettings()
+      setFieldErrors({})
       notifySuccess("Configuración guardada correctamente.")
     } catch (error) {
       console.error("Error al guardar configuración:", error)
@@ -541,7 +736,16 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "storefront" ? (
-                <StorefrontSection form={form} onChange={handleFieldChange} />
+                <StorefrontSection
+                  form={form}
+                  onChange={handleFieldChange}
+                  stripeConnectStatus={stripeConnectStatus}
+                  paymentMethods={paymentMethods}
+                />
+              ) : null}
+
+              {activeSection === "client_session" ? (
+                <ClientSessionSection form={form} onChange={handleFieldChange} />
               ) : null}
 
               {activeSection === "contact" ? (
@@ -549,6 +753,7 @@ function SettingsPage() {
                   form={form}
                   onChange={handleFieldChange}
                   onContactNumberChange={handleContactNumberChange}
+                  errors={fieldErrors}
                 />
               ) : null}
 
@@ -557,7 +762,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "forms" ? (
-                <FormsSection form={form} onChange={handleFieldChange} />
+                <FormsSection form={form} onChange={handleFieldChange} errors={fieldErrors} />
               ) : null}
 
               {activeSection === "seo" ? (
@@ -573,7 +778,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "envios" ? (
-                <ShippingSection />
+                <ShippingSection form={form} onChange={handleFieldChange} />
               ) : null}
 
               {activeSection === "abandoned_cart" ? (
@@ -581,7 +786,7 @@ function SettingsPage() {
               ) : null}
 
               {activeSection === "sale_notifications" ? (
-                <SaleNotificationsSection form={form} onChange={handleFieldChange} />
+                <SaleNotificationsSection form={form} onChange={handleFieldChange} errors={fieldErrors} />
               ) : null}
 
               {activeSection === "contact_faqs" ? (
@@ -648,11 +853,54 @@ function IdentitySection({ form, onChange }) {
   )
 }
 
-function StorefrontSection({ form, onChange }) {
+function StorefrontSection({ form, onChange, stripeConnectStatus, paymentMethods }) {
   const settings = form.storefront || EMPTY_FORM.storefront
+  const stripeGate = getStripePublicationGate(stripeConnectStatus)
+  const activePaymentCount = countActivePaymentMethods(paymentMethods)
 
   return (
     <section className="settings-page__section">
+      <div className={`settings-storefront__payment-gate settings-storefront__payment-gate--${stripeGate.tone}`}>
+        <span className="settings-storefront__payment-icon">
+          <i className={`bi ${stripeGate.icon}`} aria-hidden="true" />
+        </span>
+        <div>
+          <strong>{stripeGate.title}</strong>
+          <p>{stripeGate.message}</p>
+          {stripeGate.requirements.length ? (
+            <div className="settings-storefront__payment-requirements">
+              {stripeGate.requirements.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {!stripeGate.ready ? (
+          <Link to="/admin/payments" className="settings-storefront__payment-action">
+            {stripeGate.cta}
+          </Link>
+        ) : null}
+      </div>
+
+      <div className={`settings-storefront__payment-gate ${activePaymentCount ? "settings-storefront__payment-gate--success" : "settings-storefront__payment-gate--danger"}`}>
+        <span className="settings-storefront__payment-icon">
+          <i className={`bi ${activePaymentCount ? "bi-credit-card-2-front-fill" : "bi-exclamation-triangle-fill"}`} aria-hidden="true" />
+        </span>
+        <div>
+          <strong>{activePaymentCount ? "Método de pago activo" : "Activa un método de pago"}</strong>
+          <p>
+            {activePaymentCount
+              ? "La tienda tiene al menos un método de pago disponible para checkout."
+              : "No puedes publicar la tienda si no hay al menos un método de pago activo."}
+          </p>
+        </div>
+        {!activePaymentCount ? (
+          <Link to="/admin/payments" className="settings-storefront__payment-action">
+            Configurar pagos
+          </Link>
+        ) : null}
+      </div>
+
       <div className="settings-storefront__status">
         <ToggleField
           label={settings.is_published ? "Ecommerce publicado" : "Ecommerce en construcción"}
@@ -691,7 +939,35 @@ function StorefrontSection({ form, onChange }) {
   )
 }
 
-function ContactSection({ form, onChange, onContactNumberChange }) {
+function ClientSessionSection({ form, onChange }) {
+  const accessRules = form.storefront?.access_rules || EMPTY_FORM.storefront.access_rules
+  const requiresLogin = Boolean(accessRules.requires_login_to_purchase)
+
+  return (
+    <section className="settings-page__section">
+      <div className="settings-page__grid settings-page__grid--two">
+        <ToggleField
+          label="Requerir inicio de sesión para comprar"
+          name="storefront.access_rules.requires_login_to_purchase"
+          checked={requiresLogin}
+          onChange={onChange}
+          helpText="Si está activo, los invitados no podrán finalizar compras."
+        />
+
+        <ToggleField
+          label="Ocultar precios a invitados"
+          name="storefront.access_rules.hide_prices_for_guests"
+          checked={requiresLogin && accessRules.hide_prices_for_guests}
+          onChange={onChange}
+          disabled={!requiresLogin}
+          helpText="Solo aplica cuando la tienda está cerrada para invitados."
+        />
+      </div>
+    </section>
+  )
+}
+
+function ContactSection({ form, onChange, onContactNumberChange, errors = {} }) {
   return (
     <section className="settings-page__section">
       <div className="settings-page__grid settings-page__grid--two">
@@ -702,6 +978,8 @@ function ContactSection({ form, onChange, onContactNumberChange }) {
           value={form.email}
           onChange={onChange}
           placeholder="contacto@mitienda.com"
+          inputMode="email"
+          error={errors.email}
         />
 
         <Field
@@ -720,14 +998,25 @@ function ContactSection({ form, onChange, onContactNumberChange }) {
         </div>
         <div className="settings-page__grid settings-page__grid--two">
           {[0, 1].map((index) => (
-            <label className="settings-page__field" key={index}>
+            <label
+              className={`settings-page__field ${errors[`contact_numbers.${index}`] ? "is-error" : ""}`}
+              key={index}
+            >
               <span>Teléfono {index + 1}</span>
               <input
                 type="tel"
                 value={form.contact_numbers[index] || ""}
                 onChange={(event) => onContactNumberChange(index, event.target.value)}
                 placeholder={index === 0 ? "3312345678" : "3311223344"}
+                inputMode="numeric"
+                maxLength={10}
+                pattern="\d{10}"
+                title="Escribe un teléfono de 10 dígitos."
+                aria-invalid={Boolean(errors[`contact_numbers.${index}`])}
               />
+              {errors[`contact_numbers.${index}`] ? (
+                <small className="settings-page__field-error">{errors[`contact_numbers.${index}`]}</small>
+              ) : null}
             </label>
           ))}
         </div>
@@ -766,7 +1055,7 @@ function SocialSection({ form, onChange }) {
   )
 }
 
-function FormsSection({ form, onChange }) {
+function FormsSection({ form, onChange, errors = {} }) {
   return (
     <section className="settings-page__section">
       <Field
@@ -776,7 +1065,9 @@ function FormsSection({ form, onChange }) {
         value={form.forms_recipient_email}
         onChange={onChange}
         placeholder="formularios@mitienda.com"
+        inputMode="email"
         helpText="Este correo decide a dónde llegan los mensajes de formularios."
+        error={errors.forms_recipient_email}
       />
     </section>
   )
@@ -921,7 +1212,7 @@ function AbandonedCartSection({ form, onChange }) {
           name="abandoned_cart.enabled"
           checked={settings.enabled}
           onChange={onChange}
-          helpText="Permite que el backend detecte y notifique carritos abandonados."
+          helpText="Permite que tu ecommerce detecte y notifique carritos abandonados para recuperación de ventas."
         />
 
         <ToggleField
@@ -937,7 +1228,7 @@ function AbandonedCartSection({ form, onChange }) {
           name="abandoned_cart.send_whatsapp"
           checked={settings.send_whatsapp}
           onChange={onChange}
-          helpText="Mantiene el canal WhatsApp activo para pruebas del backend."
+          helpText="Mantén activo el canal de WhatsApp para envío de notificaciones."
         />
       </div>
 
@@ -970,7 +1261,7 @@ function AbandonedCartSection({ form, onChange }) {
   )
 }
 
-function SaleNotificationsSection({ form, onChange }) {
+function SaleNotificationsSection({ form, onChange, errors = {} }) {
   const settings = form.sale_notifications || EMPTY_FORM.sale_notifications
 
   return (
@@ -1010,7 +1301,9 @@ function SaleNotificationsSection({ form, onChange }) {
           onChange={onChange}
           placeholder="ventas@cloudishop.mx"
           required={settings.send_email}
+          inputMode="email"
           helpText="Requerido cuando el envío por correo está activo."
+          error={errors["sale_notifications.admin_email"]}
         />
 
         <Field
@@ -1019,48 +1312,76 @@ function SaleNotificationsSection({ form, onChange }) {
           type="tel"
           value={settings.admin_whatsapp}
           onChange={onChange}
-          placeholder="9612819842"
+          placeholder="5555555555"
           required={settings.send_whatsapp}
-          helpText="Requerido cuando WhatsApp está activo. Usa entre 10 y 15 dígitos."
+          inputMode="numeric"
+          maxLength={10}
+          pattern="\d{10}"
+          title="Escribe un WhatsApp de 10 dígitos."
+          helpText="Requerido cuando WhatsApp está activo. Usa 10 dígitos."
+          error={errors["sale_notifications.admin_whatsapp"]}
         />
       </div>
     </section>
   )
 }
 
-function ShippingSection() {
+function ShippingSection({ form, onChange }) {
+  const settings = form.shipping || EMPTY_FORM.shipping
+
   return (
     <section className="settings-page__section">
-      <div className="settings-shipping__grid">
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-geo-alt" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Cobertura</h4>
-            <p>Zonas, códigos postales y regiones disponibles para entrega.</p>
-          </div>
-        </article>
+      <div className="settings-page__grid settings-page__grid--two">
+        <ToggleField
+          label="Activar envío"
+          name="shipping.enabled"
+          checked={settings.enabled}
+          onChange={onChange}
+          helpText="Si está apagado, el checkout calcula envío en $0."
+        />
 
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-currency-dollar" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Tarifas</h4>
-            <p>Costos por zona, mínimos de compra y condiciones por pedido.</p>
-          </div>
-        </article>
+        <ToggleField
+          label="Activar mínimo para envío gratis"
+          name="shipping.free_shipping_minimum_enabled"
+          checked={settings.free_shipping_minimum_enabled}
+          onChange={onChange}
+          helpText="El mínimo se calcula con subtotal menos descuentos, antes de sumar envío."
+        />
+      </div>
 
-        <article className="settings-shipping__item">
-          <span className="settings-shipping__icon">
-            <i className="bi bi-box-seam" aria-hidden="true" />
-          </span>
-          <div>
-            <h4>Paqueterías</h4>
-            <p>Opciones de entrega, tiempos estimados y métodos disponibles.</p>
-          </div>
-        </article>
+      <div className="settings-page__grid settings-page__grid--two">
+        <Field
+          label="Nombre del método"
+          name="shipping.label"
+          value={settings.label}
+          onChange={onChange}
+          placeholder="Envío estándar"
+          required
+        />
+
+        <Field
+          label="Costo default"
+          name="shipping.default_cost"
+          type="number"
+          value={settings.default_cost}
+          onChange={onChange}
+          min="0"
+          step="0.01"
+          placeholder="99"
+          helpText="Si el costo es 0, el checkout lo marcará como gratis."
+        />
+
+        <Field
+          label="Mínimo para envío gratis"
+          name="shipping.free_shipping_minimum"
+          type="number"
+          value={settings.free_shipping_minimum}
+          onChange={onChange}
+          min="0"
+          step="0.01"
+          placeholder="999"
+          helpText="Solo aplica cuando el mínimo para envío gratis está activo."
+        />
       </div>
     </section>
   )
@@ -1354,9 +1675,14 @@ function Field({
   min,
   max,
   step,
+  maxLength,
+  inputMode,
+  pattern,
+  title,
+  error = "",
 }) {
   return (
-    <label className="settings-page__field">
+    <label className={`settings-page__field ${error ? "is-error" : ""}`}>
       <span>
         {label}
         {required ? <b>*</b> : null}
@@ -1371,16 +1697,28 @@ function Field({
         min={min}
         max={max}
         step={step}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        pattern={pattern}
+        title={title}
+        aria-invalid={Boolean(error)}
       />
+      {error ? <small className="settings-page__field-error">{error}</small> : null}
       {helpText ? <small>{helpText}</small> : null}
     </label>
   )
 }
 
-function ToggleField({ label, name, checked, onChange, helpText = "" }) {
+function ToggleField({ label, name, checked, onChange, helpText = "", disabled = false }) {
   return (
-    <label className="settings-page__toggle-field">
-      <input type="checkbox" name={name} checked={Boolean(checked)} onChange={onChange} />
+    <label className={`settings-page__toggle-field ${disabled ? "is-disabled" : ""}`}>
+      <input
+        type="checkbox"
+        name={name}
+        checked={Boolean(checked)}
+        onChange={onChange}
+        disabled={disabled}
+      />
       <span className="settings-page__toggle-control" aria-hidden="true" />
       <span className="settings-page__toggle-copy">
         <strong>{label}</strong>
@@ -1395,7 +1733,7 @@ function AssetInput({ label, name, accept, previewUrl, onChange, compact = false
     <div className="settings-page__asset">
       <div className={`settings-page__asset-preview ${compact ? "is-compact" : ""}`}>
         {previewUrl ? (
-          <img src={previewUrl} alt={label} />
+          <img loading="lazy" src={previewUrl} alt={label} />
         ) : (
           <span>Sin archivo</span>
         )}
@@ -1471,6 +1809,7 @@ function mapSettingsToForm(settings) {
     },
     abandoned_cart: normalizeAbandonedCartValue(settings.abandoned_cart),
     sale_notifications: normalizeSaleNotificationValue(settings.sale_notifications),
+    shipping: normalizeShippingValue(settings.shipping),
     storefront: normalizeStorefrontValue(settings.storefront),
     logo: null,
     logo_url: normalizeMediaUrl(settings.logo_url || settings.logo_path),
@@ -1505,11 +1844,136 @@ function normalizeSaleNotificationResponse(response) {
   return normalizeSaleNotificationValue(value)
 }
 
+function normalizeShippingResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return normalizeShippingValue(value)
+}
+
 function normalizeStorefrontResponse(response) {
   const data = response?.data?.data || response?.data || response || {}
   const value = data.value || data
 
   return normalizeStorefrontValue(value)
+}
+
+function normalizeStripeConnectStatus(response) {
+  const data = response?.data?.data || response?.data || response || {}
+
+  return data && typeof data === "object" ? data : null
+}
+
+function normalizePaymentMethods(response) {
+  const value = response?.data?.value || response?.data?.data?.value || response?.value || {}
+
+  return {
+    default_method: value.default_method || null,
+    methods: Array.isArray(value.methods) ? value.methods : [],
+  }
+}
+
+function countActivePaymentMethods(paymentMethods) {
+  return paymentMethods?.methods?.filter((method) => method.active || method.enabled).length || 0
+}
+
+function hasActivePaymentMethod(paymentMethods) {
+  return countActivePaymentMethods(paymentMethods) > 0
+}
+
+function getStripePublicationGate(status) {
+  const requirements = buildStripeBlockingRequirementList(status)
+  const hasPendingReview = !status?.ready_for_charges && !requirements.length
+  const disabledReasonLabel = status?.requirements?.disabled_reason_label || ""
+
+  if (status?.ready_for_charges) {
+    return {
+      ready: true,
+      tone: "success",
+      icon: "bi-check-circle-fill",
+      title: "Stripe listo para recibir pagos",
+      message: "La tienda puede publicarse y procesar cobros con Stripe Connect.",
+      cta: "",
+      requirements,
+    }
+  }
+
+  const state = String(status?.status || "not_connected")
+
+  if (state === "onboarding_pending") {
+    return {
+      ready: false,
+      tone: "warning",
+      icon: "bi-exclamation-circle-fill",
+      title: "Completa la configuración de Stripe",
+      message: disabledReasonLabel || (hasPendingReview
+        ? "Stripe aún está revisando o activando la cuenta. Intenta actualizar el estado en unos minutos."
+        : "Para publicar la tienda y recibir pagos debes terminar el onboarding de Stripe Connect."),
+      cta: "Continuar configuración de Stripe",
+      requirements,
+    }
+  }
+
+  if (state === "restricted") {
+    return {
+      ready: false,
+      tone: "danger",
+      icon: "bi-slash-circle-fill",
+      title: "Stripe requiere información pendiente",
+      message: disabledReasonLabel || (hasPendingReview
+        ? "Stripe aún está revisando o activando la cuenta. Intenta actualizar el estado en unos minutos."
+        : "La tienda no puede recibir pagos hasta resolver los requisitos indicados por Stripe."),
+      cta: "Continuar configuración de Stripe",
+      requirements,
+    }
+  }
+
+  return {
+    ready: false,
+    tone: "warning",
+    icon: "bi-cash-stack",
+    title: "Conecta Stripe antes de publicar",
+    message: "Para recibir pagos, la tienda debe tener Stripe Connect conectado y listo.",
+    cta: "Conectar Stripe",
+    requirements,
+  }
+}
+
+function getStripePublicationBlockMessage(status) {
+  const state = String(status?.status || "not_connected")
+  const disabledReasonLabel = status?.requirements?.disabled_reason_label
+
+  if (disabledReasonLabel) return disabledReasonLabel
+
+  if (state === "onboarding_pending") {
+    return "Completa la configuración de Stripe antes de publicar la tienda."
+  }
+
+  if (state === "restricted") {
+    return "Stripe requiere información pendiente antes de publicar la tienda."
+  }
+
+  return "Conecta Stripe antes de publicar la tienda."
+}
+
+function buildStripeBlockingRequirementList(status) {
+  const requirements = status?.requirements || {}
+  const blockingItems = Array.isArray(requirements.items)
+    ? requirements.items.filter((item) => item?.blocking)
+    : []
+
+  if (blockingItems.length) {
+    return blockingItems
+      .map((item) => item.label || item.field)
+      .filter(Boolean)
+  }
+
+  return [
+    ...(Array.isArray(requirements.blocking) ? requirements.blocking : []),
+    ...(Array.isArray(requirements.past_due) ? requirements.past_due : []),
+    ...(Array.isArray(requirements.currently_due) ? requirements.currently_due : []),
+    ...(Array.isArray(requirements.eventually_due) ? requirements.eventually_due : []),
+  ].filter(Boolean)
 }
 
 function normalizeAbandonedCartValue(value = {}) {
@@ -1533,11 +1997,28 @@ function normalizeSaleNotificationValue(value = {}) {
   }
 }
 
+function normalizeShippingValue(value = {}) {
+  return {
+    enabled: booleanOrDefault(value.enabled, EMPTY_FORM.shipping.enabled),
+    label: value.label || EMPTY_FORM.shipping.label,
+    default_cost: value.default_cost ?? EMPTY_FORM.shipping.default_cost,
+    free_shipping_minimum_enabled: booleanOrDefault(
+      value.free_shipping_minimum_enabled,
+      EMPTY_FORM.shipping.free_shipping_minimum_enabled
+    ),
+    free_shipping_minimum:
+      value.free_shipping_minimum ?? EMPTY_FORM.shipping.free_shipping_minimum,
+  }
+}
+
 function normalizeStorefrontValue(value = {}) {
   const construction = value.construction && typeof value.construction === "object"
     ? value.construction
     : {}
   const theme = value.theme && typeof value.theme === "object" ? value.theme : {}
+  const accessRules = value.access_rules && typeof value.access_rules === "object"
+    ? value.access_rules
+    : {}
 
   return {
     ...EMPTY_FORM.storefront,
@@ -1554,6 +2035,31 @@ function normalizeStorefrontValue(value = {}) {
     available_home_templates: Array.isArray(value.available_home_templates)
       ? value.available_home_templates
       : EMPTY_FORM.storefront.available_home_templates,
+    access_rules: {
+      ...EMPTY_FORM.storefront.access_rules,
+      requires_login_to_purchase: booleanOrDefault(
+        accessRules.requires_login_to_purchase,
+        EMPTY_FORM.storefront.access_rules.requires_login_to_purchase
+      ),
+      hide_prices_for_guests: booleanOrDefault(
+        accessRules.hide_prices_for_guests,
+        EMPTY_FORM.storefront.access_rules.hide_prices_for_guests
+      ),
+      is_authenticated: booleanOrDefault(
+        accessRules.is_authenticated,
+        EMPTY_FORM.storefront.access_rules.is_authenticated
+      ),
+      can_view_price: booleanOrDefault(
+        accessRules.can_view_price,
+        EMPTY_FORM.storefront.access_rules.can_view_price
+      ),
+      can_purchase: booleanOrDefault(
+        accessRules.can_purchase,
+        EMPTY_FORM.storefront.access_rules.can_purchase
+      ),
+      price_visibility_reason: accessRules.price_visibility_reason || null,
+      purchase_block_reason: accessRules.purchase_block_reason || null,
+    },
     theme: {
       ...EMPTY_FORM.storefront.theme,
       ...theme,
@@ -1590,11 +2096,32 @@ function buildSaleNotificationPayload(settings) {
   }
 }
 
+function buildShippingPayload(settings) {
+  return {
+    enabled: Boolean(settings.enabled),
+    label: String(settings.label || "").trim(),
+    default_cost: Number(settings.default_cost || 0),
+    free_shipping_minimum_enabled: Boolean(settings.free_shipping_minimum_enabled),
+    free_shipping_minimum: Number(settings.free_shipping_minimum || 0),
+  }
+}
+
 function buildStorefrontPublicationPayload(settings) {
   return {
     is_published: Boolean(settings.is_published),
     construction_title: nullableValue(settings.construction_title),
     construction_message: nullableValue(settings.construction_message),
+  }
+}
+
+function buildStorefrontAccessRulesPayload(settings) {
+  const requiresLoginToPurchase = Boolean(settings.access_rules?.requires_login_to_purchase)
+
+  return {
+    requires_login_to_purchase: requiresLoginToPurchase,
+    hide_prices_for_guests: requiresLoginToPurchase
+      ? Boolean(settings.access_rules?.hide_prices_for_guests)
+      : false,
   }
 }
 
@@ -1630,21 +2157,99 @@ function validateStorefrontPublicationPayload(payload) {
   return ""
 }
 
-function validateSaleNotificationPayload(payload) {
-  if (payload.send_email && !payload.admin_email) {
-    return "El correo administrador es requerido cuando el envío por correo está activo."
+function validateShippingPayload(payload) {
+  if (!payload.label) {
+    return "Escribe el nombre del método de envío."
   }
 
-  if (payload.admin_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.admin_email)) {
-    return "Escribe un correo administrador válido."
+  if (!Number.isFinite(payload.default_cost) || payload.default_cost < 0) {
+    return "El costo default debe ser un número mayor o igual a 0."
+  }
+
+  if (
+    payload.free_shipping_minimum_enabled &&
+    (!Number.isFinite(payload.free_shipping_minimum) || payload.free_shipping_minimum < 0)
+  ) {
+    return "El mínimo para envío gratis debe ser un número mayor o igual a 0."
+  }
+
+  return ""
+}
+
+function validateSettingsSection(form, section) {
+  const errors = {}
+
+  if (section === "contact") {
+    form.contact_numbers.forEach((number, index) => {
+      const value = String(number || "").trim()
+      if (value && !isValidTenDigitPhone(value)) {
+        errors[`contact_numbers.${index}`] = PHONE_FORMAT_MESSAGE
+      }
+    })
+
+    if (form.email && !isValidEmail(form.email)) {
+      errors.email = EMAIL_FORMAT_MESSAGE
+    }
+  }
+
+  if (section === "forms" && form.forms_recipient_email && !isValidEmail(form.forms_recipient_email)) {
+    errors.forms_recipient_email = EMAIL_FORMAT_MESSAGE
+  }
+
+  return {
+    errors,
+    message: Object.values(errors)[0] || "",
+  }
+}
+
+function validateSaleNotificationPayload(payload) {
+  const errors = {}
+
+  if (payload.send_email && !payload.admin_email) {
+    errors["sale_notifications.admin_email"] = "Correo administrador requerido."
+  }
+
+  if (payload.admin_email && !isValidEmail(payload.admin_email)) {
+    errors["sale_notifications.admin_email"] = EMAIL_FORMAT_MESSAGE
   }
 
   if (payload.send_whatsapp && !payload.admin_whatsapp) {
-    return "El WhatsApp administrador es requerido cuando el envío por WhatsApp está activo."
+    errors["sale_notifications.admin_whatsapp"] = "WhatsApp administrador requerido."
   }
 
-  if (payload.admin_whatsapp && !/^\d{10,15}$/.test(payload.admin_whatsapp)) {
-    return "El WhatsApp administrador debe tener entre 10 y 15 dígitos."
+  if (payload.admin_whatsapp && !isValidTenDigitPhone(payload.admin_whatsapp)) {
+    errors["sale_notifications.admin_whatsapp"] = PHONE_FORMAT_MESSAGE
+  }
+
+  return {
+    errors,
+    message: Object.values(errors)[0] || "",
+  }
+}
+
+function normalizeTenDigitPhone(value = "") {
+  return String(value || "").replace(/\D/g, "").slice(0, 10)
+}
+
+function isValidTenDigitPhone(value = "") {
+  return /^\d{10}$/.test(String(value || "").trim())
+}
+
+function isValidEmail(value = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim())
+}
+
+function getSettingsFieldError(name, value) {
+  const normalizedValue = String(value || "").trim()
+
+  if (!normalizedValue) return ""
+
+  if (name === "email" || name === "forms_recipient_email" || name === "sale_notifications.admin_email") {
+    return isValidEmail(normalizedValue) ? "" : EMAIL_FORMAT_MESSAGE
+  }
+
+  if (name.startsWith("contact_numbers.") || name === "sale_notifications.admin_whatsapp") {
+    return isValidTenDigitPhone(normalizedValue) ? "" : PHONE_FORMAT_MESSAGE
   }
 
   return ""

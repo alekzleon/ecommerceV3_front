@@ -47,6 +47,7 @@ function Header() {
   const navDensity = navDesign.density || "comfortable"
   const showTopBar = navDesign.show_top_bar !== false
   const isEditorialShop = settings.storefront?.active_template === "editorial_shop"
+  const canGuestPurchase = settings.storefront?.access_rules?.can_purchase !== false
   const canEditNavTitle = isAuthenticated && isInternal && hasModule(modules, "configuracion_ecommerce")
   const canEditGeneralLogo = canEditNavTitle
   const visibleLogoUrl = logoPreviewUrl || logoUrl
@@ -125,7 +126,7 @@ function Header() {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !canGuestPurchase) {
       clearCartSummary()
       return
     }
@@ -146,7 +147,7 @@ function Header() {
     }
 
     fetchCartSummary()
-  }, [isAuthenticated])
+  }, [isAuthenticated, canGuestPurchase])
 
   useEffect(() => {
     const handleCartUpdated = (event) => {
@@ -201,6 +202,7 @@ function Header() {
         logoUrl={visibleLogoUrl}
         cartSummary={cartSummary}
         isAuthenticated={isAuthenticated}
+        canGuestPurchase={canGuestPurchase}
         displayName={displayName}
         categories={categories}
         categoriesLoading={categoriesLoading}
@@ -227,7 +229,7 @@ function Header() {
             <>
               <Link to="/" onClick={closeMobileMenu}>
                 {visibleLogoUrl ? (
-                  <img src={visibleLogoUrl} alt={brandName} className="logo-img" />
+                  <img loading="lazy" src={visibleLogoUrl} alt={brandName} className="logo-img" />
                 ) : (
                   <span className="header-logo__text">{brandName}</span>
                 )}
@@ -426,7 +428,7 @@ function Header() {
               </Link>
             ) : null}
 
-            {isAuthenticated ? (
+            {isAuthenticated || canGuestPurchase ? (
               <Link to="/carrito" className="header-cart" onClick={closeMobileMenu}>
                 <span className="header-cart__icon-wrap">
                   <svg
@@ -468,6 +470,7 @@ function EditorialShopHeader({
   logoUrl,
   cartSummary,
   isAuthenticated,
+  canGuestPurchase,
   displayName,
   categories,
   categoriesLoading,
@@ -627,7 +630,7 @@ function EditorialShopHeader({
           </nav>
 
           <Link to="/" className="editorial-nav__logo">
-            {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+            {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
           </Link>
 
           <div className="editorial-nav__actions">
@@ -640,10 +643,12 @@ function EditorialShopHeader({
             <Link to="/contacto" aria-label="Contacto" title="Contacto">
               <i className="bi bi-chat-dots" />
             </Link>
+            {isAuthenticated || canGuestPurchase ? (
             <Link to="/carrito" aria-label="Carrito" className="editorial-nav__cart">
               <i className="bi bi-bag" />
               {cartSummary.items_count > 0 ? <span>{cartSummary.items_count}</span> : null}
             </Link>
+            ) : null}
           </div>
         </div>
       </header>
@@ -652,7 +657,7 @@ function EditorialShopHeader({
         <div className="editorial-search">
           <div className="editorial-search__bar">
             <Link to="/" className="editorial-search__logo" onClick={() => setSearchOpen(false)}>
-              {logoUrl ? <img src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
+              {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : <span>{brandName}</span>}
             </Link>
 
             <div className="editorial-search__searchbar">

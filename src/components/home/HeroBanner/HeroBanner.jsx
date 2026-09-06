@@ -77,7 +77,7 @@ function HeroBanner() {
     <section className="hero-banner">
       <div className="hero-banner__media">
         {activeBanner.type === "video" ? (
-          <video
+          <video preload="none"
             className="hero-banner__video"
             src={activeBanner.file}
             autoPlay
@@ -86,7 +86,7 @@ function HeroBanner() {
             playsInline
           />
         ) : (
-          <img
+          <img loading="lazy"
             className="hero-banner__image"
             src={activeBanner.file}
             alt={activeBanner.title || "Banner"}

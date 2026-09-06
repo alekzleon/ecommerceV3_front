@@ -1,0 +1,354 @@
+.platform-admin,
+.platform-admin-login,
+.platform-admin-loading {
+  min-height: 100vh;
+  background: #f6f7fb;
+  color: #111827;
+}
+
+.platform-admin-loading {
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+
+.platform-admin-login {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.platform-admin-login__card {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: clamp(1.4rem, 4vw, 2.2rem);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+}
+
+.platform-admin-login__card h1,
+.platform-admin__topbar h1,
+.platform-admin__panel h2 {
+  margin: 0;
+  color: #111827;
+  font-weight: 950;
+}
+
+.platform-admin-login__card p,
+.platform-admin__panel p {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+}
+
+.platform-admin-login__card > div > span,
+.platform-admin__topbar span {
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.platform-admin-login__card label,
+.platform-admin__subscription-form label {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.platform-admin-login__card label span,
+.platform-admin__subscription-form label span {
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.platform-admin-login__card input,
+.platform-admin__filters input,
+.platform-admin__filters select,
+.platform-admin__subscription-form input,
+.platform-admin__subscription-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #dbe2ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #111827;
+  padding: 0 0.8rem;
+}
+
+.platform-admin-login__card button,
+.platform-admin__filters button,
+.platform-admin__subscription-form button,
+.platform-admin__user button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 0 1rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.platform-admin-login__card button:disabled,
+.platform-admin__filters button:disabled,
+.platform-admin__subscription-form button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.platform-admin {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.platform-admin__topbar,
+.platform-admin__panel,
+.platform-admin__stats article {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.platform-admin__topbar {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 14px 16px;
+}
+
+.platform-admin__user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.platform-admin__user strong {
+  color: #334155;
+  font-size: 0.9rem;
+}
+
+.platform-admin__user button {
+  background: #111827;
+}
+
+.platform-admin__stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.platform-admin__stats article {
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  gap: 0.35rem;
+  padding: 14px;
+}
+
+.platform-admin__stats span,
+.platform-admin__info-item span {
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.platform-admin__stats strong {
+  color: #111827;
+  font-size: 1.35rem;
+  font-weight: 950;
+}
+
+.platform-admin__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.platform-admin__panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.platform-admin__panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.platform-admin__filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 150px 150px auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.platform-admin__tenant-list {
+  display: grid;
+  gap: 8px;
+}
+
+.platform-admin__tenant-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.platform-admin__tenant-list button.is-active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.platform-admin__tenant-list strong {
+  display: block;
+  color: #111827;
+}
+
+.platform-admin__tenant-list small,
+.platform-admin__tenant-list em {
+  color: #64748b;
+  font-style: normal;
+}
+
+.platform-admin__tenant-list em,
+.platform-admin__status {
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.platform-admin__detail.is-empty {
+  min-height: 260px;
+  display: grid;
+  align-content: center;
+}
+
+.platform-admin__detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.platform-admin__info-item {
+  display: grid;
+  gap: 0.2rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.platform-admin__info-item strong {
+  color: #111827;
+  overflow-wrap: anywhere;
+}
+
+.platform-admin__subscription-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.platform-admin__subscription-form button {
+  grid-column: 1 / -1;
+}
+
+.platform-admin__payments {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.platform-admin__payments h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 0.95rem;
+  font-weight: 950;
+}
+
+.platform-admin__payments article {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 9px 10px;
+}
+
+.platform-admin__payments span {
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.platform-admin__payments strong {
+  color: #111827;
+}
+
+.platform-admin__payments em {
+  color: #64748b;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.platform-admin__empty {
+  margin: 0;
+  color: #64748b;
+}
+
+@media (max-width: 1120px) {
+  .platform-admin__stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .platform-admin__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .platform-admin {
+    padding: 10px;
+  }
+
+  .platform-admin__topbar,
+  .platform-admin__user {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .platform-admin__stats,
+  .platform-admin__filters,
+  .platform-admin__detail-grid,
+  .platform-admin__subscription-form {
+    grid-template-columns: 1fr;
+  }
+
+  .platform-admin__payments article {
+    grid-template-columns: 1fr;
+  }
+}

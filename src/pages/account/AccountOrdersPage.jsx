@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { getAccountOrder, getAccountOrders } from "../../services/api/accountService"
 import { normalizeMediaUrl } from "../../utils/mediaUrl"
@@ -42,34 +42,27 @@ const SORT_OPTIONS = [
 function AccountOrdersPage() {
   const [orders, setOrders] = useState([])
   const [meta, setMeta] = useState(createEmptyMeta())
+  const [summary, setSummary] = useState(createEmptySummary())
   const [filters, setFilters] = useState(INITIAL_FILTERS)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
 
-  const totals = useMemo(() => {
-    return orders.reduce(
-      (acc, order) => {
-        acc.total += Number(order.total || 0)
-        acc.orders += 1
-        if (order.payment_status === "paid") acc.paid += 1
-        return acc
-      },
-      { total: 0, orders: 0, paid: 0 }
-    )
-  }, [orders])
-
   const loadOrders = useCallback(async (nextFilters = INITIAL_FILTERS) => {
     try {
       setLoading(true)
       const response = await getAccountOrders(cleanParams(nextFilters))
-      setOrders(normalizeOrders(response?.data))
+      const nextOrders = normalizeOrders(response?.data)
+
+      setOrders(nextOrders)
       setMeta(normalizeMeta(response?.meta, nextFilters))
+      setSummary(normalizeSummary(response?.summary, nextOrders))
     } catch (error) {
       console.error("Error al cargar pedidos:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible cargar tus pedidos.")
       setOrders([])
       setMeta(createEmptyMeta())
+      setSummary(createEmptySummary())
     } finally {
       setLoading(false)
     }
@@ -134,15 +127,19 @@ function AccountOrdersPage() {
         <section className="account_orders_summary" aria-label="Resumen de pedidos">
           <div>
             <span>Pedidos</span>
-            <strong>{formatNumber(totals.orders)}</strong>
+            <strong>{formatNumber(summary.orders_count)}</strong>
           </div>
           <div>
-            <span>Pagados</span>
-            <strong>{formatNumber(totals.paid)}</strong>
+            <span>Pedidos pagados</span>
+            <strong>{formatNumber(summary.paid_orders)}</strong>
           </div>
           <div>
-            <span>Total del periodo</span>
-            <strong>{formatMoney(totals.total)}</strong>
+            <span>Total vendido</span>
+            <strong>{formatMoney(summary.total_sold)}</strong>
+          </div>
+          <div>
+            <span>Pendiente</span>
+            <strong>{formatMoney(summary.pending_amount)}</strong>
           </div>
         </section>
 
@@ -273,7 +270,7 @@ function OrderDetailPanel({ order, loading }) {
             order.items.map((item) => (
               <article className="account_order_item" key={item.id}>
                 <div className="account_order_item__media">
-                  {item.image ? <img src={normalizeMediaUrl(item.image)} alt={item.name} /> : <i className="bi bi-box-seam" aria-hidden="true" />}
+                  {item.image ? <img loading="lazy" src={normalizeMediaUrl(item.image)} alt={item.name} /> : <i className="bi bi-box-seam" aria-hidden="true" />}
                 </div>
                 <div>
                   <strong>{item.name}</strong>
@@ -408,6 +405,41 @@ function normalizeMeta(meta = {}, filters = INITIAL_FILTERS) {
 
 function createEmptyMeta() {
   return normalizeMeta()
+}
+
+function normalizeSummary(summary = {}, orders = []) {
+  const fallback = orders.reduce(
+    (acc, order) => {
+      if (order.payment_status === "paid") {
+        acc.total_sold += Number(order.total || 0)
+        acc.paid_orders += 1
+      }
+
+      if (order.payment_status === "pending") {
+        acc.pending_amount += Number(order.total || 0)
+      }
+
+      acc.orders_count += 1
+      return acc
+    },
+    createEmptySummary()
+  )
+
+  return {
+    orders_count: Number(summary?.orders_count ?? summary?.orders ?? fallback.orders_count),
+    total_sold: Number(summary?.total_sold ?? fallback.total_sold),
+    paid_orders: Number(summary?.paid_orders ?? fallback.paid_orders),
+    pending_amount: Number(summary?.pending_amount ?? fallback.pending_amount),
+  }
+}
+
+function createEmptySummary() {
+  return {
+    orders_count: 0,
+    total_sold: 0,
+    paid_orders: 0,
+    pending_amount: 0,
+  }
 }
 
 function cleanParams(params) {

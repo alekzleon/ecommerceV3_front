@@ -28,6 +28,14 @@ const accountCards = [
     icon: "🧾",
   },
   {
+    id: "cashback",
+    title: "Cashback",
+    description:
+      "Consulta tu saldo disponible, cashback pendiente y movimientos relacionados con tus pedidos.",
+    to: "/mi-cuenta/cashback",
+    icon: "💰",
+  },
+  {
     id: "credit",
     title: "Crédito",
     description:

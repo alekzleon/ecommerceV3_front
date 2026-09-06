@@ -1,0 +1,327 @@
+.subscription-page {
+  display: grid;
+  gap: 18px;
+}
+
+.subscription-current,
+.subscription-plan {
+  border: 1px solid var(--admin-border);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 18px;
+}
+
+.subscription-current {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.subscription-current span,
+.subscription-plan__head span {
+  color: var(--admin-primary);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.subscription-current h1,
+.subscription-plan h2,
+.subscription-plan h3 {
+  margin: 0;
+  color: #111827;
+  font-weight: 900;
+}
+
+.subscription-current h1 {
+  margin-top: 0.25rem;
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+}
+
+.subscription-current p,
+.subscription-plan p,
+.subscription-plan li {
+  color: #64748b;
+  line-height: 1.55;
+}
+
+.subscription-current p,
+.subscription-plan p {
+  margin: 0.4rem 0 0;
+}
+
+.subscription-current__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+  min-width: min(100%, 460px);
+}
+
+.subscription-current__pill {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.subscription-current__pill span {
+  color: #64748b;
+}
+
+.subscription-current__pill strong {
+  color: #111827;
+  font-size: 0.92rem;
+}
+
+.subscription-cancellation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #e2e8f0;
+  background: transparent;
+  padding: 12px 2px 0;
+}
+
+.subscription-cancellation.is-pending,
+.subscription-cancellation.is-canceled {
+  border-color: #e2e8f0;
+  background: transparent;
+}
+
+.subscription-cancellation strong {
+  display: block;
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.subscription-cancellation p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.subscription-cancellation button {
+  min-height: 34px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #b91c1c;
+  padding: 0 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.subscription-cancellation button:hover {
+  background: #fef2f2;
+}
+
+.subscription-cancellation button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.subscription-plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.subscription-billing-switch {
+  grid-column: 1 / -1;
+  width: max-content;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 4px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 4px;
+}
+
+.subscription-billing-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #64748b;
+  padding: 0 1rem;
+  font-size: 0.84rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.subscription-billing-switch button.is-active {
+  background: var(--admin-primary);
+  color: #ffffff;
+}
+
+.subscription-plan {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.subscription-plan.is-current {
+  border-color: rgba(37, 99, 235, 0.38);
+  box-shadow: 0 20px 46px rgba(37, 99, 235, 0.09);
+}
+
+.subscription-plan__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subscription-plan__head h2 {
+  margin-top: 0.25rem;
+  font-size: 1.35rem;
+}
+
+.subscription-plan__head strong {
+  color: #111827;
+  white-space: nowrap;
+}
+
+.subscription-plan__price {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.subscription-plan__price em {
+  width: max-content;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  padding: 0.35rem 0.62rem;
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.subscription-plan__body {
+  display: grid;
+  gap: 16px;
+  flex: 1;
+}
+
+.subscription-plan h3 {
+  margin-bottom: 0.55rem;
+  font-size: 0.86rem;
+}
+
+.subscription-plan ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.subscription-plan__modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.subscription-plan__modules span,
+.subscription-plan__all-modules,
+.subscription-plan__empty,
+.subscription-plan__footer span {
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 0.35rem 0.62rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.subscription-plan__all-modules {
+  display: inline-flex;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.subscription-plan__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.subscription-plan__footer button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--admin-primary);
+  color: #ffffff;
+  padding: 0 1rem;
+  font-size: 0.84rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.subscription-plan__footer button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.subscription-current--loading span,
+.subscription-current--loading strong,
+.subscription-current--loading p,
+.subscription-plan--loading span,
+.subscription-plan--loading strong,
+.subscription-plan--loading p {
+  display: block;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.subscription-current--loading span,
+.subscription-plan--loading span {
+  width: 100px;
+  height: 12px;
+}
+
+.subscription-current--loading strong,
+.subscription-plan--loading strong {
+  width: 220px;
+  height: 28px;
+}
+
+.subscription-current--loading p,
+.subscription-plan--loading p {
+  width: min(100%, 320px);
+  height: 14px;
+}
+
+@media (max-width: 860px) {
+  .subscription-current {
+    flex-direction: column;
+  }
+
+  .subscription-cancellation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .subscription-current__meta {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .subscription-billing-switch {
+    width: 100%;
+  }
+}

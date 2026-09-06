@@ -1,0 +1,1 @@
+var e=`pending_cart_recover_url`,t=`pending_cart_recover_cart_id`;function n({recoverUrl:n,cartId:r=``}){n&&(localStorage.setItem(e,n),localStorage.setItem(t,r||``))}function r(){let n=localStorage.getItem(e);return n?(localStorage.removeItem(e),localStorage.removeItem(t),n):``}export{r as n,n as r,e as t};

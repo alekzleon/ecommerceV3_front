@@ -14,8 +14,11 @@ import {
   updateCartItem,
 } from "../../services/api/cartService.js"
 import { restoreRecoverableOrderCart } from "../../services/api/checkoutService.js"
+import { getAccountCashback } from "../../services/api/accountService.js"
+import { getPublicShippingSettings } from "../../services/api/settingsService.js"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast.js"
 import { normalizeMediaUrl } from "../../utils/mediaUrl.js"
+import { hasAuthSession } from "../../services/storage/authStorage.js"
 import "./cart.css"
 
 const CART_SUMMARY_STORAGE_KEY = "ecommerce_cart_summary"
@@ -54,10 +57,14 @@ function CartPage() {
   const [processingRemoveSelected, setProcessingRemoveSelected] = useState(false)
   const [itemLoadingMap, setItemLoadingMap] = useState({})
   const [promotionLoadingMap, setPromotionLoadingMap] = useState({})
+  const [accountCashback, setAccountCashback] = useState(null)
   const [cashbackAmount, setCashbackAmount] = useState("")
   const [cashbackLoading, setCashbackLoading] = useState(false)
+  const [cashbackOpen, setCashbackOpen] = useState(false)
   const [couponCode, setCouponCode] = useState("")
   const [couponLoading, setCouponLoading] = useState(false)
+  const [couponOpen, setCouponOpen] = useState(false)
+  const [shippingSettings, setShippingSettings] = useState(null)
   const restoringRecoverableRef = useRef(false)
   const recoveredNoticeShownRef = useRef(false)
 
@@ -99,6 +106,35 @@ function CartPage() {
     return recoverableOrder
   }
 
+  useEffect(() => {
+    loadShippingSettings()
+  }, [])
+
+  async function loadShippingSettings() {
+    try {
+      const response = await getPublicShippingSettings()
+      setShippingSettings(normalizeShippingSettings(response))
+    } catch (error) {
+      console.error("Error al cargar configuración de envío:", error?.response?.data || error)
+      setShippingSettings(null)
+    }
+  }
+
+  const loadAccountCashback = useCallback(async () => {
+    if (!hasAuthSession()) {
+      setAccountCashback(null)
+      return
+    }
+
+    try {
+      const response = await getAccountCashback()
+      setAccountCashback(normalizeAccountCashback(response))
+    } catch (error) {
+      console.error("Error al cargar cashback de cuenta:", error?.response?.data || error)
+      setAccountCashback(null)
+    }
+  }, [])
+
   const shouldTryImplicitRecover = useCallback((payload) => {
     if (hasRecentStripeSuccessReturn()) {
       if (DEBUG_RECOVERABLE_CART) {
@@ -117,8 +153,15 @@ function CartPage() {
   }, [getCartPayload])
 
   const normalizeCart = useCallback((payload) => {
+    const responseData = payload?.data ?? payload ?? {}
     const cartData = getCartPayload(payload)
     const items = Array.isArray(cartData?.items) ? cartData.items : []
+    const loyaltyData =
+      cartData?.loyalty ??
+      cartData?.totals?.loyalty ??
+      responseData?.loyalty ??
+      responseData?.summary?.loyalty ??
+      null
     const promotionsApplied = Array.isArray(
       cartData?.promotions_applied ?? cartData?.promotionsApplied
     )
@@ -270,7 +313,7 @@ function CartPage() {
           cartData?.totals?.total ??
           fallbackTotal
       ),
-      loyalty: normalizeLoyalty(cartData?.loyalty),
+      loyalty: normalizeLoyalty(loyaltyData),
       coupon: normalizeCoupon(cartData?.coupon ?? cartData?.totals?.coupon),
       last_activity_at: cartData?.last_activity_at ?? null,
       promotionsApplied: promotionsApplied.map((promotion) => ({
@@ -397,7 +440,8 @@ function CartPage() {
 
   useEffect(() => {
     fetchCartData()
-  }, [fetchCartData])
+    loadAccountCashback()
+  }, [fetchCartData, loadAccountCashback])
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
@@ -483,7 +527,8 @@ function CartPage() {
   const handleApplyCashback = async (event) => {
     event.preventDefault()
 
-    const amount = Number(cashbackAmount)
+    const maxRedeemable = Number(cart.loyalty?.cashback?.maxRedeemable ?? 0)
+    const amount = Math.min(Number(cashbackAmount), maxRedeemable || Number(cashbackAmount))
 
     if (!amount || amount <= 0) {
       notifyWarning("Ingresa un monto de cashback válido.")
@@ -495,6 +540,7 @@ function CartPage() {
       const response = await applyCartCashback({ amount })
       applyCartResponse(response, { keepSelected: true })
       setCashbackAmount("")
+      await loadAccountCashback()
       notifySuccess(response?.message || "Cashback aplicado correctamente.")
     } catch (error) {
       console.error("Error al aplicar cashback:", error?.response?.data || error)
@@ -512,6 +558,7 @@ function CartPage() {
       const response = await clearCartCashback()
       applyCartResponse(response, { keepSelected: true })
       setCashbackAmount("")
+      await loadAccountCashback()
       notifySuccess(response?.message || "Cashback removido correctamente.")
     } catch (error) {
       console.error("Error al quitar cashback:", error?.response?.data || error)
@@ -922,6 +969,13 @@ function CartPage() {
     }, 0)
   }, [products])
 
+  const shippingEstimate = useMemo(() => {
+    return buildCartShippingProgress(cart, shippingSettings)
+  }, [cart, shippingSettings])
+  const cartEstimatedTotal = useMemo(() => {
+    return Number(cart.total || 0) + Number(shippingEstimate?.amount || 0)
+  }, [cart.total, shippingEstimate])
+
   const allVisibleSelected =
     filteredProducts.length > 0 &&
     filteredProducts.every((product) => selected.includes(product.id))
@@ -1021,6 +1075,13 @@ function CartPage() {
           </div>
         </div>
 
+        {products.length ? (
+          <FreeShippingProgress
+            shipping={shippingEstimate}
+            formatMoney={formatMoney}
+          />
+        ) : null}
+
         {!products.length ? (
           <div className="cart_empty cart_empty--full">
             <h3>Tu carrito está vacío</h3>
@@ -1075,7 +1136,7 @@ function CartPage() {
                           </div>
 
                           <div className="cart_item_image">
-                            <img src={product.image} alt={product.name} />
+                            <img loading="lazy" src={product.image} alt={product.name} />
                           </div>
 
                           <div className="cart_item_main">
@@ -1351,7 +1412,7 @@ function CartPage() {
                             {selectedGiftItem ? (
                               <div className="summary_selected_gift">
                                 {selectedGiftItem.imageUrl ? (
-                                  <img
+                                  <img loading="lazy"
                                     src={normalizeMediaUrl(selectedGiftItem.imageUrl)}
                                     alt={selectedGiftItem.name}
                                   />
@@ -1400,7 +1461,7 @@ function CartPage() {
                                       disabled={selectingGift || clearingGift}
                                     >
                                       {giftItem.imageUrl ? (
-                                        <img
+                                        <img loading="lazy"
                                           src={normalizeMediaUrl(giftItem.imageUrl)}
                                           alt={giftItem.name}
                                         />
@@ -1474,21 +1535,7 @@ function CartPage() {
 
                 <CartLoyaltySummary
                   loyalty={cart.loyalty}
-                  cashbackAmount={cashbackAmount}
-                  cashbackLoading={cashbackLoading}
-                  onCashbackAmountChange={setCashbackAmount}
-                  onApplyCashback={handleApplyCashback}
-                  onClearCashback={handleClearCashback}
-                  formatMoney={formatMoney}
-                />
-
-                <CartCouponBox
-                  coupon={cart.coupon}
-                  couponCode={couponCode}
-                  couponLoading={couponLoading}
-                  onCouponCodeChange={setCouponCode}
-                  onApplyCoupon={handleApplyCoupon}
-                  onClearCoupon={handleClearCoupon}
+                  accountCashback={accountCashback}
                   formatMoney={formatMoney}
                 />
 
@@ -1498,26 +1545,66 @@ function CartPage() {
                     <span>{formatMoney(cart.subtotal)}</span>
                   </div>
 
-                  <div className="summary_row">
-                    <span>Descuento</span>
-                    <span>
-                      {cart.discount > 0
-                        ? `- ${formatMoney(cart.discount)}`
-                        : formatMoney(0)}
-                    </span>
-                  </div>
+                  {Number(cart.discount || 0) > 0 ? (
+                    <div className="summary_row">
+                      <span>Descuento</span>
+                      <span>- {formatMoney(cart.discount)}</span>
+                    </div>
+                  ) : null}
 
-                  <div className="summary_row">
-                    <span>Impuestos</span>
-                    <span>{formatMoney(cart.tax)}</span>
-                  </div>
+                  {Number(cart.tax || 0) > 0 ? (
+                    <div className="summary_row">
+                      <span>Impuestos</span>
+                      <span>{formatMoney(cart.tax)}</span>
+                    </div>
+                  ) : null}
+
+                  {shippingEstimate?.enabled ? (
+                    <div className="summary_row">
+                      <span>{shippingEstimate.label || "Envío"}</span>
+                      <span>{shippingEstimate.amount > 0 ? formatMoney(shippingEstimate.amount) : "Gratis"}</span>
+                    </div>
+                  ) : null}
 
                 </div>
 
                 <div className="summary_total">
-                  <span>Total</span>
-                  <strong>{formatMoney(cart.total)}</strong>
+                  <span>{shippingEstimate?.enabled ? "Total estimado" : "Total"}</span>
+                  <strong>{formatMoney(shippingEstimate?.enabled ? cartEstimatedTotal : cart.total)}</strong>
                 </div>
+
+                <CartCouponBox
+                  coupon={cart.coupon}
+                  couponCode={couponCode}
+                  couponLoading={couponLoading}
+                  isOpen={couponOpen}
+                  onToggle={() => setCouponOpen((current) => !current)}
+                  onCouponCodeChange={setCouponCode}
+                  onApplyCoupon={handleApplyCoupon}
+                  onClearCoupon={handleClearCoupon}
+                  formatMoney={formatMoney}
+                />
+
+                <CartCashbackBox
+                  loyalty={cart.loyalty}
+                  accountCashback={accountCashback}
+                  cashbackAmount={cashbackAmount}
+                  cashbackLoading={cashbackLoading}
+                  isOpen={cashbackOpen}
+                  onToggle={(maxAmount) => {
+                    setCashbackOpen((current) => {
+                      const nextOpen = !current
+                      if (nextOpen && !cashbackAmount) {
+                        setCashbackAmount(String(maxAmount))
+                      }
+                      return nextOpen
+                    })
+                  }}
+                  onCashbackAmountChange={setCashbackAmount}
+                  onApplyCashback={handleApplyCashback}
+                  onClearCashback={handleClearCashback}
+                  formatMoney={formatMoney}
+                />
 
                 <div className="summary_actions">
                   <Link
@@ -1528,7 +1615,7 @@ function CartPage() {
                     onClick={handleCheckoutNavigation}
                     aria-disabled={hasPendingGiftSelection || hasInvalidStockItems}
                   >
-                    Continuar al checkout
+                    Continuar a pago
                   </Link>
 
                   <Link to="/productos" className="btn btn_ghost">
@@ -1544,8 +1631,10 @@ function CartPage() {
       {products.length ? (
         <div className="cart_mobile_bar">
           <div className="cart_mobile_bar_info">
-            <span className="mobile_bar_label">Total</span>
-            <strong className="mobile_bar_total">{formatMoney(cart.total)}</strong>
+            <span className="mobile_bar_label">{shippingEstimate?.enabled ? "Total estimado" : "Total"}</span>
+            <strong className="mobile_bar_total">
+              {formatMoney(shippingEstimate?.enabled ? cartEstimatedTotal : cart.total)}
+            </strong>
           </div>
 
           <Link
@@ -1709,23 +1798,46 @@ function normalizeTaxBreakdown(taxBreakdown) {
 
 function normalizeLoyalty(loyalty) {
   if (!loyalty || typeof loyalty !== "object") return null
+  const firstPurchase = loyalty.first_purchase_discount ?? loyalty.firstPurchaseDiscount ?? {}
+  const cashback = loyalty.cashback ?? {}
+  const earn = cashback.earn ?? {}
 
   return {
     firstPurchaseDiscount: {
-      enabled: Boolean(loyalty.first_purchase_discount?.enabled),
-      eligible: Boolean(loyalty.first_purchase_discount?.eligible),
-      percentage: Number(loyalty.first_purchase_discount?.percentage ?? 0),
-      amount: Number(loyalty.first_purchase_discount?.amount ?? 0),
+      enabled: toBoolean(firstPurchase.enabled),
+      eligible: toBoolean(firstPurchase.eligible),
+      percentage: Number(firstPurchase.percentage ?? 0),
+      amount: Number(firstPurchase.amount ?? 0),
     },
     cashback: {
-      availableBalance: Number(loyalty.cashback?.available_balance ?? 0),
-      maxRedeemable: Number(loyalty.cashback?.max_redeemable ?? 0),
-      appliedAmount: Number(loyalty.cashback?.applied_amount ?? 0),
+      availableBalance: Number(cashback.available_balance ?? cashback.availableBalance ?? 0),
+      maxRedeemable: Number(cashback.max_redeemable ?? cashback.maxRedeemable ?? 0),
+      appliedAmount: Number(cashback.applied_amount ?? cashback.appliedAmount ?? 0),
       earn: {
-        enabled: Boolean(loyalty.cashback?.earn?.enabled),
-        percentage: Number(loyalty.cashback?.earn?.percentage ?? 0),
-        amount: Number(loyalty.cashback?.earn?.amount ?? 0),
+        enabled: toBoolean(earn.enabled),
+        percentage: Number(earn.percentage ?? 0),
+        amount: Number(earn.amount ?? 0),
       },
+    },
+  }
+}
+
+function normalizeAccountCashback(payload) {
+  const data = payload?.data ?? payload ?? {}
+  const settings = data.settings && typeof data.settings === "object" ? data.settings : {}
+  const balance = data.balance && typeof data.balance === "object" ? data.balance : {}
+
+  return {
+    currency: String(data.currency || "MXN").toUpperCase(),
+    settings: {
+      cashbackEnabled: toBoolean(settings.cashback_enabled ?? settings.cashbackEnabled),
+      earnPercentage: Number(settings.cashback_earn_percentage ?? settings.cashbackEarnPercentage ?? 0),
+      redeemEnabled: toBoolean(settings.cashback_redeem_enabled ?? settings.cashbackRedeemEnabled),
+      maxRedeemPercentage: Number(settings.cashback_max_redeem_percentage ?? settings.cashbackMaxRedeemPercentage ?? 0),
+    },
+    balance: {
+      available: Number(balance.available ?? 0),
+      pending: Number(balance.pending ?? 0),
     },
   }
 }
@@ -1764,6 +1876,8 @@ function CartCouponBox({
   coupon,
   couponCode,
   couponLoading,
+  isOpen,
+  onToggle,
   onCouponCodeChange,
   onApplyCoupon,
   onClearCoupon,
@@ -1771,18 +1885,11 @@ function CartCouponBox({
 }) {
   return (
     <div className={`summary_coupon ${coupon ? "has-coupon" : ""} ${coupon?.is_valid === false ? "is-invalid" : ""}`}>
-      <div className="summary_coupon_head">
-        <i className="bi bi-ticket-perforated" aria-hidden="true" />
-        <div>
-          <strong>Cupón</strong>
-          <span>{coupon ? coupon.message || "Cupón aplicado al carrito" : "Agrega un código promocional"}</span>
-        </div>
-      </div>
-
       {coupon ? (
         <div className="summary_coupon_applied">
           <div>
             <strong>{coupon.code}</strong>
+            <span>{coupon.message || coupon.name || "Cupón aplicado al carrito"}</span>
             {coupon.name ? <span>{coupon.name}</span> : null}
           </div>
           <div className="summary_coupon_amount">
@@ -1799,43 +1906,161 @@ function CartCouponBox({
           </button>
         </div>
       ) : (
-        <form className="summary_coupon_form" onSubmit={onApplyCoupon}>
-          <input
-            type="text"
-            value={couponCode}
-            onChange={(event) => onCouponCodeChange(event.target.value.toUpperCase())}
-            placeholder="VERANO10"
-            disabled={couponLoading}
-          />
-          <button type="submit" disabled={couponLoading}>
-            {couponLoading ? "Aplicando..." : "Aplicar"}
+        <>
+          <button
+            type="button"
+            className="summary_coupon_toggle"
+            onClick={onToggle}
+            aria-expanded={isOpen}
+          >
+            <i className="bi bi-ticket-perforated" aria-hidden="true" />
+            Aplicar cupón
           </button>
-        </form>
+
+          {isOpen ? (
+            <form className="summary_coupon_form" onSubmit={onApplyCoupon}>
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(event) => onCouponCodeChange(event.target.value.toUpperCase())}
+                placeholder="VERANO10"
+                disabled={couponLoading}
+                autoFocus
+              />
+              <button type="submit" disabled={couponLoading}>
+                {couponLoading ? "Aplicando..." : "Aplicar"}
+              </button>
+            </form>
+          ) : null}
+        </>
       )}
+    </div>
+  )
+}
+
+function CartCashbackBox({
+  loyalty,
+  accountCashback,
+  cashbackAmount,
+  cashbackLoading,
+  isOpen,
+  onToggle,
+  onCashbackAmountChange,
+  onApplyCashback,
+  onClearCashback,
+  formatMoney,
+}) {
+  const cartCashback = loyalty?.cashback ?? {}
+  const accountSettings = accountCashback?.settings
+  const accountBalance = accountCashback?.balance
+  const availableBalance = Number(accountBalance?.available ?? cartCashback?.availableBalance ?? 0)
+  const maxRedeemable = Number(cartCashback?.maxRedeemable ?? 0)
+  const appliedAmount = Number(cartCashback?.appliedAmount ?? 0)
+  const canShowCashback =
+    accountSettings?.cashbackEnabled === true &&
+    accountSettings?.redeemEnabled === true &&
+    availableBalance > 0 &&
+    maxRedeemable > 0
+  const canRender = canShowCashback || appliedAmount > 0
+  const cashbackInputMax = Math.min(availableBalance, maxRedeemable)
+
+  if (!canRender) return null
+
+  return (
+    <div className={`summary_coupon summary_cashback ${appliedAmount > 0 ? "has-coupon" : ""}`}>
+      {appliedAmount > 0 ? (
+        <div className="summary_coupon_applied">
+          <div>
+            <strong>Cashback aplicado</strong>
+            <span>Disponible: {formatMoney(availableBalance)}</span>
+          </div>
+          <div className="summary_coupon_amount">
+            <strong>-{formatMoney(appliedAmount)}</strong>
+            {maxRedeemable > 0 ? <span>Máximo: {formatMoney(maxRedeemable)}</span> : null}
+          </div>
+          <button
+            type="button"
+            className="summary_coupon_clear"
+            onClick={onClearCashback}
+            disabled={cashbackLoading}
+          >
+            {cashbackLoading ? "Quitando..." : "Quitar"}
+          </button>
+        </div>
+      ) : null}
+
+      {canShowCashback ? (
+        <>
+          <button
+            type="button"
+            className="summary_coupon_toggle"
+            onClick={() => onToggle(cashbackInputMax)}
+            aria-expanded={isOpen}
+          >
+            <i className="bi bi-wallet2" aria-hidden="true" />
+            Usar cashback
+          </button>
+
+          {isOpen ? (
+            <form className="summary_coupon_form summary_cashback_form_inline" onSubmit={onApplyCashback}>
+              <div className="summary_cashback_limits">
+                <span>Disponible: {formatMoney(availableBalance)}</span>
+                <span>Máximo aplicable: {formatMoney(cashbackInputMax)}</span>
+              </div>
+              <input
+                type="number"
+                min="0"
+                max={cashbackInputMax}
+                step="0.01"
+                value={cashbackAmount}
+                onChange={(event) => {
+                  const value = event.target.value
+                  const numericValue = Number(value)
+                  onCashbackAmountChange(
+                    numericValue > cashbackInputMax ? String(cashbackInputMax) : value
+                  )
+                }}
+                placeholder={String(cashbackInputMax)}
+                disabled={cashbackLoading}
+                autoFocus
+              />
+              <button type="submit" disabled={cashbackLoading}>
+                {cashbackLoading ? "Aplicando..." : "Aplicar"}
+              </button>
+            </form>
+          ) : null}
+        </>
+      ) : null}
     </div>
   )
 }
 
 function CartLoyaltySummary({
   loyalty,
-  cashbackAmount,
-  cashbackLoading,
-  onCashbackAmountChange,
-  onApplyCashback,
-  onClearCashback,
+  accountCashback,
   formatMoney,
 }) {
-  if (!loyalty) return null
-
-  const firstPurchase = loyalty.firstPurchaseDiscount
-  const cashback = loyalty.cashback
-  const canRedeem = cashback.availableBalance > 0 && cashback.maxRedeemable > 0
-
+  const firstPurchase = loyalty?.firstPurchaseDiscount ?? {}
+  const cartCashback = loyalty?.cashback ?? {}
+  const accountSettings = accountCashback?.settings
+  const accountBalance = accountCashback?.balance
+  const cashback = {
+    ...cartCashback,
+    availableBalance: Number(accountBalance?.available ?? cartCashback?.availableBalance ?? 0),
+  }
+  const maxRedeemable = Number(cartCashback?.maxRedeemable ?? 0)
+  const appliedAmount = Number(cartCashback?.appliedAmount ?? 0)
+  const hasFirstPurchase = firstPurchase.eligible && firstPurchase.amount > 0
+  const canShowCashback =
+    accountSettings?.cashbackEnabled === true &&
+    accountSettings?.redeemEnabled === true &&
+    cashback.availableBalance > 0 &&
+    maxRedeemable > 0
   if (
-    !firstPurchase?.enabled &&
-    !cashback?.earn?.enabled &&
-    !cashback?.availableBalance &&
-    !cashback?.appliedAmount
+    !hasFirstPurchase &&
+    !cartCashback?.earn?.enabled &&
+    !canShowCashback &&
+    !appliedAmount
   ) {
     return null
   }
@@ -1850,68 +2075,34 @@ function CartLoyaltySummary({
         </div>
       </div>
 
-      {firstPurchase.enabled ? (
+      {hasFirstPurchase ? (
         <div className="summary_loyalty_row">
-          <span>
-            Primera compra {firstPurchase.eligible ? "aplicada" : "no disponible"}
-            {firstPurchase.percentage > 0 ? ` · ${firstPurchase.percentage}%` : ""}
-          </span>
-          <strong>
-            {firstPurchase.amount > 0 ? `- ${formatMoney(firstPurchase.amount)}` : formatMoney(0)}
-          </strong>
+          <span>Primera compra aplicada{firstPurchase.percentage > 0 ? ` · ${firstPurchase.percentage}%` : ""}</span>
+          <strong>- {formatMoney(firstPurchase.amount)}</strong>
         </div>
       ) : null}
 
-      {cashback.earn.enabled ? (
+      {cartCashback?.earn?.enabled ? (
         <div className="summary_loyalty_row">
-          <span>Cashback a ganar · {cashback.earn.percentage}%</span>
-          <strong>{formatMoney(cashback.earn.amount)}</strong>
+          <span>Cashback a ganar · {cartCashback.earn.percentage}%</span>
+          <strong>{formatMoney(cartCashback.earn.amount)}</strong>
         </div>
       ) : null}
 
-      <div className="summary_loyalty_row">
-        <span>Cashback disponible</span>
-        <strong>{formatMoney(cashback.availableBalance)}</strong>
-      </div>
+      {canShowCashback || appliedAmount > 0 ? (
+        <div className="summary_loyalty_row">
+          <span>Cashback disponible</span>
+          <strong>{formatMoney(cashback.availableBalance)}</strong>
+        </div>
+      ) : null}
 
-      {cashback.appliedAmount > 0 ? (
+      {appliedAmount > 0 ? (
         <div className="summary_loyalty_row is-applied">
           <span>Cashback aplicado</span>
-          <strong>- {formatMoney(cashback.appliedAmount)}</strong>
+          <strong>- {formatMoney(appliedAmount)}</strong>
         </div>
       ) : null}
 
-      {canRedeem ? (
-        <form className="summary_cashback_form" onSubmit={onApplyCashback}>
-          <label>
-            <span>Usar cashback</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={cashbackAmount}
-              onChange={(event) => onCashbackAmountChange(event.target.value)}
-              placeholder={String(Math.min(cashback.availableBalance, cashback.maxRedeemable))}
-              disabled={cashbackLoading}
-            />
-          </label>
-
-          <button type="submit" className="btn btn_secondary" disabled={cashbackLoading}>
-            {cashbackLoading ? "Aplicando..." : "Aplicar"}
-          </button>
-
-          {cashback.appliedAmount > 0 ? (
-            <button
-              type="button"
-              className="btn btn_ghost"
-              onClick={onClearCashback}
-              disabled={cashbackLoading}
-            >
-              Quitar
-            </button>
-          ) : null}
-        </form>
-      ) : null}
     </div>
   )
 }
@@ -2112,6 +2303,90 @@ function buildNextScaleMessage(nextScale, currentQuantity) {
   return `Agrega ${missingQuantity} pza(s) más para ${formatCartScaleDiscount(
     nextScale.discount_percentage
   )}.`
+}
+
+function FreeShippingProgress({ shipping, formatMoney }) {
+  if (!shipping?.enabled || !shipping.free_shipping_minimum_enabled) return null
+
+  const minimum = Number(shipping.free_shipping_minimum || 0)
+  if (minimum <= 0) return null
+
+  const remaining = Math.max(Number(shipping.remaining_for_free_shipping || 0), 0)
+  const qualifyingAmount = Math.max(Number(shipping.qualifying_amount || 0), 0)
+  const progress = Math.max(0, Math.min(100, (qualifyingAmount / minimum) * 100))
+  const isFree = remaining <= 0
+
+  return (
+    <div className={`summary_shipping_progress ${isFree ? "is-complete" : ""}`}>
+      <div className="summary_shipping_progress_head">
+        <strong>{isFree ? "Alcanzaste el mínimo para envío gratis" : `Te falta ${formatMoney(remaining)} para envío gratis`}</strong>
+        <span>{formatMoney(qualifyingAmount)} / {formatMoney(minimum)}</span>
+      </div>
+      <div className="summary_shipping_progress_track">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p>
+        {isFree
+          ? "El envío gratis se aplicará al continuar al checkout."
+          : "El mínimo se calcula antes de sumar el envío."}
+      </p>
+    </div>
+  )
+}
+
+function buildCartShippingProgress(cart, shippingSettings) {
+  if (!shippingSettings?.enabled) {
+    return {
+      ...(shippingSettings || {}),
+      enabled: false,
+      amount: 0,
+      is_free: true,
+      qualifying_amount: 0,
+      remaining_for_free_shipping: 0,
+    }
+  }
+
+  const qualifyingAmount = Math.max(Number(cart.subtotal || 0) - Number(cart.discount || 0), 0)
+  const minimum = Number(shippingSettings.free_shipping_minimum || 0)
+  const hasFreeMinimum = toBoolean(shippingSettings.free_shipping_minimum_enabled) && minimum > 0
+  const remaining = hasFreeMinimum ? Math.max(minimum - qualifyingAmount, 0) : 0
+  const isFree = Number(shippingSettings.default_cost || 0) <= 0 || (hasFreeMinimum && remaining <= 0)
+  const amount = isFree ? 0 : Number(shippingSettings.default_cost || 0)
+
+  return {
+    ...shippingSettings,
+    amount,
+    is_free: isFree,
+    qualifying_amount: qualifyingAmount,
+    remaining_for_free_shipping: remaining,
+  }
+}
+
+function normalizeShippingSettings(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  const value = data.value || data
+
+  return {
+    enabled: toBoolean(value.enabled),
+    label: value.label || "Envío estándar",
+    default_cost: Number(value.default_cost ?? value.defaultCost ?? 0),
+    free_shipping_minimum_enabled: toBoolean(
+      value.free_shipping_minimum_enabled ?? value.freeShippingMinimumEnabled
+    ),
+    free_shipping_minimum: Number(
+      value.free_shipping_minimum ?? value.freeShippingMinimum ?? 0
+    ),
+  }
+}
+
+function toBoolean(value) {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value === 1
+  if (typeof value === "string") {
+    return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase())
+  }
+
+  return false
 }
 
 export default CartPage

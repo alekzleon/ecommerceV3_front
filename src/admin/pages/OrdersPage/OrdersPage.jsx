@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import AdminCard from "../../components/AdminCard/AdminCard"
 import AdminSidePanel from "../../../components/AdminSidePanel/AdminSidePanel"
 import {
@@ -40,6 +40,7 @@ const SORT_OPTIONS = [
 function OrdersPage() {
   const [orders, setOrders] = useState([])
   const [meta, setMeta] = useState(createEmptyMeta())
+  const [summary, setSummary] = useState(createEmptySummary())
   const [filters, setFilters] = useState(INITIAL_FILTERS)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -47,30 +48,21 @@ function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [panelOpen, setPanelOpen] = useState(false)
 
-  const summary = useMemo(() => {
-    return orders.reduce(
-      (acc, order) => {
-        acc.total += Number(order.total || 0)
-        if (order.payment_status === "paid") acc.paid += 1
-        if (order.payment_status === "pending") acc.pending += 1
-        if (order.payment_status === "failed") acc.failed += 1
-        return acc
-      },
-      { total: 0, paid: 0, pending: 0, failed: 0 }
-    )
-  }, [orders])
-
   const loadOrders = useCallback(async (nextFilters = INITIAL_FILTERS) => {
     try {
       setLoading(true)
       const response = await getAdminOrders(cleanParams(nextFilters))
-      setOrders(normalizeOrders(response?.data))
+      const nextOrders = normalizeOrders(response?.data)
+
+      setOrders(nextOrders)
       setMeta(normalizeMeta(response?.meta, nextFilters))
+      setSummary(normalizeSummary(response?.summary, nextOrders))
     } catch (error) {
       console.error("Error al cargar pedidos:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible cargar los pedidos.")
       setOrders([])
       setMeta(createEmptyMeta())
+      setSummary(createEmptySummary())
     } finally {
       setLoading(false)
     }
@@ -174,19 +166,19 @@ function OrdersPage() {
           <section className="orders-page__summary" aria-label="Resumen de pedidos">
             <div>
               <span>Total vendido</span>
-              <strong>{formatMoney(summary.total)}</strong>
+              <strong>{formatMoney(summary.total_sold)}</strong>
             </div>
             <div>
-              <span>Pagados</span>
-              <strong>{summary.paid}</strong>
+              <span>Pedidos pagados</span>
+              <strong>{summary.paid_orders}</strong>
             </div>
             <div>
-              <span>Pendientes</span>
-              <strong>{summary.pending}</strong>
+              <span>Pendiente</span>
+              <strong>{formatMoney(summary.pending_amount)}</strong>
             </div>
             <div>
               <span>Fallidos</span>
-              <strong>{summary.failed}</strong>
+              <strong>{summary.failed_orders}</strong>
             </div>
           </section>
 
@@ -440,7 +432,7 @@ function OrderDetail({ order, saving, onCancelOrder }) {
             order.items.map((item) => (
               <article key={item.id} className="orders-panel__item">
                 <div className="orders-panel__item-media">
-                  {item.image ? <img src={normalizeMediaUrl(item.image)} alt={item.name} /> : <i className="bi bi-box-seam" aria-hidden="true" />}
+                  {item.image ? <img loading="lazy" src={normalizeMediaUrl(item.image)} alt={item.name} /> : <i className="bi bi-box-seam" aria-hidden="true" />}
                 </div>
                 <div className="orders-panel__item-info">
                   <strong>{item.name}</strong>
@@ -495,7 +487,7 @@ function OrderDetail({ order, saving, onCancelOrder }) {
         >
           Cancelar pedido
         </button>
-        {order.status === "paid" ? <span>Los pedidos pagados no se cancelan desde este endpoint.</span> : null}
+        {order.status === "paid" ? <span>Los pedidos pagados no se pueden cancelar, comunícate con el cliente.</span> : null}
       </div>
     </div>
   )
@@ -603,6 +595,47 @@ function normalizeMeta(meta = {}, filters = INITIAL_FILTERS) {
 
 function createEmptyMeta() {
   return normalizeMeta()
+}
+
+function normalizeSummary(summary = {}, orders = []) {
+  const fallback = orders.reduce(
+    (acc, order) => {
+      if (order.payment_status === "paid") {
+        acc.total_sold += Number(order.total || 0)
+        acc.paid_orders += 1
+      }
+
+      if (order.payment_status === "pending") {
+        acc.pending_amount += Number(order.total || 0)
+      }
+
+      if (order.payment_status === "failed") {
+        acc.failed_orders += 1
+      }
+
+      acc.orders_count += 1
+      return acc
+    },
+    createEmptySummary()
+  )
+
+  return {
+    orders_count: Number(summary?.orders_count ?? summary?.orders ?? fallback.orders_count),
+    total_sold: Number(summary?.total_sold ?? fallback.total_sold),
+    paid_orders: Number(summary?.paid_orders ?? fallback.paid_orders),
+    pending_amount: Number(summary?.pending_amount ?? fallback.pending_amount),
+    failed_orders: Number(summary?.failed_orders ?? fallback.failed_orders),
+  }
+}
+
+function createEmptySummary() {
+  return {
+    orders_count: 0,
+    total_sold: 0,
+    paid_orders: 0,
+    pending_amount: 0,
+    failed_orders: 0,
+  }
 }
 
 function cleanParams(params) {

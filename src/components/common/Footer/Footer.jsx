@@ -297,7 +297,7 @@ function Footer() {
 
                 {logoUrl ? (
                   <div style={{ marginTop: "24px" }}>
-                    <img
+                    <img loading="lazy"
                       src={logoUrl}
                       alt={brandName}
                       style={{ maxWidth: "220px", width: "100%", height: "auto" }}
@@ -498,7 +498,7 @@ function HomeBenefitCard({ benefit, canEdit, onSave }) {
     <article className={`footer_benefit ${editing ? "is-editing" : ""}`}>
       <span className="footer_benefit_icon" aria-hidden="true">
         {benefit.icon_url && !draft.remove_icon ? (
-          <img src={benefit.icon_url} alt="" />
+          <img loading="lazy" src={benefit.icon_url} alt="" />
         ) : (
           <i className={`bi ${benefit.fallbackIcon}`} />
         )}

@@ -5,6 +5,11 @@ export function normalizeMediaUrl(value) {
 
   if (!rawValue) return ""
   if (rawValue.startsWith("blob:") || rawValue.startsWith("data:")) return rawValue
+  if (/^https?:\/\//i.test(rawValue)) return rawValue
+
+  const tenantAssetUrl = buildTenantAssetUrl(rawValue)
+
+  if (tenantAssetUrl) return tenantAssetUrl
 
   const mediaBaseUrl = getMediaBaseUrl()
 
@@ -20,6 +25,39 @@ export function normalizeMediaUrl(value) {
   } catch {
     return rawValue
   }
+}
+
+function buildTenantAssetUrl(value) {
+  const tenantHost = getTenantHost()
+  const apiBaseUrl = getApiBaseUrl()
+
+  if (!tenantHost || !apiBaseUrl) return ""
+
+  const [pathname = "", suffix = ""] = splitPathSuffix(value)
+  let cleanPath = normalizePath(pathname)
+
+  if (!cleanPath) return ""
+
+  if (cleanPath.startsWith(STORAGE_PREFIX)) {
+    cleanPath = cleanPath.slice(STORAGE_PREFIX.length)
+  }
+
+  const separator = suffix.startsWith("?") ? "&" : "?"
+
+  return `${apiBaseUrl}/tenant-assets/${cleanPath}${suffix}${separator}tenant_host=${encodeURIComponent(tenantHost)}`
+}
+
+function getTenantHost() {
+  if (typeof window === "undefined") return ""
+
+  return window.location.hostname
+}
+
+function getApiBaseUrl() {
+  return String(import.meta.env.VITE_API_URL || "")
+    .replace(/\/api\/v1\/?$/, "")
+    .replace(/\/+$/, "")
+    .concat("/api/v1")
 }
 
 function getMediaBaseUrl() {

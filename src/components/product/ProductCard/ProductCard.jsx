@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom"
 import { addCartItem } from "../../../services/api/cartService"
 import { toggleAccountFavorite } from "../../../services/api/accountService"
 import { useAuth } from "../../../context/AuthContext"
+import { useSettings } from "../../../context/SettingsContext"
 import { notifySuccess, notifyError } from "../../../utils/toast"
 import { trackMetaAddToCart } from "../../../utils/metaPixel"
 import WishlistModal from "../../wishlist/WishlistModal"
@@ -20,6 +21,7 @@ function ProductCard({ product, onFavoriteChange }) {
 
   const navigate = useNavigate()
   const { isAuthenticated, sessionReady } = useAuth()
+  const { settings } = useSettings()
 
   const productSlug = product?.slug || ""
   const productImage =
@@ -40,7 +42,28 @@ function ProductCard({ product, onFavoriteChange }) {
   const productBadges = Array.isArray(product?.badges) ? product.badges : []
   const productPromotionMessage = product?.promotionMessage || ""
   const productPriceInfo = product?.priceInfo || product?.price_info || {}
-  const canShowPrices = sessionReady && isAuthenticated
+  const pricingVisibility = product?.pricing_visibility || {}
+  const storefrontAccessRules = settings?.storefront?.access_rules || {}
+  const canViewPrice = isAuthenticated || resolvePricingPermission(
+    pricingVisibility,
+    storefrontAccessRules,
+    "can_view_price",
+    "hide_prices_for_guests"
+  )
+  const canPurchase = isAuthenticated || resolvePricingPermission(
+    pricingVisibility,
+    storefrontAccessRules,
+    "can_purchase",
+    "requires_login_to_purchase"
+  )
+  const priceVisibilityReason =
+    pricingVisibility.price_visibility_reason ||
+    storefrontAccessRules.price_visibility_reason ||
+    resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, "hide_prices_for_guests")
+  const purchaseBlockReason =
+    pricingVisibility.purchase_block_reason ||
+    storefrontAccessRules.purchase_block_reason ||
+    resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, "requires_login_to_purchase")
   const hasAvailablePrice =
     productPrice > 0 && productPriceInfo.source !== PRICE_UNAVAILABLE_SOURCE
 
@@ -69,7 +92,7 @@ function ProductCard({ product, onFavoriteChange }) {
   }
 
   const handleAddToCart = async () => {
-    if (!product?.id || addingToCart || !isAuthenticated) {
+    if (!product?.id || addingToCart || !canPurchase) {
       return
     }
 
@@ -225,7 +248,7 @@ function ProductCard({ product, onFavoriteChange }) {
           <span className="product-card__sold">{productSold}</span>
         </div>
 
-        {canShowPrices && hasAvailablePrice ? (
+        {canViewPrice && hasAvailablePrice ? (
           <>
             {productOldPrice > productPrice ? (
               <div className="product-card__old-price">
@@ -242,7 +265,7 @@ function ProductCard({ product, onFavoriteChange }) {
           </>
         ) : (
           <div className="product-card__price-login">
-            {canShowPrices ? "Precio no disponible" : "Inicia sesión para ver precios"}
+            {getPriceUnavailableMessage(canViewPrice, priceVisibilityReason)}
           </div>
         )}
 
@@ -264,7 +287,7 @@ function ProductCard({ product, onFavoriteChange }) {
           >
             Cargando...
           </button>
-        ) : isAuthenticated ? (
+        ) : canPurchase ? (
           <button
             type="button"
             className="product-card__add-to-cart"
@@ -284,8 +307,9 @@ function ProductCard({ product, onFavoriteChange }) {
             type="button"
             className="product-card__login-required"
             onClick={handleGoToLogin}
+            disabled={purchaseBlockReason !== "login_required"}
           >
-            Inicia sesión para comprar
+            {getPurchaseBlockedMessage(purchaseBlockReason)}
           </button>
         )}
       </div>
@@ -297,6 +321,37 @@ function ProductCard({ product, onFavoriteChange }) {
       />
     </article>
   )
+}
+
+function resolvePricingPermission(pricingVisibility, storefrontAccessRules, permissionKey, fallbackRuleKey) {
+  if (pricingVisibility?.[permissionKey] !== undefined) {
+    return Boolean(pricingVisibility[permissionKey])
+  }
+
+  if (storefrontAccessRules?.[permissionKey] !== undefined) {
+    return Boolean(storefrontAccessRules[permissionKey])
+  }
+
+  return !Boolean(pricingVisibility?.[fallbackRuleKey] ?? storefrontAccessRules?.[fallbackRuleKey])
+}
+
+function resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, ruleKey) {
+  return Boolean(pricingVisibility?.[ruleKey] ?? storefrontAccessRules?.[ruleKey])
+    ? "login_required"
+    : null
+}
+
+function getPriceUnavailableMessage(canViewPrice, reason) {
+  if (canViewPrice) return "Precio no disponible"
+  if (reason === "login_required") return "Inicia sesión para ver precios"
+
+  return "Precio no disponible"
+}
+
+function getPurchaseBlockedMessage(reason) {
+  if (reason === "login_required") return "Inicia sesión para comprar"
+
+  return "No disponible para compra"
 }
 
 function formatStockMessage(status) {

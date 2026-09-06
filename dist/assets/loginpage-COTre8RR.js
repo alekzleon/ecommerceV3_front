@@ -1,0 +1,1 @@
+var e=`/assets/login-business-DevF9GZ6.webp`;export{e as t};

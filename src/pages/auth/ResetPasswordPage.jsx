@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { useSettings } from "../../context/SettingsContext"
 import { resetPasswordRequest } from "../../services/api/authService"
-import loginBusiness from "../../assets/images/auth/login-business.png"
+import loginBusiness from "../../assets/images/auth/login-business.webp"
 import "./loginpage.css"
 
 const EMPTY_FORM = {
@@ -84,7 +84,7 @@ function ResetPasswordPage() {
   return (
     <section className="login-page">
       <div className="login-page__content">
-        <img
+        <img loading="lazy"
           src={loginBusiness}
           alt=""
           className="login-page__watermark"
@@ -94,7 +94,7 @@ function ResetPasswordPage() {
         <nav className="login-page__nav login-page__nav--center" aria-label="Navegación de restablecimiento">
           <Link to="/" className="login-page__brand" aria-label="Ir al inicio">
             {logoUrl ? (
-              <img src={logoUrl} alt={brandName} className="login-page__logo" />
+              <img loading="lazy" src={logoUrl} alt={brandName} className="login-page__logo" />
             ) : (
               <span className="login-page__brand-name">{brandName}</span>
             )}

@@ -5,14 +5,14 @@ import "./AdminSidebar.css"
 function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
   const { brandName, logoUrl } = useSettings()
   const brandInitial = brandName?.charAt(0)?.toUpperCase() || "T"
-  const visibleMenu = addDesignMenuItem(menu)
+  const visibleMenu = addStorefrontAdminMenuItems(menu)
 
   return (
     <aside className={`admin-sidebar ${isOpen ? "admin-sidebar--open" : ""}`}>
       <div className="admin-sidebar__top">
         <div className="admin-sidebar__brand">
           <div className="admin-sidebar__brand-logo">
-            {logoUrl ? <img src={logoUrl} alt={brandName} /> : brandInitial}
+            {logoUrl ? <img loading="lazy" src={logoUrl} alt={brandName} /> : brandInitial}
           </div>
 
           <div className="admin-sidebar__brand-copy">
@@ -27,7 +27,7 @@ function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
           aria-label="Cerrar menú"
           onClick={onClose}
         >
-          ✕
+          <i className="bi bi-layout-sidebar-inset" aria-hidden="true" />
         </button>
       </div>
 
@@ -91,25 +91,73 @@ function SidebarGroupLinks({ group, onClose }) {
   )
 }
 
-function addDesignMenuItem(menu) {
-  return menu.map((group) => {
-    const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
-    const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
+function addStorefrontAdminMenuItems(menu) {
+  const subscriptionItem = buildSubscriptionMenuItem()
+  const sidebarMenu = menu
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.name !== "banners"),
+    }))
+    .filter((group) => group.items.length > 0)
 
-    if (!hasSettings || hasDesign) return group
+  if (!sidebarMenu.length) {
+    return [
+      {
+        group_key: "account",
+        group_name: "Cuenta",
+        items: [subscriptionItem],
+      },
+    ]
+  }
+
+  const nextMenu = sidebarMenu.map((group) => {
+    const hasSettings = group.items.some((item) => item.name === "configuracion_ecommerce")
+    const hasPayments = group.items.some((item) => item.name === "pagos")
+    const hasDesign = group.items.some((item) => item.name === "disena_ecommerce")
+    const hasDomains = group.items.some((item) => item.name === "dominios_personalizados")
+    const hasSubscription = group.items.some((item) => item.name === "suscripcion")
+
+    if (!hasSettings && !hasDesign && !hasPayments && !hasDomains) return group
 
     const items = []
 
     group.items.forEach((item) => {
       items.push(item)
 
-      if (item.name === "configuracion_ecommerce") {
+      if (item.name === "configuracion_ecommerce" && !hasDesign) {
         items.push({
           ...item,
           name: "disena_ecommerce",
           display_name: "Diseña tu ecommerce",
           front_path: "/admin/design",
         })
+      }
+
+      if (item.name === "configuracion_ecommerce" && !hasPayments) {
+        items.push({
+          ...item,
+          name: "pagos",
+          display_name: "Pagos",
+          front_path: "/admin/payments",
+        })
+      }
+
+      if (item.name === "configuracion_ecommerce" && !hasDomains) {
+        items.push({
+          ...item,
+          name: "dominios_personalizados",
+          display_name: "Dominios",
+          front_path: "/admin/domains",
+        })
+      }
+
+      const isDesignInsertionPoint = item.name === "disena_ecommerce"
+        || (item.name === "configuracion_ecommerce" && !hasDesign && !hasPayments && !hasDomains)
+      const isPaymentsInsertionPoint = item.name === "pagos"
+      const isDomainsInsertionPoint = item.name === "dominios_personalizados"
+
+      if ((isDesignInsertionPoint || isPaymentsInsertionPoint || isDomainsInsertionPoint) && !hasSubscription) {
+        items.push(buildSubscriptionMenuItem(item))
       }
     })
 
@@ -118,42 +166,72 @@ function addDesignMenuItem(menu) {
       items,
     }
   })
+
+  const alreadyHasSubscription = nextMenu.some((group) =>
+    group.items.some((item) => item.name === "suscripcion")
+  )
+
+  if (alreadyHasSubscription) return nextMenu
+
+  return nextMenu.map((group, index) => {
+    if (index !== 0) return group
+
+    return {
+      ...group,
+      items: [
+        ...group.items,
+        subscriptionItem,
+      ],
+    }
+  })
+}
+
+function buildSubscriptionMenuItem(source = {}) {
+  return {
+    ...source,
+    name: "suscripcion",
+    display_name: "Suscripción",
+    front_path: "/admin/subscription",
+  }
 }
 
 function renderSidebarIcon(moduleName) {
   const icons = {
-    dashboard: "bi-house-door-fill",
+    dashboard: "bi-grid",
     sales_channels: "bi-shop-window",
     canales_venta: "bi-shop-window",
-    usuarios: "bi-person-fill",
-    roles: "bi-shield-lock-fill",
-    productos: "bi-tag-fill",
-    categories: "bi-collection-fill",
-    categorias: "bi-collection-fill",
-    families: "bi-diagram-3-fill",
-    familias: "bi-diagram-3-fill",
-    pedidos: "bi-inbox-fill",
-    orders: "bi-inbox-fill",
-    carritos: "bi-cart-fill",
-    carts: "bi-cart-fill",
+    usuarios: "bi-people",
+    roles: "bi-shield-check",
+    productos: "bi-box-seam",
+    categories: "bi-ui-checks-grid",
+    categorias: "bi-ui-checks-grid",
+    families: "bi-diagram-3",
+    familias: "bi-diagram-3",
+    pedidos: "bi-receipt",
+    orders: "bi-receipt",
+    carritos: "bi-cart",
+    carts: "bi-cart",
     clientes: "bi-people-fill",
     customers: "bi-people-fill",
-    credito: "bi-credit-card-2-front-fill",
+    credito: "bi-credit-card-2-front",
     cobranza: "bi-bank2",
     marketing: "bi-bullseye",
-    banners: "bi-image-fill",
+    banners: "bi-image",
     promociones: "bi-percent",
     promotions: "bi-percent",
-    cupones: "bi-ticket-perforated-fill",
-    coupons: "bi-ticket-perforated-fill",
+    cupones: "bi-ticket-perforated",
+    coupons: "bi-ticket-perforated",
     logs: "bi-list-check",
     sincronizacion: "bi-arrow-repeat",
-    configuracion_ecommerce: "bi-gear-fill",
-    disena_ecommerce: "bi-palette-fill",
-    design: "bi-palette-fill",
-    settings: "bi-gear-fill",
-    notificaciones: "bi-bell-fill",
-    notifications: "bi-bell-fill",
+    configuracion_ecommerce: "bi-gear",
+    pagos: "bi-cash-stack",
+    dominios_personalizados: "bi-globe2",
+    disena_ecommerce: "bi-palette",
+    suscripcion: "bi-credit-card",
+    design: "bi-palette",
+    settings: "bi-gear",
+    notificaciones: "bi-bell",
+    notifications: "bi-bell",
   }
 
   return <i className={`bi ${icons[moduleName] || "bi-circle-fill"}`} aria-hidden="true" />

@@ -164,6 +164,12 @@ function ProductsPage() {
           : response?.data || []
         const normalizedProducts = rawProducts.map(normalizeProduct)
 
+        if (import.meta.env.DEV) {
+          console.log({
+            product: rawProducts[0]?.image_url,
+          })
+        }
+
         setProducts(normalizedProducts)
         setSmartSearchInfo(shouldUseSmartSearch ? response?.data?.interpreted || null : null)
         setMeta({
@@ -490,11 +496,6 @@ function EditorialProductCard({ product }) {
 
   const handleAddToCart = async () => {
     if (!product?.id || addingToCart) return
-
-    if (!isAuthenticated) {
-      navigate("/login")
-      return
-    }
 
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")

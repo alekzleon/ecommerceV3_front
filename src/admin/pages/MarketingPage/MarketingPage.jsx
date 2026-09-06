@@ -59,6 +59,7 @@ function MarketingPage() {
   const [activeSection, setActiveSection] = useState(BANNER_SECTIONS[0].value)
   const [banners, setBanners] = useState([])
   const [monthlyPromotions, setMonthlyPromotions] = useState([])
+  const [bannerLimits, setBannerLimits] = useState({})
   const [loadedSections, setLoadedSections] = useState({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -72,6 +73,8 @@ function MarketingPage() {
   const [draggingId, setDraggingId] = useState(null)
   const isMonthlyPromotionsSection = activeSection === MONTHLY_PROMOTIONS_SECTION
   const isBrandBannersSection = activeSection === BRAND_BANNERS_SECTION
+  const activeLimit = isMonthlyPromotionsSection ? null : bannerLimits[activeSection] || null
+  const reachedLimit = Boolean(activeLimit && !activeLimit.is_unlimited && Number(activeLimit.remaining ?? 0) <= 0)
 
   const activeSectionLabel = useMemo(() => {
     return BANNER_SECTIONS.find((item) => item.value === activeSection)?.label || "Banners"
@@ -112,6 +115,7 @@ function MarketingPage() {
         ? await getAdminBrandBanners({ without_pagination: true })
         : await getAdminBanners({ without_pagination: true })
       const nextBanners = normalizeCollectionResponse(response)
+      const limits = normalizeLimitsResponse(response)
       const normalizedBanners = section === BRAND_BANNERS_SECTION
         ? nextBanners.map((banner) => ({
           ...banner,
@@ -127,6 +131,9 @@ function MarketingPage() {
         const otherSections = prev.filter((banner) => getBannerSection(banner) !== section)
         return [...otherSections, ...normalizedBanners.filter((banner) => getBannerSection(banner) === section)]
       })
+      if (limits) {
+        setBannerLimits((prev) => ({ ...prev, [section]: limits }))
+      }
       setLoadedSections((prev) => ({ ...prev, [section]: true }))
     } catch (error) {
       console.error("Error al cargar banners:", error?.response?.data || error)
@@ -174,6 +181,11 @@ function MarketingPage() {
   }, [selectedFilePreviews])
 
   function openCreatePanel() {
+    if (reachedLimit) {
+      notifyWarning(getLimitReachedMessage(activeLimit, isBrandBannersSection))
+      return
+    }
+
     setEditingBannerId(null)
     setForm(EMPTY_FORM)
     setPanelOpen(true)
@@ -351,6 +363,11 @@ function MarketingPage() {
   }
 
   function validateBeforeSubmit() {
+    if (!editingBannerId && reachedLimit) {
+      notifyWarning(getLimitReachedMessage(activeLimit, isBrandBannersSection))
+      return false
+    }
+
     if (isMonthlyPromotionsSection && !form.title.trim()) {
       notifyWarning("Escribe un nombre para identificar el elemento.")
       return false
@@ -368,6 +385,18 @@ function MarketingPage() {
           : isBrandBannersSection
             ? "Selecciona una o varias imágenes/videos."
             : "Selecciona al menos una imagen o video."
+      )
+      return false
+    }
+
+    if (
+      !editingBannerId &&
+      activeLimit &&
+      !activeLimit.is_unlimited &&
+      selectedFiles.length > Number(activeLimit.remaining ?? 0)
+    ) {
+      notifyWarning(
+        `Solo tienes ${Number(activeLimit.remaining ?? 0)} cupo(s) disponible(s) en este plan.`
       )
       return false
     }
@@ -579,7 +608,12 @@ function MarketingPage() {
   }
 
   const rightActions = (
-    <button type="button" className="marketing-button marketing-button--primary" onClick={openCreatePanel}>
+    <button
+      type="button"
+      className="marketing-button marketing-button--primary"
+      onClick={openCreatePanel}
+      disabled={reachedLimit}
+    >
       {isMonthlyPromotionsSection ? "Nueva promoción" : isBrandBannersSection ? "Subir banners" : "Nuevo banner"}
     </button>
   )
@@ -616,7 +650,15 @@ function MarketingPage() {
                   : `${currentItems.length} ${isMonthlyPromotionsSection ? "promoción(es)" : "banner(s)"} registrados`}
               </span>
             </div>
+            {activeLimit ? <BannerLimitBadge limit={activeLimit} /> : null}
           </div>
+
+          {reachedLimit ? (
+            <div className="marketing-page__limit-warning">
+              <strong>Límite alcanzado</strong>
+              <span>{getLimitReachedMessage(activeLimit, isBrandBannersSection)} Actualiza tu plan desde Suscripción para crear más.</span>
+            </div>
+          ) : null}
 
           <div className="marketing-page__table-wrapper">
             <table className="marketing-page__table">
@@ -904,9 +946,9 @@ function MarketingPage() {
                   {selectedFilePreviews.map((preview) => (
                     <div className="marketing-panel__preview" key={preview.url}>
                       {preview.type === "video" ? (
-                        <video src={preview.url} muted playsInline controls />
+                        <video preload="none" src={preview.url} muted playsInline controls />
                       ) : (
-                        <img src={preview.url} alt={preview.name} />
+                        <img loading="lazy" src={preview.url} alt={preview.name} />
                       )}
                       <span>{preview.name}</span>
                     </div>
@@ -1037,6 +1079,28 @@ function BrandBannerInlineInfo({
   )
 }
 
+function BannerLimitBadge({ limit }) {
+  if (!limit) return null
+
+  if (limit.is_unlimited) {
+    return (
+      <div className="marketing-page__limit-badge is-unlimited">
+        <strong>Ilimitado</strong>
+        <span>Plan {limit.plan_key || "-"}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="marketing-page__limit-badge">
+      <strong>{Number(limit.remaining ?? 0)} restantes</strong>
+      <span>
+        {Number(limit.current ?? 0)} de {Number(limit.limit ?? 0)} usados · Plan {limit.plan_key || "-"}
+      </span>
+    </div>
+  )
+}
+
 function BrandBannerInlineDates({ banner, valueGetter, onChange, onSave, onKeyDown, disabled }) {
   return (
     <div className="marketing-page__dates marketing-page__dates--inline">
@@ -1078,9 +1142,9 @@ function BannerPreview({ banner }) {
   return (
     <div className="marketing-page__preview">
       {mediaType === "video" ? (
-        <video src={mediaUrl} muted playsInline controls />
+        <video preload="none" src={mediaUrl} muted playsInline controls />
       ) : (
-        <img src={mediaUrl} alt={getBannerTitle(banner)} />
+        <img loading="lazy" src={mediaUrl} alt={getBannerTitle(banner)} />
       )}
     </div>
   )
@@ -1098,6 +1162,29 @@ function normalizeCollectionResponse(response) {
   if (Array.isArray(payload?.monthlyPromotions)) return payload.monthlyPromotions
 
   return []
+}
+
+function normalizeLimitsResponse(response) {
+  const payload = response?.data ?? response
+  const limits = payload?.limits || response?.limits || null
+
+  if (!limits || typeof limits !== "object") return null
+
+  return {
+    resource: limits.resource || "",
+    current: Number(limits.current ?? 0),
+    limit: limits.limit === null ? null : Number(limits.limit ?? 0),
+    remaining: limits.remaining === null ? null : Number(limits.remaining ?? 0),
+    is_unlimited: Boolean(limits.is_unlimited || limits.limit === null),
+    plan_key: limits.plan_key || "",
+  }
+}
+
+function getLimitReachedMessage(limit, isBrandBannersSection) {
+  const label = isBrandBannersSection ? "banner(s) de marca" : "banner(s) principal(es)"
+  const limitText = limit?.limit ?? 0
+
+  return `Tu plan permite hasta ${limitText} ${label}.`
 }
 
 function getBannerSection(banner) {

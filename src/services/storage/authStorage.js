@@ -2,16 +2,20 @@ const AUTH_TOKEN_KEY = "pf_auth_token"
 const AUTH_USER_KEY = "pf_auth_user"
 
 export function setAuthSession(token, user) {
-  localStorage.setItem(AUTH_TOKEN_KEY, token)
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user))
+  localStorage.setItem(getScopedStorageKey(AUTH_TOKEN_KEY), token)
+  localStorage.setItem(getScopedStorageKey(AUTH_USER_KEY), JSON.stringify(user))
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_USER_KEY)
 }
 
 export function getAuthToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY)
+  return localStorage.getItem(getScopedStorageKey(AUTH_TOKEN_KEY))
+    || localStorage.getItem(AUTH_TOKEN_KEY)
 }
 
 export function getAuthUser() {
-  const raw = localStorage.getItem(AUTH_USER_KEY)
+  const raw = localStorage.getItem(getScopedStorageKey(AUTH_USER_KEY))
+    || localStorage.getItem(AUTH_USER_KEY)
 
   if (!raw) return null
 
@@ -23,10 +27,22 @@ export function getAuthUser() {
 }
 
 export function clearAuthSession() {
+  localStorage.removeItem(getScopedStorageKey(AUTH_TOKEN_KEY))
+  localStorage.removeItem(getScopedStorageKey(AUTH_USER_KEY))
   localStorage.removeItem(AUTH_TOKEN_KEY)
   localStorage.removeItem(AUTH_USER_KEY)
 }
 
 export function hasAuthSession() {
   return !!getAuthToken()
+}
+
+function getScopedStorageKey(key) {
+  return `${key}:${getAuthScope()}`
+}
+
+function getAuthScope() {
+  if (typeof window === "undefined") return "default"
+
+  return window.location.hostname || "default"
 }
