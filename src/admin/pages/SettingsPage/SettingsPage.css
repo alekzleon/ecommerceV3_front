@@ -556,6 +556,11 @@
   min-width: 180px;
 }
 
+.settings-page__toggle-field.is-disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
 .settings-page__toggle-field input {
   position: absolute;
   opacity: 0;

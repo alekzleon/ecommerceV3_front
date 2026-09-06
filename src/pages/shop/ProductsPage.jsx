@@ -497,11 +497,6 @@ function EditorialProductCard({ product }) {
   const handleAddToCart = async () => {
     if (!product?.id || addingToCart) return
 
-    if (!isAuthenticated) {
-      navigate("/login")
-      return
-    }
-
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")
       return

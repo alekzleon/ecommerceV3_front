@@ -5,6 +5,7 @@ import {
   getCheckoutOrder,
   restoreCheckoutOrderCart,
 } from "../../services/api/checkoutService.js"
+import { clearStoredGuestToken } from "../../services/api/cartService.js"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import { trackMetaPurchase } from "../../utils/metaPixel"
 import "./checkout.css"
@@ -50,6 +51,7 @@ function CheckoutResultPage({ type = "success" }) {
             if (confirmedOrder) {
               setOrder(confirmedOrder)
               clearCartSummary()
+              clearStoredGuestToken()
               trackMetaPurchase(confirmedOrder)
             }
 

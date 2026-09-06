@@ -1,0 +1,1 @@
+import{t as e}from"./api-DLYO2C0C.js";async function t(){let{data:t}=await e.get(`/admin/ecommerce-settings/payment-methods`);return t}async function n(t){let{data:n}=await e.patch(`/admin/ecommerce-settings/payment-methods`,t);return n}async function r(){let{data:t}=await e.get(`/ecommerce-settings/payment-methods`);return t}export{r as n,n as r,t};

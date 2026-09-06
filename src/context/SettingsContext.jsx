@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import {
   getPublicContactFaqImage,
   getPublicContactMapUrl,
+  getPublicAccessRules,
   getPublicGeneralLogo,
   getPublicMetaPixel,
   getPublicNavTitle,
@@ -59,6 +60,15 @@ const DEFAULT_SETTINGS = {
     construction: {
       title: "Ecommerce en construcción",
       message: "Estamos preparando la tienda. Vuelve pronto.",
+    },
+    access_rules: {
+      requires_login_to_purchase: false,
+      hide_prices_for_guests: false,
+      is_authenticated: false,
+      can_view_price: true,
+      can_purchase: true,
+      price_visibility_reason: null,
+      purchase_block_reason: null,
     },
     home_template: "classic",
     active_template: "classic",
@@ -187,6 +197,7 @@ export function SettingsProvider({ children }) {
         contactMapUrlResponse,
         metaPixelResponse,
         storefrontResponse,
+        accessRulesResponse,
       ] = await Promise.allSettled([
         getPublicSettings(),
         getPublicNavTitle(),
@@ -195,6 +206,7 @@ export function SettingsProvider({ children }) {
         getPublicContactMapUrl(),
         getPublicMetaPixel(),
         getPublicStorefront(),
+        getPublicAccessRules(),
       ])
       const nextSettings = settingsResponse.status === "fulfilled"
         ? normalizeSettingsResponse(settingsResponse.value)
@@ -217,6 +229,9 @@ export function SettingsProvider({ children }) {
       const storefront = storefrontResponse.status === "fulfilled"
         ? normalizeStorefrontResponse(storefrontResponse.value)
         : DEFAULT_SETTINGS.storefront
+      const accessRules = accessRulesResponse.status === "fulfilled"
+        ? normalizeAccessRulesResponse(accessRulesResponse.value)
+        : storefront.access_rules
       const rawSettingsData = getResponseData(settingsResponse.value)
 
       setSettings({
@@ -228,7 +243,10 @@ export function SettingsProvider({ children }) {
         meta_pixel: metaPixelId,
         meta_pixel_id: metaPixelId,
         logo_url: generalLogo.logo_url || nextSettings.logo_url,
-        storefront: applyStorefrontPreview(storefront),
+        storefront: applyStorefrontPreview({
+          ...storefront,
+          access_rules: accessRules,
+        }),
       })
 
       if (import.meta.env.DEV) {
@@ -446,6 +464,7 @@ function normalizeStorefrontResponse(response) {
     ...DEFAULT_SETTINGS.storefront,
     ...data,
     is_published: Boolean(data.is_published),
+    access_rules: normalizeAccessRulesValue(data.access_rules),
     construction: {
       ...DEFAULT_SETTINGS.storefront.construction,
       ...construction,
@@ -476,6 +495,27 @@ function normalizeStorefrontResponse(response) {
       ...theme,
       buttons: normalizeThemeButtons(theme.buttons),
     },
+  }
+}
+
+function normalizeAccessRulesResponse(response) {
+  const data = response?.data?.data || response?.data || response || {}
+  return normalizeAccessRulesValue(data.value || data.access_rules || data)
+}
+
+function normalizeAccessRulesValue(value = {}) {
+  const rules = value && typeof value === "object" ? value : {}
+
+  return {
+    ...DEFAULT_SETTINGS.storefront.access_rules,
+    ...rules,
+    requires_login_to_purchase: Boolean(rules.requires_login_to_purchase),
+    hide_prices_for_guests: Boolean(rules.hide_prices_for_guests),
+    is_authenticated: Boolean(rules.is_authenticated),
+    can_view_price: rules.can_view_price === undefined ? true : Boolean(rules.can_view_price),
+    can_purchase: rules.can_purchase === undefined ? true : Boolean(rules.can_purchase),
+    price_visibility_reason: rules.price_visibility_reason || null,
+    purchase_block_reason: rules.purchase_block_reason || null,
   }
 }
 

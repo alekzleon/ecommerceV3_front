@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-D-oznMWL.js";import{t}from"./AdminCard-pBdCDETL.js";var n=e();function r(){return(0,n.jsx)(t,{title:`Sincronización`,subtitle:`Procesos de sincronización del sistema.`,children:(0,n.jsx)(`p`,{children:`Este módulo está disponible según permisos del backend.`})})}export{r as default};

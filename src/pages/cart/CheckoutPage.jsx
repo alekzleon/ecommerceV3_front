@@ -38,6 +38,20 @@ const emptyAddressForm = {
   is_default: false,
 }
 
+const emptyGuestCheckoutForm = {
+  name: "",
+  email: "",
+  phone: "",
+  street: "",
+  external_number: "",
+  internal_number: "",
+  neighborhood: "",
+  zip_code: "",
+  city: "",
+  state: "",
+  references: "",
+}
+
 const ADDRESS_PHONE_LENGTH = 10
 const ADDRESS_ZIP_CODE_LENGTH = 5
 
@@ -85,6 +99,7 @@ const DOCUMENT_NOTE_MAX_LENGTH = 1000
 
 function CheckoutPage() {
   const { brandName, logoUrl } = useSettings()
+  const isGuestCheckout = !hasAuthSession()
   const [checkout, setCheckout] = useState(emptyCheckout)
   const [loading, setLoading] = useState(true)
   const [addressPanelOpen, setAddressPanelOpen] = useState(false)
@@ -93,6 +108,7 @@ function CheckoutPage() {
   const [addressSaving, setAddressSaving] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressForm, setAddressForm] = useState(emptyAddressForm)
+  const [guestForm, setGuestForm] = useState(emptyGuestCheckoutForm)
   const [paymentMethods, setPaymentMethods] = useState(null)
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true)
   const [processingPayment, setProcessingPayment] = useState(false)
@@ -330,8 +346,12 @@ function CheckoutPage() {
   }, [checkout])
 
   const selectedAddress = useMemo(() => {
+    if (isGuestCheckout) {
+      return isGuestCheckoutFormValid(guestForm) ? buildGuestAddress(guestForm) : null
+    }
+
     return addresses.find((address) => address.id === selectedAddressId) || null
-  }, [addresses, selectedAddressId])
+  }, [addresses, guestForm, isGuestCheckout, selectedAddressId])
 
   const hasPendingGiftSelection = useMemo(() => {
     return checkout.promotions_applied.some((promotion) => {
@@ -394,7 +414,10 @@ function CheckoutPage() {
     }
 
     if (!selectedAddress) {
-      notifyWarning("Configura una dirección de envío para continuar.")
+      notifyWarning(isGuestCheckout
+        ? "Completa tus datos de invitado para continuar."
+        : "Configura una dirección de envío para continuar."
+      )
       handleOpenAddressPanel()
       return
     }
@@ -412,9 +435,10 @@ function CheckoutPage() {
     try {
       setProcessingPayment(true)
 
-      const validationResponse = await validateCheckout(
-        buildCheckoutPayload(selectedAddress, documentNotes)
-      )
+      const checkoutPayload = isGuestCheckout
+        ? buildGuestCheckoutPayload(guestForm, documentNotes)
+        : buildCheckoutPayload(selectedAddress, documentNotes)
+      const validationResponse = await validateCheckout(checkoutPayload)
       if (DEBUG_RECOVERABLE_CART) {
         console.log("[recoverable-cart][checkout] validate before Stripe response:", validationResponse)
       }
@@ -452,7 +476,7 @@ function CheckoutPage() {
         return
       }
 
-      const orderResponse = await createCheckoutOrder(buildCheckoutPayload(selectedAddress, documentNotes))
+      const orderResponse = await createCheckoutOrder(checkoutPayload)
       const order = orderResponse?.data
 
       if (!order?.id) {
@@ -531,11 +555,28 @@ function CheckoutPage() {
     }))
   }
 
+  function handleGuestFormChange(event) {
+    const { name, value } = event.target
+    const nextValue =
+      name === "phone"
+        ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
+        : name === "zip_code"
+          ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
+          : value
+
+    setGuestForm((prev) => ({
+      ...prev,
+      [name]: nextValue,
+    }))
+  }
+
   function handleDocumentNotesChange(event) {
     setDocumentNotes(event.target.value.slice(0, DOCUMENT_NOTE_MAX_LENGTH))
   }
 
   async function fetchAddresses() {
+    if (isGuestCheckout) return
+
     try {
       setAddressesLoading(true)
       const shippingAddresses = normalizeShippingAddresses(checkout.shipping)
@@ -560,6 +601,8 @@ function CheckoutPage() {
   }
 
   function handleOpenAddressPanel() {
+    if (isGuestCheckout) return
+
     setAddressPanelOpen(true)
     fetchAddresses()
   }
@@ -713,7 +756,14 @@ function CheckoutPage() {
                         <button
                           type="button"
                           className="checkout_address_clear"
-                          onClick={() => setSelectedAddressId(null)}
+                          onClick={() => {
+                            if (isGuestCheckout) {
+                              setGuestForm(emptyGuestCheckoutForm)
+                              return
+                            }
+
+                            setSelectedAddressId(null)
+                          }}
                           aria-label="Quitar dirección seleccionada"
                         >
                           <i className="bi bi-x-lg" aria-hidden="true" />
@@ -731,12 +781,23 @@ function CheckoutPage() {
                   ) : (
                     <>
                       <strong>Dirección pendiente</strong>
-                      <small>Selecciona o agrega una dirección de envío para poder continuar.</small>
+                      <small>
+                        {isGuestCheckout
+                          ? "Completa tus datos de invitado para poder continuar."
+                          : "Selecciona o agrega una dirección de envío para poder continuar."}
+                      </small>
                     </>
                   )}
                 </div>
 
               </div>
+
+              {isGuestCheckout ? (
+                <GuestCheckoutForm
+                  form={guestForm}
+                  onChange={handleGuestFormChange}
+                />
+              ) : null}
 
               {actionableBlockers.length > 0 ? (
                 <div className="checkout_blockers">
@@ -1161,6 +1222,66 @@ function CheckoutPage() {
         </div>
       </AdminSidePanel>
     </div>
+  )
+}
+
+function GuestCheckoutForm({ form, onChange }) {
+  return (
+    <section className="checkout_invoice_card">
+      <div className="checkout_invoice_card_head">
+        <div>
+          <h2>Datos de invitado</h2>
+          <p>Usaremos esta información para envío, pago y notificaciones del pedido.</p>
+        </div>
+      </div>
+
+      <div className="checkout_address_form">
+        <label>
+          <span>Nombre completo</span>
+          <input name="name" value={form.name} onChange={onChange} placeholder="Cliente Invitado" />
+        </label>
+        <label>
+          <span>Correo</span>
+          <input name="email" type="email" value={form.email} onChange={onChange} placeholder="cliente@correo.com" />
+        </label>
+        <label>
+          <span>Teléfono</span>
+          <input name="phone" value={form.phone} onChange={onChange} placeholder="9611234567" inputMode="numeric" maxLength={10} />
+        </label>
+        <label>
+          <span>Calle</span>
+          <input name="street" value={form.street} onChange={onChange} placeholder="Av. Central" />
+        </label>
+        <label>
+          <span>Número exterior</span>
+          <input name="external_number" value={form.external_number} onChange={onChange} placeholder="123" />
+        </label>
+        <label>
+          <span>Número interior</span>
+          <input name="internal_number" value={form.internal_number} onChange={onChange} placeholder="2B" />
+        </label>
+        <label>
+          <span>Colonia</span>
+          <input name="neighborhood" value={form.neighborhood} onChange={onChange} placeholder="Centro" />
+        </label>
+        <label>
+          <span>Código postal</span>
+          <input name="zip_code" value={form.zip_code} onChange={onChange} placeholder="29000" inputMode="numeric" maxLength={5} />
+        </label>
+        <label>
+          <span>Ciudad</span>
+          <input name="city" value={form.city} onChange={onChange} placeholder="Tuxtla" />
+        </label>
+        <label>
+          <span>Estado</span>
+          <input name="state" value={form.state} onChange={onChange} placeholder="Chiapas" />
+        </label>
+        <label className="checkout_address_form_full">
+          <span>Referencias</span>
+          <textarea name="references" value={form.references} onChange={onChange} placeholder="Casa azul" rows="3" />
+        </label>
+      </div>
+    </section>
   )
 }
 
@@ -1891,6 +2012,63 @@ function buildCheckoutPayload(address, documentNotes = "") {
     ...buildCheckoutAddressSelection(address),
     ...(notes ? { document_notes: notes } : {}),
   }
+}
+
+function buildGuestCheckoutPayload(form, documentNotes = "") {
+  const notes = String(documentNotes || "").trim().slice(0, DOCUMENT_NOTE_MAX_LENGTH)
+  const address = buildGuestShippingAddress(form)
+
+  return {
+    guest: {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      shipping_address: address,
+    },
+    ...(notes ? { document_notes: notes } : {}),
+  }
+}
+
+function buildGuestAddress(form) {
+  return {
+    id: "guest",
+    alias: "Dirección de invitado",
+    contact_name: form.name.trim(),
+    phone: form.phone.trim(),
+    ...buildGuestShippingAddress(form),
+    address_line_2: [form.external_number, form.internal_number ? `Int. ${form.internal_number}` : ""]
+      .filter(Boolean)
+      .join(" "),
+  }
+}
+
+function buildGuestShippingAddress(form) {
+  return {
+    contact_name: form.name.trim(),
+    phone: form.phone.trim(),
+    street: form.street.trim(),
+    external_number: form.external_number.trim(),
+    internal_number: form.internal_number.trim(),
+    neighborhood: form.neighborhood.trim(),
+    zip_code: form.zip_code.trim(),
+    city: form.city.trim(),
+    state: form.state.trim(),
+    references: form.references.trim(),
+  }
+}
+
+function isGuestCheckoutFormValid(form) {
+  return Boolean(
+    form.name.trim() &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) &&
+      /^\d{10}$/.test(form.phone) &&
+      form.street.trim() &&
+      form.external_number.trim() &&
+      form.neighborhood.trim() &&
+      /^\d{5}$/.test(form.zip_code) &&
+      form.city.trim() &&
+      form.state.trim()
+  )
 }
 
 function getBlockerMessage(blockers = []) {

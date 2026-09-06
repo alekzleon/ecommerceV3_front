@@ -66,6 +66,11 @@ export async function getPublicStorefront() {
   return data
 }
 
+export async function getPublicAccessRules() {
+  const { data } = await api.get("/ecommerce-settings/access-rules")
+  return data
+}
+
 export async function getPublicHome() {
   const { data } = await api.get("/home")
   return data

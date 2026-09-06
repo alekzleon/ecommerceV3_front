@@ -24,6 +24,7 @@ function OffersPage() {
   const [loading, setLoading] = useState(true)
   const [addingOfferId, setAddingOfferId] = useState(null)
   const [activeOfferIndex, setActiveOfferIndex] = useState(0)
+  const [expandedOfferId, setExpandedOfferId] = useState(null)
   const [meta, setMeta] = useState({
     current_page: 1,
     last_page: 1,
@@ -61,6 +62,7 @@ function OffersPage() {
 
   useEffect(() => {
     setActiveOfferIndex(0)
+    setExpandedOfferId(null)
   }, [page])
 
   const handlePageChange = (nextPage) => {
@@ -92,6 +94,12 @@ function OffersPage() {
 
   const handleAddOfferToCart = async (offer) => {
     if (!offer?.id || addingOfferId === offer.id) return
+
+    if (hasMultipleOfferProducts(offer)) {
+      setExpandedOfferId((currentId) => currentId === offer.id ? null : offer.id)
+      notifyWarning("Elige un producto de esta promoción para agregarlo al carrito.")
+      return
+    }
 
     if (!isAuthenticated) {
       navigate("/login")
@@ -168,6 +176,8 @@ function OffersPage() {
               <div className="offers-page__grid">
                 {offers.map((offer) => {
                   const isOutOfStock = isOfferOutOfStock(offer)
+                  const hasMultipleProducts = hasMultipleOfferProducts(offer)
+                  const isExpanded = expandedOfferId === offer.id
 
                   return (
                   <article className="offers-page__card" key={offer.id}>
@@ -187,22 +197,36 @@ function OffersPage() {
                         <strong>{offer.typeLabel}</strong>
                       </div>
                       <div className="offers-page__actions">
-                        <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
-                          Ver
-                        </Link>
+                        {hasMultipleProducts ? (
+                          <button
+                            type="button"
+                            className="offers-page__action offers-page__action--secondary"
+                            onClick={() => setExpandedOfferId(isExpanded ? null : offer.id)}
+                            aria-expanded={isExpanded}
+                          >
+                            {isExpanded ? "Ocultar" : "Ver promoción"}
+                          </button>
+                        ) : (
+                          <Link to={getOfferUrl(offer)} className="offers-page__action offers-page__action--secondary">
+                            Ver
+                          </Link>
+                        )}
                         <button
                           type="button"
                           className="offers-page__action offers-page__action--primary"
                           onClick={() => handleAddOfferToCart(offer)}
-                          disabled={addingOfferId === offer.id || isOutOfStock}
+                          disabled={addingOfferId === offer.id || (!hasMultipleProducts && isOutOfStock)}
                         >
                           {addingOfferId === offer.id
                             ? "Agregando..."
+                            : hasMultipleProducts
+                            ? "Elegir producto"
                             : isOutOfStock
                             ? "Producto sin inventario"
                             : "Agregar al carrito"}
                         </button>
                       </div>
+                      {isExpanded ? <OfferProductsList offer={offer} /> : null}
                     </div>
                   </article>
                   )
@@ -264,6 +288,12 @@ function OffersPage() {
 function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange }) {
   const activeOffer = offers[activeIndex] || offers[0]
   const visibleOffers = getVisibleEditorialOffers(offers, activeIndex)
+  const [showProducts, setShowProducts] = useState(false)
+  const hasMultipleProducts = hasMultipleOfferProducts(activeOffer)
+
+  useEffect(() => {
+    setShowProducts(false)
+  }, [activeOffer?.id])
 
   const goToPrevious = () => {
     onActiveIndexChange(activeIndex === 0 ? offers.length - 1 : activeIndex - 1)
@@ -310,12 +340,52 @@ function EditorialOffersShowcase({ offers = [], activeIndex, onActiveIndexChange
 
         <div className="editorial-offers-showcase__info">
           <span>{activeOffer.label}</span>
-          <h1>{activeOffer.productName || activeOffer.title}</h1>
+          <h1>{hasMultipleProducts ? activeOffer.title : activeOffer.productName || activeOffer.title}</h1>
           {activeOffer.price > 0 ? <p>{formatMoney(activeOffer.price)}</p> : null}
           {activeOffer.description ? <small>{activeOffer.description}</small> : null}
-          <Link to={getOfferUrl(activeOffer)}>Ver promoción</Link>
+          {hasMultipleProducts ? (
+            <button
+              type="button"
+              onClick={() => setShowProducts((currentValue) => !currentValue)}
+              aria-expanded={showProducts}
+            >
+              {showProducts ? "Ocultar productos" : "Ver promoción"}
+            </button>
+          ) : (
+            <Link to={getOfferUrl(activeOffer)}>Ver promoción</Link>
+          )}
         </div>
       </div>
+      {showProducts ? <OfferProductsList offer={activeOffer} variant="editorial" /> : null}
+    </div>
+  )
+}
+
+function OfferProductsList({ offer, variant = "default" }) {
+  const products = getOfferSelectableProducts(offer)
+
+  return (
+    <div className={`offers-page__products ${variant === "editorial" ? "offers-page__products--editorial" : ""}`}>
+      <h3>Productos de esta promoción</h3>
+      {products.length ? (
+        <div className="offers-page__products-grid">
+          {products.map((product) => (
+            <Link
+              to={`/producto/${product.slug}`}
+              className="offers-page__product-option"
+              key={product.id || product.slug}
+            >
+              <img loading="lazy" src={product.image} alt={product.name} />
+              <span>
+                <strong>{product.name}</strong>
+                {product.price > 0 ? <small>{formatMoney(product.price)}</small> : null}
+              </span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p>No fue posible cargar los productos de esta promoción.</p>
+      )}
     </div>
   )
 }
@@ -342,30 +412,36 @@ function getVisibleEditorialOffers(offers = [], activeIndex = 0) {
 }
 
 function normalizePromotions(items = []) {
-  return items.map((item) => ({
-    id: item?.id,
-    title: item?.name || "Oferta disponible",
-    slug: item?.slug || "",
-    label: item?.label || formatPromotionType(item?.type),
-    description: item?.description || "",
-    image: normalizePromotionImage(item?.image_url || item?.image_path),
-    productsCount: Number(item?.products_count || 0),
-    typeLabel: formatPromotionType(item?.type),
-    isFavorite: Boolean(item?.is_favorite),
-    productId: getPromotionProductId(item),
-    productName: getPromotionProductName(item),
-    productSlug: getPromotionProductSlug(item),
-    price: getPromotionProductPrice(item),
-    stock: getPromotionProductStock(item),
-    stockStatus: getPromotionProductStockStatus(item),
-    stockMessage: getPromotionProductStockMessage(item),
-    productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
-    products: Array.isArray(item?.products) ? item.products : [],
-  }))
+  return items.map((item) => {
+    const products = normalizePromotionProducts(item)
+    const productsCount = getPromotionProductsCount(item, products)
+    const hasMultipleProducts = productsCount > 1
+
+    return {
+      id: item?.id,
+      title: item?.name || "Oferta disponible",
+      slug: item?.slug || "",
+      label: item?.label || formatPromotionType(item?.type),
+      description: item?.description || "",
+      image: normalizePromotionImage(item?.image_url || item?.image_path),
+      productsCount,
+      typeLabel: formatPromotionType(item?.type),
+      isFavorite: Boolean(item?.is_favorite),
+      productId: hasMultipleProducts ? null : getPromotionProductId(item),
+      productName: hasMultipleProducts ? "" : getPromotionProductName(item),
+      productSlug: hasMultipleProducts ? "" : getPromotionProductSlug(item),
+      price: hasMultipleProducts ? 0 : getPromotionProductPrice(item),
+      stock: hasMultipleProducts ? null : getPromotionProductStock(item),
+      stockStatus: hasMultipleProducts ? "untracked" : getPromotionProductStockStatus(item),
+      stockMessage: hasMultipleProducts ? "" : getPromotionProductStockMessage(item),
+      productIds: Array.isArray(item?.product_ids) ? item.product_ids : [],
+      products,
+    }
+  })
 }
 
 function getOfferUrl(offer) {
-  if (offer?.productSlug) return `/producto/${offer.productSlug}`
+  if (!hasMultipleOfferProducts(offer) && offer?.productSlug) return `/producto/${offer.productSlug}`
 
   const params = new URLSearchParams()
 
@@ -376,6 +452,41 @@ function getOfferUrl(offer) {
   }
 
   return `/productos${params.toString() ? `?${params.toString()}` : ""}`
+}
+
+function hasMultipleOfferProducts(offer = {}) {
+  return Number(offer?.productsCount || 0) > 1 || getOfferSelectableProducts(offer).length > 1
+}
+
+function getOfferSelectableProducts(offer = {}) {
+  return Array.isArray(offer?.products)
+    ? offer.products.filter((product) => product?.slug)
+    : []
+}
+
+function normalizePromotionProducts(item = {}) {
+  const products = Array.isArray(item?.products) ? item.products : []
+
+  return products.map((product) => ({
+    id: product?.id ?? null,
+    name: product?.name || "Producto sin nombre",
+    slug: product?.slug || "",
+    image: normalizePromotionImage(product?.image_url || product?.image_path || product?.image),
+    price: Number(product?.final_price || product?.default_price || product?.price || 0),
+    stock: product?.stock ?? null,
+    stockStatus: product?.stock_status || product?.stockStatus || "untracked",
+    stockMessage: product?.stock_message || product?.stockMessage || "",
+  }))
+}
+
+function getPromotionProductsCount(item = {}, products = []) {
+  const explicitCount = Number(item?.products_count || 0)
+
+  if (explicitCount > 0) return explicitCount
+  if (products.length > 0) return products.length
+  if (getPromotionProductId(item)) return 1
+
+  return 0
 }
 
 function getPromotionProductId(item = {}) {

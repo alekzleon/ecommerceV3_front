@@ -184,6 +184,80 @@
   cursor: not-allowed;
 }
 
+.offers-page__products {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.offers-page__products h3 {
+  margin: 0;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.offers-page__products > p {
+  min-height: 0;
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.offers-page__products-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.offers-page__product-option {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  color: #111827;
+  text-decoration: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.offers-page__product-option:hover {
+  border-color: #13426b;
+  background: #f8fafc;
+}
+
+.offers-page__product-option img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.offers-page__product-option span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.offers-page__product-option strong {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offers-page__product-option small {
+  color: #13426b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .offers-page__empty {
   min-height: 320px;
   display: flex;
@@ -369,7 +443,8 @@
   line-height: 1.45;
 }
 
-.editorial-offers-showcase__info a {
+.editorial-offers-showcase__info a,
+.editorial-offers-showcase__info button {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -382,11 +457,24 @@
   font-weight: 900;
   text-decoration: none;
   padding: 0 1.4rem;
+  cursor: pointer;
 }
 
-.editorial-offers-showcase__info a:hover {
+.editorial-offers-showcase__info a:hover,
+.editorial-offers-showcase__info button:hover {
   background: #111111;
   color: #ffffff;
+}
+
+.offers-page__products--editorial {
+  width: min(1120px, calc(100% - 2rem));
+  margin: 1.25rem auto 0;
+  padding: 0;
+  border: 0;
+}
+
+.offers-page__products--editorial .offers-page__products-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 @media (max-width: 1200px) {
@@ -429,5 +517,9 @@
   .editorial-offers-showcase__info {
     bottom: 1rem;
     width: calc(100% - 2rem);
+  }
+
+  .offers-page__products--editorial .offers-page__products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

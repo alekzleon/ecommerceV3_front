@@ -88,6 +88,15 @@ const EMPTY_FORM = {
     construction_message: "Estamos preparando la tienda. Vuelve pronto.",
     template: "classic",
     available_home_templates: ["classic"],
+    access_rules: {
+      requires_login_to_purchase: false,
+      hide_prices_for_guests: false,
+      is_authenticated: false,
+      can_view_price: true,
+      can_purchase: true,
+      price_visibility_reason: null,
+      purchase_block_reason: null,
+    },
     theme: {
       primary_color: "#111827",
       secondary_color: "#2563eb",
@@ -127,6 +136,12 @@ const SECTIONS = [
     icon: "bi-broadcast",
     title: "Publicación",
     description: "Estado público y mensaje visible cuando la tienda está en construcción.",
+  },
+  {
+    id: "client_session",
+    icon: "bi-person-lock",
+    title: "Sesión Clientes",
+    description: "Acceso de invitados, compras y visibilidad de precios.",
   },
   {
     id: "contact",
@@ -389,6 +404,21 @@ function SettingsPage() {
       return
     }
 
+    if (name.startsWith("storefront.access_rules.")) {
+      const key = name.replace("storefront.access_rules.", "")
+      setForm((prev) => ({
+        ...prev,
+        storefront: {
+          ...prev.storefront,
+          access_rules: {
+            ...prev.storefront.access_rules,
+            [key]: type === "checkbox" ? checked : value,
+          },
+        },
+      }))
+      return
+    }
+
     if (name.startsWith("storefront.")) {
       const key = name.replace("storefront.", "")
       setForm((prev) => ({
@@ -584,6 +614,20 @@ function SettingsPage() {
         return
       }
 
+      if (activeSection === "client_session") {
+        const payload = buildStorefrontAccessRulesPayload(form.storefront)
+        const response = await updateAdminStorefront(payload)
+
+        setForm((prev) => ({
+          ...prev,
+          storefront: normalizeStorefrontResponse(response),
+        }))
+        refreshSettings()
+        setFieldErrors({})
+        notifySuccess("Configuración de sesión de clientes guardada correctamente.")
+        return
+      }
+
       const payload = buildSettingsPayload(form, activeSection)
       if (activeSection === "tracking") {
         const pixelId = String(form.meta_pixel_id || "").trim()
@@ -698,6 +742,10 @@ function SettingsPage() {
                   stripeConnectStatus={stripeConnectStatus}
                   paymentMethods={paymentMethods}
                 />
+              ) : null}
+
+              {activeSection === "client_session" ? (
+                <ClientSessionSection form={form} onChange={handleFieldChange} />
               ) : null}
 
               {activeSection === "contact" ? (
@@ -886,6 +934,34 @@ function StorefrontSection({ form, onChange, stripeConnectStatus, paymentMethods
       <div className="settings-storefront__note">
         <i className="bi bi-palette" aria-hidden="true" />
         <span>La plantilla y los colores ahora se administran desde Diseña tu ecommerce.</span>
+      </div>
+    </section>
+  )
+}
+
+function ClientSessionSection({ form, onChange }) {
+  const accessRules = form.storefront?.access_rules || EMPTY_FORM.storefront.access_rules
+  const requiresLogin = Boolean(accessRules.requires_login_to_purchase)
+
+  return (
+    <section className="settings-page__section">
+      <div className="settings-page__grid settings-page__grid--two">
+        <ToggleField
+          label="Requerir inicio de sesión para comprar"
+          name="storefront.access_rules.requires_login_to_purchase"
+          checked={requiresLogin}
+          onChange={onChange}
+          helpText="Si está activo, los invitados no podrán finalizar compras."
+        />
+
+        <ToggleField
+          label="Ocultar precios a invitados"
+          name="storefront.access_rules.hide_prices_for_guests"
+          checked={requiresLogin && accessRules.hide_prices_for_guests}
+          onChange={onChange}
+          disabled={!requiresLogin}
+          helpText="Solo aplica cuando la tienda está cerrada para invitados."
+        />
       </div>
     </section>
   )
@@ -1633,10 +1709,16 @@ function Field({
   )
 }
 
-function ToggleField({ label, name, checked, onChange, helpText = "" }) {
+function ToggleField({ label, name, checked, onChange, helpText = "", disabled = false }) {
   return (
-    <label className="settings-page__toggle-field">
-      <input type="checkbox" name={name} checked={Boolean(checked)} onChange={onChange} />
+    <label className={`settings-page__toggle-field ${disabled ? "is-disabled" : ""}`}>
+      <input
+        type="checkbox"
+        name={name}
+        checked={Boolean(checked)}
+        onChange={onChange}
+        disabled={disabled}
+      />
       <span className="settings-page__toggle-control" aria-hidden="true" />
       <span className="settings-page__toggle-copy">
         <strong>{label}</strong>
@@ -1934,6 +2016,9 @@ function normalizeStorefrontValue(value = {}) {
     ? value.construction
     : {}
   const theme = value.theme && typeof value.theme === "object" ? value.theme : {}
+  const accessRules = value.access_rules && typeof value.access_rules === "object"
+    ? value.access_rules
+    : {}
 
   return {
     ...EMPTY_FORM.storefront,
@@ -1950,6 +2035,31 @@ function normalizeStorefrontValue(value = {}) {
     available_home_templates: Array.isArray(value.available_home_templates)
       ? value.available_home_templates
       : EMPTY_FORM.storefront.available_home_templates,
+    access_rules: {
+      ...EMPTY_FORM.storefront.access_rules,
+      requires_login_to_purchase: booleanOrDefault(
+        accessRules.requires_login_to_purchase,
+        EMPTY_FORM.storefront.access_rules.requires_login_to_purchase
+      ),
+      hide_prices_for_guests: booleanOrDefault(
+        accessRules.hide_prices_for_guests,
+        EMPTY_FORM.storefront.access_rules.hide_prices_for_guests
+      ),
+      is_authenticated: booleanOrDefault(
+        accessRules.is_authenticated,
+        EMPTY_FORM.storefront.access_rules.is_authenticated
+      ),
+      can_view_price: booleanOrDefault(
+        accessRules.can_view_price,
+        EMPTY_FORM.storefront.access_rules.can_view_price
+      ),
+      can_purchase: booleanOrDefault(
+        accessRules.can_purchase,
+        EMPTY_FORM.storefront.access_rules.can_purchase
+      ),
+      price_visibility_reason: accessRules.price_visibility_reason || null,
+      purchase_block_reason: accessRules.purchase_block_reason || null,
+    },
     theme: {
       ...EMPTY_FORM.storefront.theme,
       ...theme,
@@ -2001,6 +2111,17 @@ function buildStorefrontPublicationPayload(settings) {
     is_published: Boolean(settings.is_published),
     construction_title: nullableValue(settings.construction_title),
     construction_message: nullableValue(settings.construction_message),
+  }
+}
+
+function buildStorefrontAccessRulesPayload(settings) {
+  const requiresLoginToPurchase = Boolean(settings.access_rules?.requires_login_to_purchase)
+
+  return {
+    requires_login_to_purchase: requiresLoginToPurchase,
+    hide_prices_for_guests: requiresLoginToPurchase
+      ? Boolean(settings.access_rules?.hide_prices_for_guests)
+      : false,
   }
 }
 

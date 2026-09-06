@@ -157,7 +157,6 @@ const defaultLandingMarkup = String.raw`<nav class="nav" aria-label="Navegacion 
         <a href="#clientes">Grandes marcas</a>
       </div>
       <div class="nav-actions">
-        <a class="login-link" href="/login">Login</a>
         <a class="btn btn-primary" href="/registro">Crear CloudiShop gratis</a>
       </div>
     </div>
