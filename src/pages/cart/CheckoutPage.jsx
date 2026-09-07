@@ -23,12 +23,14 @@ import { useSettings } from "../../context/SettingsContext.jsx"
 import { notifyError, notifySuccess, notifyWarning } from "../../utils/toast"
 import { trackMetaInitiateCheckout } from "../../utils/metaPixel.js"
 import { hasAuthSession } from "../../services/storage/authStorage.js"
+import { normalizeMediaUrl } from "../../utils/mediaUrl.js"
 import "./checkout.css"
 
 const emptyAddressForm = {
   alias: "",
   contact_name: "",
   phone: "",
+  email: "",
   street: "",
   address_line_2: "",
   neighborhood: "",
@@ -39,21 +41,16 @@ const emptyAddressForm = {
 }
 
 const emptyGuestCheckoutForm = {
-  name: "",
-  email: "",
   phone: "",
+  email: "",
   street: "",
-  external_number: "",
-  internal_number: "",
-  neighborhood: "",
-  zip_code: "",
-  city: "",
-  state: "",
+  address_line_2: "",
   references: "",
 }
 
 const ADDRESS_PHONE_LENGTH = 10
-const ADDRESS_ZIP_CODE_LENGTH = 5
+const CHECKOUT_ITEM_IMAGE_PLACEHOLDER =
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' rx='14' fill='%23f1f5f9'/%3E%3Cpath d='M32 82h56l-11-18-12 13-15-24-18 29Z' fill='%23cbd5e1'/%3E%3Ccircle cx='80' cy='40' r='9' fill='%23cbd5e1'/%3E%3C/svg%3E"
 
 const emptyCheckout = {
   cart_id: null,
@@ -103,17 +100,20 @@ function CheckoutPage() {
   const [checkout, setCheckout] = useState(emptyCheckout)
   const [loading, setLoading] = useState(true)
   const [addressPanelOpen, setAddressPanelOpen] = useState(false)
+  const [addressPanelMode, setAddressPanelMode] = useState("select")
   const [addresses, setAddresses] = useState([])
   const [addressesLoading, setAddressesLoading] = useState(false)
   const [addressSaving, setAddressSaving] = useState(false)
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressForm, setAddressForm] = useState(emptyAddressForm)
   const [guestForm, setGuestForm] = useState(emptyGuestCheckoutForm)
+  const [guestAddress, setGuestAddress] = useState(null)
   const [paymentMethods, setPaymentMethods] = useState(null)
   const [paymentMethodsLoading, setPaymentMethodsLoading] = useState(true)
   const [processingPayment, setProcessingPayment] = useState(false)
-  const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false)
   const [documentNotes, setDocumentNotes] = useState("")
+  const [documentNotesOpen, setDocumentNotesOpen] = useState(false)
   const [accountCashback, setAccountCashback] = useState(null)
   const [cashbackAmount, setCashbackAmount] = useState("")
   const [cashbackLoading, setCashbackLoading] = useState(false)
@@ -325,7 +325,21 @@ function CheckoutPage() {
       const cartShipping = cartData?.shipping ?? null
       const nextAddresses = normalizeShippingAddresses(cartShipping)
 
-      if (!nextAddresses.length) return
+      if (!nextAddresses.length) {
+        if (isGuestCheckout) return
+
+        const accountResponse = await getAccountAddresses()
+        const accountAddresses = normalizeAddresses(accountResponse)
+        setAddresses(accountAddresses)
+        setSelectedAddressId((currentId) => {
+          if (currentId && accountAddresses.some((address) => address.id === currentId)) {
+            return currentId
+          }
+
+          return accountAddresses.find((address) => address.is_default)?.id || accountAddresses[0]?.id || null
+        })
+        return
+      }
 
       setCheckout((prev) => ({
         ...prev,
@@ -347,11 +361,11 @@ function CheckoutPage() {
 
   const selectedAddress = useMemo(() => {
     if (isGuestCheckout) {
-      return isGuestCheckoutFormValid(guestForm) ? buildGuestAddress(guestForm) : null
+      return guestAddress
     }
 
     return addresses.find((address) => address.id === selectedAddressId) || null
-  }, [addresses, guestForm, isGuestCheckout, selectedAddressId])
+  }, [addresses, guestAddress, isGuestCheckout, selectedAddressId])
 
   const hasPendingGiftSelection = useMemo(() => {
     return checkout.promotions_applied.some((promotion) => {
@@ -377,7 +391,7 @@ function CheckoutPage() {
   const canContinue = Boolean(selectedAddress) && !hasPendingGiftSelection && insufficientStockBlockers.length === 0 && invalidStockItems.length === 0
   const stripePaymentMethod = getActivePaymentMethod(paymentMethods, "stripe")
   const hasStripePaymentMethod = Boolean(stripePaymentMethod)
-  const canPay = canContinue && acceptedTerms && hasStripePaymentMethod && !paymentMethodsLoading
+  const canPay = canContinue && hasStripePaymentMethod && !paymentMethodsLoading
 
   useEffect(() => {
     if (!checkout.items.length) return
@@ -397,7 +411,7 @@ function CheckoutPage() {
     })
   }, [checkout, totals])
 
-  async function handleStartStripeCheckout() {
+  function handleStartStripeCheckout() {
     if (paymentMethodsLoading) {
       notifyWarning("Espera a que carguen los métodos de pago.")
       return
@@ -408,15 +422,10 @@ function CheckoutPage() {
       return
     }
 
-    if (!acceptedTerms) {
-      notifyWarning("Acepta los términos y condiciones para continuar con el pago.")
-      return
-    }
-
     if (!selectedAddress) {
       notifyWarning(isGuestCheckout
-        ? "Completa tus datos de invitado para continuar."
-        : "Configura una dirección de envío para continuar."
+        ? "Guarda la dirección de envío para continuar."
+        : "Guarda o selecciona una dirección de envío para continuar."
       )
       handleOpenAddressPanel()
       return
@@ -432,48 +441,61 @@ function CheckoutPage() {
       return
     }
 
+    setConfirmPaymentOpen(true)
+  }
+
+  async function handleConfirmStripeCheckout() {
+    if (!selectedAddress) {
+      setConfirmPaymentOpen(false)
+      return
+    }
+
     try {
       setProcessingPayment(true)
+      setConfirmPaymentOpen(false)
 
       const checkoutPayload = isGuestCheckout
-        ? buildGuestCheckoutPayload(guestForm, documentNotes)
+        ? buildGuestCheckoutPayload(selectedAddress, documentNotes)
         : buildCheckoutPayload(selectedAddress, documentNotes)
-      const validationResponse = await validateCheckout(checkoutPayload)
-      if (DEBUG_RECOVERABLE_CART) {
-        console.log("[recoverable-cart][checkout] validate before Stripe response:", validationResponse)
-      }
 
-      const recoverableOrder = getRecoverableOrder(validationResponse)
+      if (!isGuestCheckout) {
+        const validationResponse = await validateCheckout(checkoutPayload)
+        if (DEBUG_RECOVERABLE_CART) {
+          console.log("[recoverable-cart][checkout] validate before Stripe response:", validationResponse)
+        }
 
-      if (recoverableOrder) {
-        await restoreRecoverableCheckout(recoverableOrder, "user_returned_to_checkout")
-        return
-      }
+        const recoverableOrder = getRecoverableOrder(validationResponse)
 
-      const nextCheckout = normalizeCheckout(validationResponse)
+        if (recoverableOrder) {
+          await restoreRecoverableCheckout(recoverableOrder, "user_returned_to_checkout")
+          return
+        }
 
-      setCheckout((prev) => ({
-        ...prev,
-        ...nextCheckout,
-        customer: nextCheckout.customer || prev.customer,
-        shipping: nextCheckout.shipping || prev.shipping,
-        items: nextCheckout.items.length ? nextCheckout.items : prev.items,
-        items_count: nextCheckout.items_count || prev.items_count,
-        promotions_applied: nextCheckout.promotions_applied.length
-          ? nextCheckout.promotions_applied
-          : prev.promotions_applied,
-        invoice_preview: hasInvoiceDetail(nextCheckout.invoice_preview)
-          ? nextCheckout.invoice_preview
-          : prev.invoice_preview,
-        totals: hasTotals(nextCheckout.totals) ? nextCheckout.totals : prev.totals,
-      }))
+        const nextCheckout = normalizeCheckout(validationResponse)
 
-      const nextInvalidStockItems = nextCheckout.items.filter(isCheckoutItemStockInvalid)
-      const nextActionableBlockers = getActionableBlockers(nextCheckout.blockers, nextInvalidStockItems)
+        setCheckout((prev) => ({
+          ...prev,
+          ...nextCheckout,
+          customer: nextCheckout.customer || prev.customer,
+          shipping: nextCheckout.shipping || prev.shipping,
+          items: nextCheckout.items.length ? nextCheckout.items : prev.items,
+          items_count: nextCheckout.items_count || prev.items_count,
+          promotions_applied: nextCheckout.promotions_applied.length
+            ? nextCheckout.promotions_applied
+            : prev.promotions_applied,
+          invoice_preview: hasInvoiceDetail(nextCheckout.invoice_preview)
+            ? nextCheckout.invoice_preview
+            : prev.invoice_preview,
+          totals: hasTotals(nextCheckout.totals) ? nextCheckout.totals : prev.totals,
+        }))
 
-      if (!nextCheckout.can_checkout && nextActionableBlockers.length) {
-        notifyWarning(getBlockerMessage(nextActionableBlockers))
-        return
+        const nextInvalidStockItems = nextCheckout.items.filter(isCheckoutItemStockInvalid)
+        const nextActionableBlockers = getActionableBlockers(nextCheckout.blockers, nextInvalidStockItems)
+
+        if (!nextCheckout.can_checkout && nextActionableBlockers.length) {
+          notifyWarning(getBlockerMessage(nextActionableBlockers))
+          return
+        }
       }
 
       const orderResponse = await createCheckoutOrder(checkoutPayload)
@@ -529,7 +551,9 @@ function CheckoutPage() {
     syncCartSummary(restoreResponse?.data?.cart)
     notifySuccess(restoreResponse?.message || "Carrito recuperado correctamente.")
 
-    const nextResponse = await getCheckoutPreview(buildCheckoutAddressSelection(selectedAddress))
+    const nextResponse = await getCheckoutPreview(
+      isGuestCheckout ? {} : buildCheckoutAddressSelection(selectedAddress)
+    )
     if (DEBUG_RECOVERABLE_CART) {
       console.log("[recoverable-cart][checkout] preview after restore:", nextResponse)
     }
@@ -545,9 +569,7 @@ function CheckoutPage() {
         ? value.slice(0, DELIVERY_NOTE_MAX_LENGTH)
         : name === "phone"
           ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
-          : name === "zip_code"
-            ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
-            : value
+          : value
 
     setAddressForm((prev) => ({
       ...prev,
@@ -560,14 +582,13 @@ function CheckoutPage() {
     const nextValue =
       name === "phone"
         ? onlyDigits(value, ADDRESS_PHONE_LENGTH)
-        : name === "zip_code"
-          ? onlyDigits(value, ADDRESS_ZIP_CODE_LENGTH)
-          : value
+        : value
 
     setGuestForm((prev) => ({
       ...prev,
       [name]: nextValue,
     }))
+    setGuestAddress(null)
   }
 
   function handleDocumentNotesChange(event) {
@@ -600,11 +621,17 @@ function CheckoutPage() {
     }
   }
 
-  function handleOpenAddressPanel() {
+  function handleOpenAddressPanel(mode = "select") {
     if (isGuestCheckout) return
 
+    setAddressPanelMode(mode)
     setAddressPanelOpen(true)
     fetchAddresses()
+  }
+
+  function handleOpenCreateAddressPanel() {
+    setAddressForm(emptyAddressForm)
+    handleOpenAddressPanel("create")
   }
 
   async function handleSelectAddress(address) {
@@ -622,8 +649,8 @@ function CheckoutPage() {
   async function handleAddAddress(event) {
     event.preventDefault()
 
-    if (!addressForm.alias.trim() || !addressForm.street.trim() || !addressForm.zip_code.trim()) {
-      notifyWarning("Completa alias, calle y código postal.")
+    if (!addressForm.street.trim() || !addressForm.phone.trim()) {
+      notifyWarning("Completa dirección y teléfono.")
       return
     }
 
@@ -641,19 +668,39 @@ function CheckoutPage() {
 
       notifySuccess(response?.message || "Dirección creada correctamente.")
       setAddressForm(emptyAddressForm)
-      const nextPreview = await getCheckoutPreview()
-      applyCheckoutResponse(nextPreview)
-      await fetchAddresses()
 
       if (createdAddress?.id) {
         setSelectedAddressId(createdAddress.id)
+        const nextPreview = await getCheckoutPreview(buildCheckoutAddressSelection(createdAddress))
+        applyCheckoutResponse(nextPreview, { keepSelectedAddressId: createdAddress.id })
+        setAddressPanelOpen(false)
+        setAddressPanelMode("select")
+      } else {
+        const nextPreview = await getCheckoutPreview()
+        applyCheckoutResponse(nextPreview)
       }
+
+      await fetchAddresses()
     } catch (error) {
       console.error("Error al crear dirección:", error?.response?.data || error)
       notifyError(error?.response?.data?.message || "No fue posible crear la dirección.")
     } finally {
       setAddressSaving(false)
     }
+  }
+
+  function handleSaveGuestAddress(event) {
+    event.preventDefault()
+
+    const validationMessage = validateGuestAddressForm(guestForm)
+
+    if (validationMessage) {
+      notifyWarning(validationMessage)
+      return
+    }
+
+    setGuestAddress(buildGuestAddress(guestForm))
+    notifySuccess("Dirección de envío guardada.")
   }
 
   function handleDownloadPreview() {
@@ -692,36 +739,45 @@ function CheckoutPage() {
   }
 
   const hasItems = checkout.items.length > 0
+  const showLegacyInvoiceTable = false
+  const showLegacyInlineAddressForm = false
 
   return (
-    <div className="checkout_page">
+    <div className={`checkout_page ${isGuestCheckout ? "checkout_page--guest" : "checkout_page--compact"}`}>
       <div className="checkout_shell">
         <header className="checkout_header checkout_invoice_header">
           <div className="checkout_header_left">
             <p className="checkout_eyebrow">Previa de factura</p>
-            <h1 className="checkout_title">Checkout #{checkout.cart_id || "-"}</h1>
+            <h1 className="checkout_title">Checkout</h1>
             <p className="checkout_meta">
               Revisa partidas, promociones aplicadas y total antes de continuar.
             </p>
           </div>
+
+          <Link to="/carrito" className="checkout_header_back">
+            Volver al carrito
+          </Link>
 
           {selectedAddress ? (
             <div className="checkout_status is-ready">
               <i className="bi bi-check-circle-fill" aria-hidden="true" />
               Dirección lista
             </div>
+          ) : isGuestCheckout ? (
+            <div className="checkout_status is-warning">
+              <i className="bi bi-exclamation-circle-fill" aria-hidden="true" />
+              Dirección pendiente
+            </div>
           ) : (
             <button
               type="button"
               className="btn btn_primary checkout_header_action"
-              onClick={handleOpenAddressPanel}
+              onClick={() => handleOpenAddressPanel()}
             >
               Configurar dirección de envío
             </button>
           )}
         </header>
-
-        {hasItems ? <CheckoutFreeShippingProgress shipping={checkout.shipping} /> : null}
 
         {!hasItems ? (
           <div className="checkout_empty_state">
@@ -732,74 +788,46 @@ function CheckoutPage() {
             </Link>
           </div>
         ) : (
-          <div className="checkout_layout">
+          <div className="checkout_layout checkout_layout--compact">
             <section className="checkout_main">
-              <div className="checkout_invoice_meta">
-                <div className="checkout_meta_card">
-                  <span>Cliente</span>
-                  <strong>{checkout.customer?.name || "Cliente no identificado"}</strong>
-                  <small>
-                    {checkout.customer?.email || "-"}
-                    {checkout.customer?.username ? ` · ${checkout.customer.username}` : ""}
-                  </small>
-                </div>
-
-                <div className="checkout_meta_card">
-                  <span>Entrega</span>
-                  {selectedAddress ? (
-                    <>
-                      <div className="checkout_address_meta_head">
-                        <strong className="checkout_address_ready">
-                          <i className="bi bi-check-circle-fill" aria-hidden="true" />
-                          {selectedAddress.alias}
-                        </strong>
-                        <button
-                          type="button"
-                          className="checkout_address_clear"
-                          onClick={() => {
-                            if (isGuestCheckout) {
-                              setGuestForm(emptyGuestCheckoutForm)
-                              return
-                            }
-
-                            setSelectedAddressId(null)
-                          }}
-                          aria-label="Quitar dirección seleccionada"
-                        >
-                          <i className="bi bi-x-lg" aria-hidden="true" />
-                        </button>
-                      </div>
-                      <small>{formatAddress(selectedAddress)}</small>
-                      <button
-                        type="button"
-                        className="checkout_address_change"
-                        onClick={handleOpenAddressPanel}
-                      >
-                        Cambiar dirección
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <strong>Dirección pendiente</strong>
-                      <small>
-                        {isGuestCheckout
-                          ? "Completa tus datos de invitado para poder continuar."
-                          : "Selecciona o agrega una dirección de envío para poder continuar."}
-                      </small>
-                    </>
-                  )}
-                </div>
-
-              </div>
+              <CheckoutOrderItems items={checkout.items} />
 
               {isGuestCheckout ? (
-                <GuestCheckoutForm
+                <GuestCheckoutFlow
                   form={guestForm}
+                  selectedAddress={selectedAddress}
                   onChange={handleGuestFormChange}
+                  onSaveAddress={handleSaveGuestAddress}
+                  onClearAddress={() => {
+                    setGuestForm(emptyGuestCheckoutForm)
+                    setGuestAddress(null)
+                  }}
                 />
               ) : null}
 
-              {actionableBlockers.length > 0 ? (
+              {!isGuestCheckout ? (
+                <AuthenticatedCheckoutFlow
+                  customer={checkout.customer}
+                  addresses={addresses}
+                  shipping={checkout.shipping}
+                  selectedAddress={selectedAddress}
+                  selectedAddressId={selectedAddressId}
+                  addressesLoading={addressesLoading}
+                  onSelectAddress={handleSelectAddress}
+                  onAddAddress={handleOpenCreateAddressPanel}
+                  onChangeAddress={() => handleOpenAddressPanel("select")}
+                />
+              ) : null}
+
+              <CheckoutOrderDetails
+                promotions={checkout.promotions_applied}
+                documentNotes={documentNotes}
+                documentNotesOpen={documentNotesOpen}
+                onDocumentNotesChange={handleDocumentNotesChange}
+                onToggleDocumentNotes={() => setDocumentNotesOpen((current) => !current)}
+              />
+
+              {!isGuestCheckout && actionableBlockers.length > 0 ? (
                 <div className="checkout_blockers">
                   <h2>Pendientes para completar tu pedido</h2>
                   <ul>
@@ -815,6 +843,7 @@ function CheckoutPage() {
                 </div>
               ) : null}
 
+              {showLegacyInvoiceTable ? (
               <section className="checkout_invoice_card">
                 <div className="checkout_invoice_card_head">
                   <div>
@@ -842,44 +871,47 @@ function CheckoutPage() {
                         <tr key={item.cart_item_id || `${item.product_id}-${item.line_number}`}>
                           <td>{item.line_number}</td>
                           <td>
-                            <div className="checkout_item_info">
-                              <strong>{item.name}</strong>
-                              <span>
-                                SKU {item.sku || "-"} · Producto #{item.product_id}
-                              </span>
-                              {item.selected_attributes.length ? (
-                                <small>{formatSelectedAttributes(item.selected_attributes)}</small>
-                              ) : null}
-                              {item.promotion ? (
-                                <small>
-                                  Promo:{" "}
-                                  {item.promotion.name ||
-                                    formatPromotionType(item.promotion.type)}
-                                </small>
-                              ) : null}
-                              {formatScaleSnapshot(item.promotion?.snapshot) ? (
-                                <small>{formatScaleSnapshot(item.promotion.snapshot)}</small>
-                              ) : null}
-                              {(() => {
-                                const selectedGiftItem = getSelectedGiftItem(
-                                  item.promotion ?? item
-                                )
-                                const giftItemsToShow = selectedGiftItem
-                                  ? [selectedGiftItem]
-                                  : []
-
-                                return Number(item.gift_item_units || 0) > 0 ||
-                                  giftItemsToShow.length > 0 ? (
-                                  <small className="checkout_gift_items_note">
-                                    {selectedGiftItem
-                                      ? `Regalo elegido: ${formatGiftItemsText(
-                                          giftItemsToShow,
-                                          item.gift_item_units
-                                        )}`
-                                      : `${Number(item.gift_item_units || 0)} regalo(s) pendiente(s) por elegir`}
+                            <div className="checkout_item_product">
+                              <img src={item.image} alt={item.name} loading="lazy" />
+                              <div className="checkout_item_info">
+                                <strong>{item.name}</strong>
+                                <span>
+                                  SKU {item.sku || "-"} · Producto #{item.product_id}
+                                </span>
+                                {item.selected_attributes.length ? (
+                                  <small>{formatSelectedAttributes(item.selected_attributes)}</small>
+                                ) : null}
+                                {item.promotion ? (
+                                  <small>
+                                    Promo:{" "}
+                                    {item.promotion.name ||
+                                      formatPromotionType(item.promotion.type)}
                                   </small>
-                                ) : null
-                              })()}
+                                ) : null}
+                                {formatScaleSnapshot(item.promotion?.snapshot) ? (
+                                  <small>{formatScaleSnapshot(item.promotion.snapshot)}</small>
+                                ) : null}
+                                {(() => {
+                                  const selectedGiftItem = getSelectedGiftItem(
+                                    item.promotion ?? item
+                                  )
+                                  const giftItemsToShow = selectedGiftItem
+                                    ? [selectedGiftItem]
+                                    : []
+
+                                  return Number(item.gift_item_units || 0) > 0 ||
+                                    giftItemsToShow.length > 0 ? (
+                                    <small className="checkout_gift_items_note">
+                                      {selectedGiftItem
+                                        ? `Regalo elegido: ${formatGiftItemsText(
+                                            giftItemsToShow,
+                                            item.gift_item_units
+                                          )}`
+                                        : `${Number(item.gift_item_units || 0)} regalo(s) pendiente(s) por elegir`}
+                                    </small>
+                                  ) : null
+                                })()}
+                              </div>
                             </div>
                           </td>
                           <td className="text-end">{formatQuantity(item.quantity)}</td>
@@ -932,98 +964,36 @@ function CheckoutPage() {
                   </table>
                 </div>
               </section>
+              ) : null}
 
-              <div className="checkout_detail_grid">
-                <section className="checkout_invoice_card">
-                  <div className="checkout_invoice_card_head">
-                    <div>
-                      <h2>Promociones aplicadas</h2>
-                      <p>Descuentos calculados por el motor de promociones</p>
-                    </div>
-                  </div>
-
-                  {checkout.promotions_applied.length ? (
-                    <div className="checkout_promo_list">
-                      {checkout.promotions_applied.map((promotion) => (
-                        <article className="checkout_promo_item" key={promotion.id}>
-                          <div>
-                            <strong>
-                              {promotion.name || formatPromotionType(promotion.type)}
-                            </strong>
-                          </div>
-                          <div className="checkout_promo_amounts">
-                            <span>Ahorro {formatMoney(promotion.total_discount)}</span>
-                            {Number(promotion.gift_units || 0) > 0 ? (
-                              <small>
-                                {promotion.gift_units} regalo(s): {formatMoney(promotion.gift_line_total)}
-                              </small>
-                            ) : null}
-                            {Number(promotion.gift_item_units || 0) > 0 ? (
-                              <small>
-                                {getSelectedGiftItem(promotion)
-                                  ? `Regalo elegido: ${formatGiftItemsText(
-                                      [getSelectedGiftItem(promotion)],
-                                      promotion.gift_item_units
-                                    )}`
-                                  : `${Number(promotion.gift_item_units || 0)} regalo(s) pendiente(s) por elegir`}
-                              </small>
-                            ) : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="checkout_muted">No hay promociones aplicadas.</p>
-                  )}
-                </section>
-
-                <section className="checkout_invoice_card">
-                  <div className="checkout_invoice_card_head">
-                    <div>
-                      <h2>Notas del documento</h2>
-                      <p>Agrega una nota breve para este pedido</p>
-                    </div>
-                  </div>
-
-                  <div className="checkout_document_notes">
-                    <textarea
-                      value={documentNotes}
-                      onChange={handleDocumentNotesChange}
-                      maxLength={DOCUMENT_NOTE_MAX_LENGTH}
-                      rows="4"
-                      placeholder="Escribe notas para el documento o pedido."
-                    />
-                    <span className="checkout_field_counter">
-                      {documentNotes.length}/{DOCUMENT_NOTE_MAX_LENGTH}
-                    </span>
-                  </div>
-
-                  {checkout.invoice_preview?.notes?.length ? (
-                    <div className="checkout_system_notes">
-                      <strong>Notas del sistema</strong>
-                      <ul className="checkout_notes">
-                        {checkout.invoice_preview.notes.map((note, index) => (
-                          <li key={`${note}-${index}`}>{note}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </section>
-              </div>
             </section>
 
             <aside className="checkout_sidebar">
+              {showLegacyInlineAddressForm ? (
+                <CheckoutShippingForm
+                  isGuestCheckout={isGuestCheckout}
+                  guestForm={guestForm}
+                  addressForm={addressForm}
+                  addressSaving={addressSaving}
+                  selectedAddress={selectedAddress}
+                  onGuestChange={handleGuestFormChange}
+                  onAddressChange={handleAddressFormChange}
+                  onSaveGuestAddress={handleSaveGuestAddress}
+                  onSaveAddress={handleAddAddress}
+                  onClearGuestAddress={() => {
+                    setGuestForm(emptyGuestCheckoutForm)
+                    setGuestAddress(null)
+                  }}
+                />
+              ) : null}
               <InvoiceSummary
                 totals={totals}
                 canCheckout={canContinue}
                 processingPayment={processingPayment}
                 hasPendingGiftSelection={hasPendingGiftSelection}
                 onPay={handleStartStripeCheckout}
-                onConfigureAddress={handleOpenAddressPanel}
                 onDownloadPreview={handleDownloadPreview}
                 hasAddress={Boolean(selectedAddress)}
-                acceptedTerms={acceptedTerms}
-                onAcceptedTermsChange={setAcceptedTerms}
                 loyalty={checkout.loyalty}
                 accountCashback={accountCashback}
                 cashbackAmount={cashbackAmount}
@@ -1059,7 +1029,7 @@ function CheckoutPage() {
               onClick={handleStartStripeCheckout}
               disabled={processingPayment || !canPay}
             >
-              {processingPayment ? "Redirigiendo..." : "Pagar con tarjeta"}
+              {processingPayment ? "Redirigiendo..." : "Pagar"}
             </button>
           ) : (
             <p className="checkout_muted checkout_muted--warning">
@@ -1067,24 +1037,21 @@ function CheckoutPage() {
             </p>
           )}
 
-          <label className="checkout_terms checkout_terms--mobile">
-            <input
-              type="checkbox"
-              checked={acceptedTerms}
-              onChange={(event) => setAcceptedTerms(event.target.checked)}
-            />
-            <span>
-              Acepto{" "}
-              <Link to="/terminos-y-condiciones">términos y condiciones</Link>
-            </span>
-          </label>
         </div>
       ) : null}
 
+      <PaymentConfirmationModal
+        isOpen={confirmPaymentOpen}
+        address={selectedAddress}
+        processing={processingPayment}
+        onCancel={() => setConfirmPaymentOpen(false)}
+        onConfirm={handleConfirmStripeCheckout}
+      />
+
       <AdminSidePanel
         isOpen={addressPanelOpen}
-        title="Dirección de envío"
-        subtitle="Selecciona una dirección guardada o agrega una nueva para continuar."
+        title={addressPanelMode === "create" ? "Agregar dirección" : "Dirección de envío"}
+        subtitle={addressPanelMode === "create" ? "Guarda una nueva dirección sin salir del checkout." : "Selecciona una dirección guardada para continuar."}
         onClose={() => setAddressPanelOpen(false)}
         width="lg"
         footer={(
@@ -1096,191 +1063,401 @@ function CheckoutPage() {
             >
               Cerrar
             </button>
-            <button
-              type="button"
-              className="btn btn_primary"
-              onClick={() => setAddressPanelOpen(false)}
-              disabled={!selectedAddress}
-            >
-              Usar dirección seleccionada
-            </button>
+            {addressPanelMode === "select" ? (
+              <button
+                type="button"
+                className="btn btn_primary"
+                onClick={() => setAddressPanelOpen(false)}
+                disabled={!selectedAddress}
+              >
+                Usar dirección seleccionada
+              </button>
+            ) : null}
           </div>
         )}
       >
         <div className="checkout_address_panel">
-          <section className="checkout_address_panel_section">
-            <h3>Direcciones disponibles</h3>
-            {addressesLoading ? (
-              <p className="checkout_address_empty">Cargando direcciones...</p>
-            ) : addresses.length ? (
-              <div className="checkout_address_list">
-                {addresses.map((address) => (
-                  <button
-                    type="button"
-                    className={`checkout_address_card ${selectedAddressId === address.id ? "is-selected" : ""}`}
-                    key={address.id}
-                    onClick={() => handleSelectAddress(address)}
-                  >
-                    <span className="checkout_address_radio">
-                      {selectedAddressId === address.id ? (
-                        <i className="bi bi-check-lg" aria-hidden="true" />
-                      ) : null}
-                    </span>
-                    <span className="checkout_address_content">
-                      <strong>{address.alias}</strong>
-                      <small>{address.contact_name || "Sin contacto"} · {address.phone || "Sin teléfono"}</small>
-                      <span>{formatAddress(address)}</span>
-                      {address.is_default ? <em>Predeterminada</em> : null}
-                      {address.delivery_note ? <em>{address.delivery_note}</em> : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="checkout_address_empty">
-                No tienes direcciones guardadas. Agrega una para poder continuar.
-              </p>
-            )}
-          </section>
-
-          <section className="checkout_address_panel_section">
-            <h3>Agregar otra dirección</h3>
-            <form className="checkout_address_form" onSubmit={handleAddAddress}>
-              <label>
-                Alias
-                <input name="alias" value={addressForm.alias} onChange={handleAddressFormChange} placeholder="Ej. Sucursal Centro" />
-              </label>
-              <label>
-                Contacto
-                <input name="contact_name" value={addressForm.contact_name} onChange={handleAddressFormChange} placeholder="Nombre de quien recibe" />
-              </label>
-              <label>
-                Teléfono
-                <input
-                  name="phone"
-                  value={addressForm.phone}
-                  onChange={handleAddressFormChange}
-                  placeholder="5555555555"
-                  inputMode="numeric"
-                  maxLength={ADDRESS_PHONE_LENGTH}
-                  pattern="\d{10}"
-                />
-              </label>
-              <label>
-                Calle y número
-                <input name="street" value={addressForm.street} onChange={handleAddressFormChange} placeholder="Av. Principal 123" />
-              </label>
-              <label className="checkout_address_form_full">
-                Complemento
-                <input name="address_line_2" value={addressForm.address_line_2} onChange={handleAddressFormChange} placeholder="Interior 4B, edificio azul" />
-              </label>
-              <label>
-                Colonia
-                <input name="neighborhood" value={addressForm.neighborhood} onChange={handleAddressFormChange} placeholder="Colonia" />
-              </label>
-              <label>
-                Estado
-                <input name="state" value={addressForm.state} onChange={handleAddressFormChange} placeholder="Estado" />
-              </label>
-              <label>
-                Código postal
-                <input
-                  name="zip_code"
-                  value={addressForm.zip_code}
-                  onChange={handleAddressFormChange}
-                  placeholder="00000"
-                  inputMode="numeric"
-                  maxLength={ADDRESS_ZIP_CODE_LENGTH}
-                  pattern="\d{5}"
-                />
-              </label>
-              <label className="checkout_address_form_full">
-                Instrucciones de entrega
-                <textarea
-                  name="delivery_note"
-                  value={addressForm.delivery_note}
-                  onChange={handleAddressFormChange}
-                  rows="3"
-                  maxLength={DELIVERY_NOTE_MAX_LENGTH}
-                  placeholder="Tocar el timbre negro. Entregar en recepción."
-                />
-                <span className="checkout_field_counter">
-                  {addressForm.delivery_note.length}/{DELIVERY_NOTE_MAX_LENGTH}
-                </span>
-              </label>
-              <label className="checkout_address_form_full checkout_address_default_check">
-                <input type="checkbox" name="is_default" checked={addressForm.is_default} onChange={handleAddressFormChange} />
-                Usar como dirección predeterminada
-              </label>
-              <div className="checkout_address_form_actions">
-                <button type="submit" className="btn btn_primary" disabled={addressSaving}>
-                  {addressSaving ? "Guardando..." : "Agregar dirección"}
-                </button>
-              </div>
-            </form>
-          </section>
+          {addressPanelMode === "select" ? (
+            <AddressSelectionList
+              addresses={addresses}
+              selectedAddressId={selectedAddressId}
+              addressesLoading={addressesLoading}
+              onSelectAddress={handleSelectAddress}
+              onAddAddress={handleOpenCreateAddressPanel}
+            />
+          ) : (
+            <CheckoutShippingForm
+              isGuestCheckout={false}
+              guestForm={guestForm}
+              addressForm={addressForm}
+              addressSaving={addressSaving}
+              selectedAddress={null}
+              onGuestChange={handleGuestFormChange}
+              onAddressChange={handleAddressFormChange}
+              onSaveGuestAddress={handleSaveGuestAddress}
+              onSaveAddress={handleAddAddress}
+              onClearGuestAddress={() => null}
+            />
+          )}
         </div>
       </AdminSidePanel>
     </div>
   )
 }
 
-function GuestCheckoutForm({ form, onChange }) {
+function GuestCheckoutFlow({
+  form,
+  selectedAddress,
+  onChange,
+  onSaveAddress,
+  onClearAddress,
+}) {
+  const isReady = isCheckoutAddressFormValid(form)
+
   return (
-    <section className="checkout_invoice_card">
+    <section className="checkout_guest_flow" aria-label="Datos de checkout">
+      <CheckoutStep number={1} title="Datos de contacto">
+        <div className="checkout_guest_grid">
+          <label>
+            <span>Teléfono *</span>
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={onChange}
+              inputMode="numeric"
+              maxLength={ADDRESS_PHONE_LENGTH}
+            />
+          </label>
+
+          <label>
+            <span>Correo</span>
+            <input
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={onChange}
+            />
+          </label>
+        </div>
+      </CheckoutStep>
+
+      <CheckoutStep number={2} title="Forma de entrega">
+        {selectedAddress ? (
+          <div className="checkout_delivery_option checkout_delivery_option--guest">
+            <i className="bi bi-geo-alt-fill" aria-hidden="true" />
+            <div>
+              <strong>{formatAddress(selectedAddress)}</strong>
+              {selectedAddress.address_line_2 ? <span>{selectedAddress.address_line_2}</span> : null}
+              {selectedAddress.phone ? <small>{selectedAddress.phone}</small> : null}
+              <button type="button" onClick={onClearAddress}>
+                Cambiar dirección
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form className="checkout_guest_grid" onSubmit={onSaveAddress}>
+            <label className="checkout_guest_field_full">
+              <span>Dirección *</span>
+              <input
+                name="street"
+                value={form.street}
+                onChange={onChange}
+              />
+            </label>
+
+            <label>
+              <span>Línea 2</span>
+              <input
+                name="address_line_2"
+                value={form.address_line_2}
+                onChange={onChange}
+              />
+            </label>
+
+            <label>
+              <span>Referencia</span>
+              <input
+                name="references"
+                value={form.references}
+                onChange={onChange}
+                maxLength={DELIVERY_NOTE_MAX_LENGTH}
+              />
+            </label>
+
+            <div className="checkout_guest_actions">
+              <button type="submit" className="btn btn_primary" disabled={!isReady}>
+                Guardar dirección para envío
+              </button>
+            </div>
+          </form>
+        )}
+      </CheckoutStep>
+    </section>
+  )
+}
+
+function AuthenticatedCheckoutFlow({
+  customer,
+  addresses,
+  shipping,
+  selectedAddress,
+  selectedAddressId,
+  addressesLoading,
+  onSelectAddress,
+  onAddAddress,
+  onChangeAddress,
+}) {
+  return (
+    <section className="checkout_guest_flow" aria-label="Datos de checkout">
+      <CheckoutStep number={1} title="Datos de contacto">
+        <div className="checkout_customer_snapshot">
+          <div>
+            <small>Cliente</small>
+            <span>{customer?.name || "Cliente"}</span>
+          </div>
+          <div>
+            <small>Correo</small>
+            <span>{customer?.email || "-"}</span>
+          </div>
+        </div>
+      </CheckoutStep>
+
+      <CheckoutStep number={2} title="Forma de entrega">
+        <AddressSelectionList
+          addresses={addresses}
+          selectedAddress={selectedAddress}
+          selectedAddressId={selectedAddressId}
+          addressesLoading={addressesLoading}
+          onSelectAddress={onSelectAddress}
+          onAddAddress={onAddAddress}
+          onChangeAddress={onChangeAddress}
+        />
+        <CheckoutFreeShippingProgress shipping={shipping} />
+      </CheckoutStep>
+    </section>
+  )
+}
+
+function AddressSelectionList({
+  addresses,
+  selectedAddress,
+  selectedAddressId,
+  addressesLoading,
+  onSelectAddress,
+  onAddAddress,
+  onChangeAddress,
+}) {
+  if (addressesLoading) {
+    return <p className="checkout_address_empty">Cargando direcciones...</p>
+  }
+
+  if (selectedAddress && onChangeAddress) {
+    return (
+      <div className="checkout_delivery_option">
+        <i className="bi bi-geo-alt-fill" aria-hidden="true" />
+        <div>
+          <strong>{formatAddress(selectedAddress)}</strong>
+          <button type="button" onClick={onChangeAddress}>
+            Cambiar dirección
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="checkout_address_selector">
+      {addresses.length ? (
+        <div className="checkout_address_selector_list">
+          {addresses.map((address) => (
+            <button
+              type="button"
+              className={`checkout_address_card ${selectedAddressId === address.id ? "is-selected" : ""}`}
+              key={address.id}
+              onClick={() => onSelectAddress(address)}
+            >
+              <span className="checkout_address_radio">
+                {selectedAddressId === address.id ? (
+                  <i className="bi bi-check-lg" aria-hidden="true" />
+                ) : null}
+              </span>
+              <span className="checkout_address_content">
+                <strong>{address.alias}</strong>
+                <small>{address.contact_name || "Sin contacto"} · {address.phone || "Sin teléfono"}</small>
+                <span>{formatAddress(address)}</span>
+                {address.is_default ? <em>Predeterminada</em> : null}
+                {address.delivery_note ? <em>{address.delivery_note}</em> : null}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="checkout_address_empty">No tienes direcciones guardadas.</p>
+      )}
+
+      <button type="button" className="checkout_add_address_button" onClick={onAddAddress}>
+        <i className="bi bi-plus-lg" aria-hidden="true" />
+        Agregar dirección
+      </button>
+    </div>
+  )
+}
+
+function CheckoutOrderItems({ items = [] }) {
+  if (!items.length) return null
+
+  return (
+    <section className="checkout_products_card">
+      <div className="checkout_products_head">
+        <h2>Productos</h2>
+        <span>{items.length} producto(s)</span>
+      </div>
+      <div className="checkout_order_items checkout_order_items--main">
+        {items.map((item) => (
+          <article className="checkout_order_item" key={item.cart_item_id || `${item.product_id}-${item.line_number}`}>
+            <img src={item.image} alt={item.name} loading="lazy" />
+            <div>
+              <strong>{item.name}</strong>
+              <span>{formatMoney(item.unit_price)}</span>
+              <small>Cantidad {formatQuantity(item.quantity)}</small>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function CheckoutOrderDetails({
+  promotions = [],
+  documentNotes,
+  documentNotesOpen,
+  onDocumentNotesChange,
+  onToggleDocumentNotes,
+}) {
+  return (
+    <section className="checkout_post_delivery">
+      {promotions.length ? (
+        <div className="checkout_summary_promotions">
+          {promotions.map((promotion) => (
+            <article key={promotion.id}>
+              <strong>{promotion.name || formatPromotionType(promotion.type)}</strong>
+              <span>Ahorro {formatMoney(promotion.total_discount)}</span>
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="checkout_summary_note">
+        <button type="button" onClick={onToggleDocumentNotes}>
+          {documentNotesOpen || documentNotes ? "Editar nota del envío" : "Agregar nota del envío"}
+        </button>
+
+        {documentNotesOpen ? (
+          <div className="checkout_summary_note_field">
+            <textarea
+              value={documentNotes}
+              onChange={onDocumentNotesChange}
+              maxLength={DOCUMENT_NOTE_MAX_LENGTH}
+              rows="3"
+              placeholder="Escribe una nota para el envío."
+            />
+            <span>{documentNotes.length}/{DOCUMENT_NOTE_MAX_LENGTH}</span>
+          </div>
+        ) : documentNotes ? (
+          <p>{documentNotes}</p>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function CheckoutStep({ number, title, children }) {
+  return (
+    <div className="checkout_step">
+      <div className="checkout_step_head">
+        <span>{number}</span>
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function CheckoutShippingForm({
+  isGuestCheckout,
+  guestForm,
+  addressForm,
+  addressSaving,
+  selectedAddress,
+  onGuestChange,
+  onAddressChange,
+  onSaveGuestAddress,
+  onSaveAddress,
+  onClearGuestAddress,
+}) {
+  const form = isGuestCheckout ? guestForm : addressForm
+  const onChange = isGuestCheckout ? onGuestChange : onAddressChange
+  const onSubmit = isGuestCheckout ? onSaveGuestAddress : onSaveAddress
+  const isReady = isCheckoutAddressFormValid(form)
+  const buttonText = isGuestCheckout
+    ? selectedAddress
+      ? "Dirección temporal guardada"
+      : "Guardar dirección para envío"
+    : addressSaving
+    ? "Guardando..."
+    : "Guardar dirección para envío"
+
+  return (
+    <section className="checkout_shipping_form_card">
       <div className="checkout_invoice_card_head">
         <div>
-          <h2>Datos de invitado</h2>
-          <p>Usaremos esta información para envío, pago y notificaciones del pedido.</p>
+          <h2>Dirección de envío</h2>
+          <p>{selectedAddress ? "Lista para continuar con el pago." : "Completa los datos obligatorios para continuar."}</p>
         </div>
       </div>
 
-      <div className="checkout_address_form">
+      <form className="checkout_address_form checkout_address_form--compact" onSubmit={onSubmit}>
         <label>
-          <span>Nombre completo</span>
-          <input name="name" value={form.name} onChange={onChange} placeholder="Cliente Invitado" />
-        </label>
-        <label>
-          <span>Correo</span>
-          <input name="email" type="email" value={form.email} onChange={onChange} placeholder="cliente@correo.com" />
+          <span>Dirección *</span>
+          <input name="street" value={form.street} onChange={onChange} placeholder="Calle, número, colonia, ciudad" />
         </label>
         <label>
-          <span>Teléfono</span>
-          <input name="phone" value={form.phone} onChange={onChange} placeholder="9611234567" inputMode="numeric" maxLength={10} />
+          <span>Línea 2</span>
+          <input name="address_line_2" value={form.address_line_2} onChange={onChange} placeholder="Depto, interior, piso" />
         </label>
         <label>
-          <span>Calle</span>
-          <input name="street" value={form.street} onChange={onChange} placeholder="Av. Central" />
+          <span>Teléfono *</span>
+          <input name="phone" value={form.phone} onChange={onChange} placeholder="9611234567" inputMode="numeric" maxLength={ADDRESS_PHONE_LENGTH} />
         </label>
+        {isGuestCheckout ? (
+          <label>
+            <span>Correo</span>
+            <input name="email" type="email" value={form.email} onChange={onChange} placeholder="cliente@correo.com" />
+          </label>
+        ) : null}
         <label>
-          <span>Número exterior</span>
-          <input name="external_number" value={form.external_number} onChange={onChange} placeholder="123" />
+          <span>Referencia</span>
+          <textarea name={isGuestCheckout ? "references" : "delivery_note"} value={isGuestCheckout ? form.references : form.delivery_note} onChange={onChange} placeholder="Entre calles, color de fachada, indicaciones" rows="3" maxLength={DELIVERY_NOTE_MAX_LENGTH} />
         </label>
-        <label>
-          <span>Número interior</span>
-          <input name="internal_number" value={form.internal_number} onChange={onChange} placeholder="2B" />
-        </label>
-        <label>
-          <span>Colonia</span>
-          <input name="neighborhood" value={form.neighborhood} onChange={onChange} placeholder="Centro" />
-        </label>
-        <label>
-          <span>Código postal</span>
-          <input name="zip_code" value={form.zip_code} onChange={onChange} placeholder="29000" inputMode="numeric" maxLength={5} />
-        </label>
-        <label>
-          <span>Ciudad</span>
-          <input name="city" value={form.city} onChange={onChange} placeholder="Tuxtla" />
-        </label>
-        <label>
-          <span>Estado</span>
-          <input name="state" value={form.state} onChange={onChange} placeholder="Chiapas" />
-        </label>
-        <label className="checkout_address_form_full">
-          <span>Referencias</span>
-          <textarea name="references" value={form.references} onChange={onChange} placeholder="Casa azul" rows="3" />
-        </label>
-      </div>
+
+        <button type="submit" className="btn btn_primary" disabled={!isReady || addressSaving}>
+          {buttonText}
+        </button>
+
+        {selectedAddress ? (
+          <div className="checkout_saved_address">
+            <strong>{formatAddress(selectedAddress)}</strong>
+            {selectedAddress.address_line_2 ? <span>{selectedAddress.address_line_2}</span> : null}
+            <small>{selectedAddress.phone}</small>
+            {isGuestCheckout ? (
+              <button type="button" className="btn btn_ghost" onClick={onClearGuestAddress}>
+                Cambiar dirección
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </form>
     </section>
   )
 }
@@ -1291,11 +1468,7 @@ function InvoiceSummary({
   processingPayment,
   hasPendingGiftSelection,
   onPay,
-  onConfigureAddress,
   onDownloadPreview,
-  hasAddress,
-  acceptedTerms,
-  onAcceptedTermsChange,
   loyalty,
   accountCashback,
   cashbackAmount,
@@ -1314,7 +1487,7 @@ function InvoiceSummary({
 
   return (
     <div className="summary_card">
-      <h2 className="summary_title">Totales</h2>
+      <h2 className="summary_title">Resumen de compra</h2>
 
       <div className="summary_rows">
         <div className="summary_row">
@@ -1389,29 +1562,7 @@ function InvoiceSummary({
         </p>
       ) : null}
 
-      <label className="checkout_terms">
-        <input
-          type="checkbox"
-          checked={acceptedTerms}
-          onChange={(event) => onAcceptedTermsChange(event.target.checked)}
-        />
-        <span>
-          Acepto{" "}
-          <Link to="/terminos-y-condiciones">términos y condiciones</Link>
-        </span>
-      </label>
-
       <div className="summary_actions">
-        {!hasAddress ? (
-          <button
-            type="button"
-            className="btn btn_ghost"
-            onClick={onConfigureAddress}
-          >
-            Configurar dirección de envío
-          </button>
-        ) : null}
-
         {paymentMethodsLoading ? (
           <p className="checkout_muted">Cargando métodos de pago...</p>
         ) : hasStripePaymentMethod ? (
@@ -1419,9 +1570,9 @@ function InvoiceSummary({
             type="button"
             className="btn btn_primary"
             onClick={onPay}
-            disabled={processingPayment || !canCheckout || !acceptedTerms}
+            disabled={processingPayment || !canCheckout}
           >
-            {processingPayment ? "Validando checkout..." : "Pagar con tarjeta"}
+            {processingPayment ? "Validando checkout..." : "Pagar"}
           </button>
         ) : (
           <p className="checkout_muted checkout_muted--warning">
@@ -1437,9 +1588,33 @@ function InvoiceSummary({
           Descargar previa de pedido
         </button>
 
-        <Link to="/carrito" className="btn btn_ghost btn_link_like">
-          Volver al carrito
-        </Link>
+      </div>
+    </div>
+  )
+}
+
+function PaymentConfirmationModal({ isOpen, address, processing, onCancel, onConfirm }) {
+  if (!isOpen) return null
+
+  return (
+    <div className="checkout_confirm_overlay" role="presentation">
+      <div className="checkout_confirm_modal" role="dialog" aria-modal="true" aria-labelledby="checkout-confirm-title">
+        <h2 id="checkout-confirm-title">Confirmar dirección</h2>
+        <p>
+          Confirma la dirección de envío antes de pagar su pedido, una vez realizado el pago no podrá modificar la dirección.
+        </p>
+        <div className="checkout_confirm_address">
+          <strong>{address?.street || "Dirección pendiente"}</strong>
+          {address?.address_line_2 ? <span>{address.address_line_2}</span> : null}
+        </div>
+        <div className="checkout_confirm_actions">
+          <button type="button" className="btn btn_ghost checkout_confirm_cancel" onClick={onCancel} disabled={processing}>
+            Cancelar
+          </button>
+          <button type="button" className="btn btn_primary checkout_confirm_accept" onClick={onConfirm} disabled={processing}>
+            {processing ? "Procesando..." : "Acepto y continuar"}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1700,6 +1875,7 @@ function normalizeCheckoutItem(item = {}) {
   return {
     ...item,
     quantity,
+    image: getCheckoutItemImage(item),
     unit_price: unitPrice,
     discount,
     total,
@@ -1725,6 +1901,30 @@ function normalizeCheckoutItem(item = {}) {
         }
       : null,
   }
+}
+
+function getCheckoutItemImage(item = {}) {
+  const rawImage =
+    item.image_url ??
+    item.image_path ??
+    item.image ??
+    item.thumbnail_url ??
+    item.thumbnail ??
+    item.product?.image_url ??
+    item.product?.image_path ??
+    item.product?.image ??
+    item.product?.thumbnail_url ??
+    item.product?.thumbnail ??
+    item.product?.default_image?.url ??
+    item.product?.default_image?.path ??
+    item.product?.media?.[0]?.url ??
+    item.product?.media?.[0]?.path ??
+    item.product?.images?.[0]?.url ??
+    item.product?.images?.[0]?.path ??
+    item.variant?.image_url ??
+    item.variant?.image_path
+
+  return normalizeMediaUrl(rawImage) || CHECKOUT_ITEM_IMAGE_PLACEHOLDER
 }
 
 function normalizeCheckoutItemStock(item = {}) {
@@ -1953,15 +2153,16 @@ function normalizeAddress(address) {
 
 function buildAddressPayload(form, checkout) {
   return {
-    alias: form.alias.trim(),
+    alias: form.alias.trim() || "Dirección de envío",
     street: form.street.trim(),
     address_line_2: form.address_line_2.trim(),
     zip_code: form.zip_code.trim(),
     neighborhood: form.neighborhood.trim(),
     state: form.state.trim(),
     delivery_note: form.delivery_note.trim().slice(0, DELIVERY_NOTE_MAX_LENGTH),
-    contact_name: form.contact_name.trim() || checkout.customer?.name || "",
+    contact_name: form.contact_name.trim() || checkout.customer?.name || form.email.trim() || "Cliente",
     phone: form.phone.trim(),
+    email: form.email.trim(),
     is_default: Boolean(form.is_default),
   }
 }
@@ -1971,12 +2172,16 @@ function onlyDigits(value, maxLength) {
 }
 
 function validateAddressForm(form) {
+  if (!form.street.trim()) {
+    return "Ingresa la dirección de envío."
+  }
+
   if (!/^\d{10}$/.test(form.phone)) {
     return "El teléfono debe tener 10 dígitos numéricos."
   }
 
-  if (!/^\d{5}$/.test(form.zip_code)) {
-    return "El código postal debe tener 5 dígitos numéricos."
+  if (form.email.trim() && !isValidOptionalEmail(form.email)) {
+    return "Ingresa un correo válido o deja el campo vacío."
   }
 
   return ""
@@ -2014,16 +2219,17 @@ function buildCheckoutPayload(address, documentNotes = "") {
   }
 }
 
-function buildGuestCheckoutPayload(form, documentNotes = "") {
+function buildGuestCheckoutPayload(address, documentNotes = "") {
   const notes = String(documentNotes || "").trim().slice(0, DOCUMENT_NOTE_MAX_LENGTH)
-  const address = buildGuestShippingAddress(form)
+  const shippingAddress = buildGuestShippingAddress(address)
 
   return {
+    shipping_address: shippingAddress,
     guest: {
-      name: form.name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      shipping_address: address,
+      name: address.contact_name || address.email || "Cliente invitado",
+      email: address.email || "",
+      phone: address.phone,
+      shipping_address: shippingAddress,
     },
     ...(notes ? { document_notes: notes } : {}),
   }
@@ -2032,43 +2238,50 @@ function buildGuestCheckoutPayload(form, documentNotes = "") {
 function buildGuestAddress(form) {
   return {
     id: "guest",
-    alias: "Dirección de invitado",
-    contact_name: form.name.trim(),
+    alias: "Dirección temporal",
+    contact_name: form.email.trim() || "Cliente invitado",
     phone: form.phone.trim(),
-    ...buildGuestShippingAddress(form),
-    address_line_2: [form.external_number, form.internal_number ? `Int. ${form.internal_number}` : ""]
-      .filter(Boolean)
-      .join(" "),
-  }
-}
-
-function buildGuestShippingAddress(form) {
-  return {
-    contact_name: form.name.trim(),
-    phone: form.phone.trim(),
+    email: form.email.trim(),
     street: form.street.trim(),
-    external_number: form.external_number.trim(),
-    internal_number: form.internal_number.trim(),
-    neighborhood: form.neighborhood.trim(),
-    zip_code: form.zip_code.trim(),
-    city: form.city.trim(),
-    state: form.state.trim(),
-    references: form.references.trim(),
+    address_line_2: form.address_line_2.trim(),
+    references: form.references.trim().slice(0, DELIVERY_NOTE_MAX_LENGTH),
+    full_address: [form.street.trim(), form.address_line_2.trim()].filter(Boolean).join(", "),
   }
 }
 
-function isGuestCheckoutFormValid(form) {
+function buildGuestShippingAddress(address) {
+  return {
+    contact_name: address.contact_name || "Cliente invitado",
+    phone: address.phone.trim(),
+    email: address.email?.trim() || "",
+    street: address.street.trim(),
+    address_line_2: address.address_line_2?.trim() || "",
+    references: (address.references || address.delivery_note || "").trim().slice(0, DELIVERY_NOTE_MAX_LENGTH),
+  }
+}
+
+function validateGuestAddressForm(form) {
+  return validateAddressForm({
+    ...emptyAddressForm,
+    phone: form.phone,
+    email: form.email,
+    street: form.street,
+    address_line_2: form.address_line_2,
+    delivery_note: form.references,
+  })
+}
+
+function isCheckoutAddressFormValid(form) {
   return Boolean(
-    form.name.trim() &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) &&
-      /^\d{10}$/.test(form.phone) &&
-      form.street.trim() &&
-      form.external_number.trim() &&
-      form.neighborhood.trim() &&
-      /^\d{5}$/.test(form.zip_code) &&
-      form.city.trim() &&
-      form.state.trim()
+    form.street?.trim() &&
+      /^\d{10}$/.test(form.phone || "") &&
+      isValidOptionalEmail(form.email || "")
   )
+}
+
+function isValidOptionalEmail(email) {
+  const value = String(email || "").trim()
+  return !value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
 function getBlockerMessage(blockers = []) {

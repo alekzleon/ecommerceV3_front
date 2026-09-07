@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react"
 import AdminCard from "../../components/AdminCard/AdminCard"
 import AdminSidePanel from "../../../components/AdminSidePanel/AdminSidePanel"
 import {
+  assignAdminCouponUsers,
   createAdminCoupon,
   deleteAdminCoupon,
   getAdminCoupon,
   getAdminCouponFormOptions,
   getAdminCoupons,
-  sendAdminCoupon,
   toggleAdminCoupon,
   updateAdminCoupon,
 } from "../../../services/api/adminCouponService"
@@ -21,20 +21,21 @@ const EMPTY_COUPON_FORM = {
   discount_type: "percentage",
   discount_value: "",
   usage_limit: "",
+  per_user_usage_limit: "",
+  is_combinable: false,
+  trigger_coupon_id: "",
   starts_at: "",
   ends_at: "",
   is_active: true,
   is_general: true,
   user_ids: [],
-}
-
-const EMPTY_SEND_FORM = {
-  channels: ["email"],
-  user_ids: [],
-  emails: "",
-  whatsapp_numbers: "",
-  subject: "",
-  message: "",
+  campaign: {
+    send_email: false,
+    send_at: "",
+    subject: "",
+    message: "",
+    user_ids: [],
+  },
 }
 
 const DEFAULT_OPTIONS = {
@@ -43,6 +44,7 @@ const DEFAULT_OPTIONS = {
     { value: "fixed", label: "Monto fijo" },
   ],
   clients: [],
+  coupons: [],
   channels: [
     { value: "email", label: "Correo" },
     { value: "whatsapp", label: "WhatsApp" },
@@ -54,21 +56,17 @@ function CouponsPage() {
   const [options, setOptions] = useState(DEFAULT_OPTIONS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [sending, setSending] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [panelOpen, setPanelOpen] = useState(false)
-  const [sendPanelOpen, setSendPanelOpen] = useState(false)
   const [assignPanelOpen, setAssignPanelOpen] = useState(false)
   const [editingCouponId, setEditingCouponId] = useState(null)
-  const [selectedCoupon, setSelectedCoupon] = useState(null)
   const [assignmentCoupon, setAssignmentCoupon] = useState(null)
   const [assignmentSearch, setAssignmentSearch] = useState("")
   const [assignmentUserIds, setAssignmentUserIds] = useState([])
   const [form, setForm] = useState(EMPTY_COUPON_FORM)
-  const [sendForm, setSendForm] = useState(EMPTY_SEND_FORM)
 
   useEffect(() => {
     loadCouponsModule()
@@ -162,15 +160,6 @@ function CouponsPage() {
     setPanelOpen(true)
   }
 
-  function openSendPanel(coupon) {
-    setSelectedCoupon(coupon)
-    setSendForm({
-      ...EMPTY_SEND_FORM,
-      subject: `Cupón ${coupon.code}`,
-    })
-    setSendPanelOpen(true)
-  }
-
   async function openAssignPanel(coupon) {
     setAssignPanelOpen(true)
     setAssignmentLoading(true)
@@ -198,13 +187,6 @@ function CouponsPage() {
     setForm(EMPTY_COUPON_FORM)
   }
 
-  function closeSendPanel() {
-    if (sending) return
-    setSendPanelOpen(false)
-    setSelectedCoupon(null)
-    setSendForm(EMPTY_SEND_FORM)
-  }
-
   function closeAssignPanel() {
     if (assigning) return
     setAssignPanelOpen(false)
@@ -214,50 +196,45 @@ function CouponsPage() {
   }
 
   function handleFormChange(event) {
-    const { name, value, type, checked } = event.target
+    const { name, value, type, checked, selectedOptions } = event.target
 
     setForm((prev) => {
-      const nextValue = type === "checkbox" ? checked : value
+      const nextValue =
+        type === "checkbox"
+          ? checked
+          : type === "select-multiple"
+          ? Array.from(selectedOptions).map((option) => Number(option.value))
+          : value
+      const [group, field] = name.split(".")
+
+      if (group === "campaign") {
+        return {
+          ...prev,
+          campaign: {
+            ...prev.campaign,
+            [field]: nextValue,
+          },
+        }
+      }
+
       const nextForm = {
         ...prev,
         [name]: nextValue,
       }
 
-      if (name === "discount_type" && value === "fixed") {
-        return nextForm
+      if (name === "is_general" && checked) {
+        return {
+          ...nextForm,
+          user_ids: [],
+          campaign: {
+            ...nextForm.campaign,
+            user_ids: [],
+          },
+        }
       }
 
       return nextForm
     })
-  }
-
-  function handleSendFieldChange(event) {
-    const { name, value } = event.target
-    setSendForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
-
-  function handleSendChannelsChange(channelValue, checked) {
-    setSendForm((prev) => {
-      const channels = checked
-        ? [...new Set([...prev.channels, channelValue])]
-        : prev.channels.filter((channel) => channel !== channelValue)
-
-      return {
-        ...prev,
-        channels,
-      }
-    })
-  }
-
-  function handleSendUsersChange(event) {
-    const selectedIds = Array.from(event.target.selectedOptions).map((option) => Number(option.value))
-    setSendForm((prev) => ({
-      ...prev,
-      user_ids: selectedIds,
-    }))
   }
 
   function toggleAssignmentUser(userId) {
@@ -327,49 +304,14 @@ function CouponsPage() {
     }
   }
 
-  async function handleSendCoupon(event) {
-    event.preventDefault()
-
-    if (!selectedCoupon?.id) return
-    if (!sendForm.channels.length) {
-      notifyWarning("Selecciona al menos un canal de envío.")
-      return
-    }
-
-    const payload = buildSendPayload(sendForm)
-    const hasRecipients =
-      payload.user_ids.length ||
-      payload.emails.length ||
-      payload.whatsapp_numbers.length
-
-    if (!hasRecipients) {
-      notifyWarning("Selecciona clientes o agrega destinatarios manuales.")
-      return
-    }
-
-    try {
-      setSending(true)
-      const response = await sendAdminCoupon(selectedCoupon.id, payload)
-      notifySuccess(response?.message || "Cupón enviado correctamente.")
-      closeSendPanel()
-    } catch (error) {
-      console.error("Error al enviar cupón:", error?.response?.data || error)
-      notifyError(error?.response?.data?.message || "No fue posible enviar el cupón.")
-    } finally {
-      setSending(false)
-    }
-  }
-
   async function handleSaveAssignment() {
     if (!assignmentCoupon?.id) return
 
     try {
       setAssigning(true)
-      const payload = buildCouponPayloadFromCoupon(assignmentCoupon, {
-        is_general: assignmentUserIds.length === 0,
+      const response = await assignAdminCouponUsers(assignmentCoupon.id, {
         user_ids: assignmentUserIds.map(Number),
       })
-      const response = await updateAdminCoupon(assignmentCoupon.id, payload)
 
       notifySuccess(response?.message || "Asignación del cupón actualizada.")
       await loadCouponsModule()
@@ -469,6 +411,14 @@ function CouponsPage() {
                         <div className="coupons-page__code-cell">
                           <strong>{coupon.code}</strong>
                           <span>{coupon.name}</span>
+                          <div className="coupons-page__badges">
+                            <span className="coupons-page__badge">
+                              {coupon.is_general ? "General" : `${coupon.users_count || coupon.user_ids.length} asignado(s)`}
+                            </span>
+                            {coupon.is_combinable ? (
+                              <span className="coupons-page__badge coupons-page__badge--blue">Combinable</span>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                       <td>
@@ -478,6 +428,11 @@ function CouponsPage() {
                         <div className="coupons-page__usage">
                           <strong>{coupon.usage_count || coupon.redemptions_count || 0}</strong>
                           <span>{coupon.usage_limit ? `de ${coupon.usage_limit}` : "sin límite"}</span>
+                          <span>
+                            {coupon.per_user_usage_limit
+                              ? `Por usuario: ${coupon.per_user_usage_limit}`
+                              : "Sin límite por usuario"}
+                          </span>
                         </div>
                       </td>
                       <td>{formatValidity(coupon)}</td>
@@ -499,15 +454,6 @@ function CouponsPage() {
                             onClick={() => openAssignPanel(coupon)}
                           >
                             Asignar cupón
-                          </button>
-                          <button
-                            type="button"
-                            className="coupons-icon-button coupons-icon-button--send"
-                            onClick={() => openSendPanel(coupon)}
-                            title="Enviar cupón"
-                            aria-label={`Enviar ${coupon.code}`}
-                          >
-                            <i className="bi bi-send" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
@@ -624,7 +570,54 @@ function CouponsPage() {
                   placeholder="Sin límite"
                 />
               </label>
+              <label className="coupons-panel__field">
+                <span>Límite por usuario</span>
+                <input
+                  type="number"
+                  min="0"
+                  name="per_user_usage_limit"
+                  value={form.per_user_usage_limit}
+                  onChange={handleFormChange}
+                  placeholder="Sin límite"
+                />
+              </label>
+              <label className="coupons-panel__field">
+                <span>Cupón relacionado</span>
+                <select name="trigger_coupon_id" value={form.trigger_coupon_id} onChange={handleFormChange}>
+                  <option value="">Sin cupón relacionado</option>
+                  {options.coupons
+                    .filter((coupon) => Number(coupon.id) !== Number(editingCouponId))
+                    .map((coupon) => (
+                      <option value={coupon.id} key={coupon.id}>
+                        {coupon.code} · {coupon.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
             </div>
+            <div className="coupons-panel__checks">
+              <label className="coupons-panel__check">
+                <input type="checkbox" name="is_combinable" checked={form.is_combinable} onChange={handleFormChange} />
+                <span>Permitir combinar con otros cupones</span>
+              </label>
+              <label className="coupons-panel__check">
+                <input type="checkbox" name="is_general" checked={form.is_general} onChange={handleFormChange} />
+                <span>Cupón general</span>
+              </label>
+            </div>
+
+            {!form.is_general ? (
+              <label className="coupons-panel__field">
+                <span>Usuarios asignados</span>
+                <select multiple name="user_ids" value={form.user_ids.map(String)} onChange={handleFormChange}>
+                  {options.clients.map((client) => (
+                    <option value={client.id} key={client.id}>
+                      {client.name || client.username || client.email} {client.email ? `· ${client.email}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </section>
 
           <section className="coupons-panel__section">
@@ -643,6 +636,43 @@ function CouponsPage() {
               <input type="checkbox" name="is_active" checked={form.is_active} onChange={handleFormChange} />
               <span>Activo</span>
             </label>
+          </section>
+
+          <section className="coupons-panel__section">
+            <h4>Campaña email</h4>
+            <label className="coupons-panel__check">
+              <input type="checkbox" name="campaign.send_email" checked={form.campaign.send_email} onChange={handleFormChange} />
+              <span>Enviar campaña por correo</span>
+            </label>
+
+            {form.campaign.send_email ? (
+              <>
+                <div className="coupons-panel__grid">
+                  <label className="coupons-panel__field">
+                    <span>Fecha de envío</span>
+                    <input type="datetime-local" name="campaign.send_at" value={form.campaign.send_at} onChange={handleFormChange} />
+                  </label>
+                  <label className="coupons-panel__field">
+                    <span>Destinatarios</span>
+                    <select multiple name="campaign.user_ids" value={form.campaign.user_ids.map(String)} onChange={handleFormChange}>
+                      {options.clients.map((client) => (
+                        <option value={client.id} key={client.id}>
+                          {client.name || client.username || client.email} {client.email ? `· ${client.email}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="coupons-panel__field">
+                  <span>Asunto</span>
+                  <input name="campaign.subject" value={form.campaign.subject} onChange={handleFormChange} placeholder="Tienes un cupón disponible" />
+                </label>
+                <label className="coupons-panel__field">
+                  <span>Mensaje</span>
+                  <textarea name="campaign.message" value={form.campaign.message} onChange={handleFormChange} rows="4" placeholder="Usa este cupón en tu próxima compra." />
+                </label>
+              </>
+            ) : null}
           </section>
         </form>
       </AdminSidePanel>
@@ -692,7 +722,7 @@ function CouponsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="coupons-assignment__empty">Este cupón no tiene clientes asignados. Se guardará como general si no seleccionas usuarios.</p>
+                <p className="coupons-assignment__empty">Este cupón no tiene clientes asignados.</p>
               )}
             </section>
 
@@ -745,78 +775,6 @@ function CouponsPage() {
         )}
       </AdminSidePanel>
 
-      <AdminSidePanel
-        isOpen={sendPanelOpen}
-        title="Enviar cupón"
-        subtitle={selectedCoupon ? `${selectedCoupon.code} · ${selectedCoupon.name}` : "Marketing · Cupones"}
-        onClose={closeSendPanel}
-        closeDisabled={sending}
-        width="lg"
-        footer={
-          <div className="coupons-panel__footer">
-            <button type="button" className="coupons-button coupons-button--secondary" onClick={closeSendPanel} disabled={sending}>
-              Cancelar
-            </button>
-            <button type="submit" form="coupon-send-form" className="coupons-button coupons-button--primary" disabled={sending}>
-              {sending ? "Enviando..." : "Enviar cupón"}
-            </button>
-          </div>
-        }
-      >
-        <form id="coupon-send-form" className="coupons-panel" onSubmit={handleSendCoupon}>
-          <section className="coupons-panel__section">
-            <h4>Canales</h4>
-            <div className="coupons-panel__checks">
-              {options.channels.map((channel) => (
-                <label className="coupons-panel__check" key={channel.value}>
-                  <input
-                    type="checkbox"
-                    checked={sendForm.channels.includes(channel.value)}
-                    onChange={(event) => handleSendChannelsChange(channel.value, event.target.checked)}
-                  />
-                  <span>{channel.label}</span>
-                </label>
-              ))}
-            </div>
-          </section>
-
-          <section className="coupons-panel__section">
-            <h4>Destinatarios</h4>
-            <label className="coupons-panel__field">
-              <span>Clientes</span>
-              <select multiple value={sendForm.user_ids.map(String)} onChange={handleSendUsersChange}>
-                {options.clients.map((client) => (
-                  <option value={client.id} key={client.id}>
-                    {client.name || client.username || client.email} {client.email ? `· ${client.email}` : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="coupons-panel__grid">
-              <label className="coupons-panel__field">
-                <span>Correos extra</span>
-                <input name="emails" value={sendForm.emails} onChange={handleSendFieldChange} placeholder="extra@mail.com, otro@mail.com" />
-              </label>
-              <label className="coupons-panel__field">
-                <span>WhatsApp extra</span>
-                <input name="whatsapp_numbers" value={sendForm.whatsapp_numbers} onChange={handleSendFieldChange} placeholder="5219999999999" />
-              </label>
-            </div>
-          </section>
-
-          <section className="coupons-panel__section">
-            <h4>Mensaje</h4>
-            <label className="coupons-panel__field">
-              <span>Asunto</span>
-              <input name="subject" value={sendForm.subject} onChange={handleSendFieldChange} placeholder="Cupón especial para ti" />
-            </label>
-            <label className="coupons-panel__field">
-              <span>Mensaje</span>
-              <textarea name="message" value={sendForm.message} onChange={handleSendFieldChange} rows="4" placeholder="Aprovecha este cupón en tu próxima compra." />
-            </label>
-          </section>
-        </form>
-      </AdminSidePanel>
     </>
   )
 }
@@ -839,14 +797,25 @@ function normalizeCoupon(coupon = {}) {
   return {
     ...coupon,
     is_active: Boolean(coupon.is_active),
-    is_general: Boolean(coupon.is_general),
+    is_general: coupon.is_general !== false,
+    is_combinable: Boolean(coupon.is_combinable),
     usage_count: Number(coupon.usage_count ?? coupon.redemptions_count ?? 0),
     users_count: Number(coupon.users_count ?? coupon.users?.length ?? 0),
+    per_user_usage_limit: coupon.per_user_usage_limit ?? null,
+    trigger_coupon_id: coupon.trigger_coupon_id ?? null,
     user_ids: Array.isArray(coupon.user_ids)
       ? coupon.user_ids
       : Array.isArray(coupon.users)
       ? coupon.users.map((user) => user.id)
       : [],
+  }
+}
+
+function normalizeCouponOption(coupon = {}) {
+  return {
+    id: coupon.id,
+    code: coupon.code || "",
+    name: coupon.name || "",
   }
 }
 
@@ -857,7 +826,8 @@ function normalizeOptions(response) {
     discount_types: Array.isArray(data.discount_types) && data.discount_types.length
       ? data.discount_types
       : DEFAULT_OPTIONS.discount_types,
-    clients: Array.isArray(data.clients) ? data.clients : [],
+    clients: Array.isArray(data.clients) ? data.clients : Array.isArray(data.users) ? data.users : [],
+    coupons: Array.isArray(data.coupons) ? data.coupons.map(normalizeCouponOption) : [],
     channels: Array.isArray(data.channels) && data.channels.length
       ? data.channels
       : DEFAULT_OPTIONS.channels,
@@ -872,17 +842,33 @@ function mapCouponToForm(coupon) {
     discount_type: coupon.discount_type || "percentage",
     discount_value: coupon.discount_value ?? "",
     usage_limit: coupon.usage_limit ?? "",
+    per_user_usage_limit: coupon.per_user_usage_limit ?? "",
+    is_combinable: Boolean(coupon.is_combinable),
+    trigger_coupon_id: coupon.trigger_coupon_id ?? "",
     starts_at: toDateTimeLocalValue(coupon.starts_at),
     ends_at: toDateTimeLocalValue(coupon.ends_at),
     is_active: Boolean(coupon.is_active),
     is_general: Boolean(coupon.is_general),
     user_ids: Array.isArray(coupon.user_ids) ? coupon.user_ids.map(Number) : [],
+    campaign: {
+      send_email: Boolean(coupon.campaign?.send_email),
+      send_at: toDateTimeLocalValue(coupon.campaign?.send_at),
+      subject: coupon.campaign?.subject || "",
+      message: coupon.campaign?.message || "",
+      user_ids: Array.isArray(coupon.campaign?.user_ids)
+        ? coupon.campaign.user_ids.map(Number)
+        : [],
+    },
   }
 }
 
 function validateCouponForm(form) {
   if (!form.code.trim() || !form.name.trim()) {
     return { valid: false, message: "Completa código y nombre del cupón." }
+  }
+
+  if (!/^[A-Z0-9_-]+$/.test(form.code.trim().toUpperCase())) {
+    return { valid: false, message: "El código solo puede usar A-Z, 0-9, guion bajo o guion medio." }
   }
 
   const discountValue = Number(form.discount_value || 0)
@@ -895,10 +881,22 @@ function validateCouponForm(form) {
     return { valid: false, message: "El porcentaje no puede ser mayor a 100." }
   }
 
+  if (!form.is_general && !form.user_ids.length) {
+    return { valid: false, message: "Selecciona al menos un usuario o marca el cupón como general." }
+  }
+
+  if (form.campaign.send_email && !form.campaign.subject.trim()) {
+    return { valid: false, message: "Agrega un asunto para la campaña email." }
+  }
+
   return { valid: true, message: "" }
 }
 
 function buildCouponPayload(form) {
+  const campaignUserIds = form.campaign.user_ids.length
+    ? form.campaign.user_ids.map(Number)
+    : form.user_ids.map(Number)
+
   const payload = {
     code: form.code.trim().toUpperCase(),
     name: form.name.trim(),
@@ -907,60 +905,23 @@ function buildCouponPayload(form) {
     discount_value: Number(form.discount_value || 0),
     is_active: Boolean(form.is_active),
     is_general: Boolean(form.is_general),
+    is_combinable: Boolean(form.is_combinable),
     starts_at: form.starts_at ? `${form.starts_at.replace("T", " ")}:00` : null,
     ends_at: form.ends_at ? `${form.ends_at.replace("T", " ")}:00` : null,
     usage_limit: form.usage_limit === "" ? null : Number(form.usage_limit),
-    metadata: {},
-  }
-
-  if (!payload.is_general) {
-    payload.user_ids = form.user_ids.map(Number)
-  }
-
-  return payload
-}
-
-function buildCouponPayloadFromCoupon(coupon, assignment) {
-  const startsAt = toDateTimeLocalValue(coupon.starts_at)
-  const endsAt = toDateTimeLocalValue(coupon.ends_at)
-  const isGeneral = Boolean(assignment.is_general)
-  const payload = {
-    code: String(coupon.code || "").trim().toUpperCase(),
-    name: String(coupon.name || "").trim(),
-    description: coupon.description || null,
-    discount_type: coupon.discount_type || "percentage",
-    discount_value: Number(coupon.discount_value || 0),
-    is_active: Boolean(coupon.is_active),
-    is_general: isGeneral,
-    starts_at: startsAt ? `${startsAt.replace("T", " ")}:00` : null,
-    ends_at: endsAt ? `${endsAt.replace("T", " ")}:00` : null,
-    usage_limit: coupon.usage_limit === undefined || coupon.usage_limit === "" ? null : coupon.usage_limit,
-    metadata: coupon.metadata || {},
-  }
-
-  if (!isGeneral) {
-    payload.user_ids = assignment.user_ids.map(Number)
+    per_user_usage_limit: form.per_user_usage_limit === "" ? null : Number(form.per_user_usage_limit),
+    trigger_coupon_id: form.trigger_coupon_id === "" ? null : Number(form.trigger_coupon_id),
+    user_ids: form.is_general ? [] : form.user_ids.map(Number),
+    campaign: {
+      send_email: Boolean(form.campaign.send_email),
+      send_at: form.campaign.send_at ? `${form.campaign.send_at.replace("T", " ")}:00` : null,
+      subject: form.campaign.subject.trim() || null,
+      message: form.campaign.message.trim() || null,
+      user_ids: campaignUserIds,
+    },
   }
 
   return payload
-}
-
-function buildSendPayload(form) {
-  return {
-    channels: form.channels,
-    user_ids: form.user_ids.map(Number),
-    emails: splitList(form.emails),
-    whatsapp_numbers: splitList(form.whatsapp_numbers),
-    subject: form.subject.trim() || null,
-    message: form.message.trim() || null,
-  }
-}
-
-function splitList(value) {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
 }
 
 function formatDiscount(coupon) {

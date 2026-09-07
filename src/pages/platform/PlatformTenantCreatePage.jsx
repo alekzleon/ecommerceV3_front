@@ -4,7 +4,7 @@ import {
   checkTenantSubdomain,
   createTenant,
 } from "../../services/api/platformTenantService"
-import { CloudiShopMarketingHome } from "../public/HomePage"
+import { CloudiShopMarketingHome, CloudiShopPricingPage } from "../public/HomePage"
 import "./platform-tenant-create.css"
 
 const INITIAL_FORM = {
@@ -31,6 +31,10 @@ function PlatformTenantCreatePage() {
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/"
 
   if (normalizedPathname !== CREATE_STORE_PATH) {
+    if (normalizedPathname === "/precios") {
+      return <CloudiShopPricingPage createStorePath={CREATE_STORE_PATH} loginPath="/platform/admin" />
+    }
+
     return <PlatformLandingPage />
   }
 

@@ -20,6 +20,11 @@ export async function getAllPromotions(params = {}) {
   return response.data
 }
 
+export async function getPromotionProducts(slug, params = {}) {
+  const response = await api.get(`/promotions/${slug}/products`, { params })
+  return response.data
+}
+
 export async function getAdminPromotions(params = {}) {
   const response = await api.get("/admin/promotions", { params })
   return response.data

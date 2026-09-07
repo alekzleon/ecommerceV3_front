@@ -13,6 +13,7 @@ import {
 } from "../utils/salesTracking"
 
 const HomePage = lazy(() => import("../pages/public/HomePage"))
+const PricingPage = lazy(() => import("../pages/public/PricingPage"))
 const ContactPage = lazy(() => import("../pages/public/ContactPage"))
 const NotFoundPage = lazy(() => import("../pages/public/NotFoundPage"))
 const PrivacyPolicyPage = lazy(() => import("../pages/legal/PrivacyPolicyPage"))
@@ -119,6 +120,7 @@ function AppRouter() {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<HomePage />} />
           <Route path="preview/ecommerce" element={<HomePage />} />
+          <Route path="precios" element={<PricingPage />} />
           <Route path="productos" element={<ProductsPage />} />
           <Route path="producto/:slug" element={<ProductDetailPage />} />
           <Route path="ofertas" element={<OffersPage />} />

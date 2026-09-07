@@ -98,6 +98,7 @@ function ProductDetailPage() {
       price: defaultPrice,
       oldPrice: defaultPrice,
       priceInfo: productData.price_info ?? null,
+      pricingVisibility: productData.pricing_visibility ?? {},
       stock: productData.stock ?? null,
       stockStatus: productData.stock_status || "untracked",
       stockMessage: productData.stock_message || "",
@@ -149,11 +150,32 @@ function ProductDetailPage() {
   }, [product, selectedVariantId])
   const displayPrice = Number(product?.price ?? 0)
   const comparePrice = Number(product?.oldPrice ?? 0)
+  const pricingVisibility = product?.pricingVisibility || product?.pricing_visibility || {}
+  const storefrontAccessRules = settings?.storefront?.access_rules || {}
+  const canViewPrice = isAuthenticated || resolvePricingPermission(
+    pricingVisibility,
+    storefrontAccessRules,
+    "can_view_price",
+    "hide_prices_for_guests"
+  )
+  const canPurchase = isAuthenticated || resolvePricingPermission(
+    pricingVisibility,
+    storefrontAccessRules,
+    "can_purchase",
+    "requires_login_to_purchase"
+  )
+  const priceVisibilityReason =
+    pricingVisibility.price_visibility_reason ||
+    storefrontAccessRules.price_visibility_reason ||
+    resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, "hide_prices_for_guests")
+  const purchaseBlockReason =
+    pricingVisibility.purchase_block_reason ||
+    storefrontAccessRules.purchase_block_reason ||
+    resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, "requires_login_to_purchase")
   const selectedVariantStock = selectedVariant?.stock
   const selectedVariantHasTrackedStock = selectedVariantStock !== null && selectedVariantStock !== undefined && selectedVariantStock !== ""
   const displayStock = selectedVariantHasTrackedStock ? selectedVariantStock : product?.stock
   const hasDisplayStock = displayStock !== null && displayStock !== undefined && displayStock !== ""
-  const canShowPrices = sessionReady && isAuthenticated
   const hasAvailablePrice =
     displayPrice > 0 && product?.priceInfo?.source !== PRICE_UNAVAILABLE_SOURCE
   const hasVariantAttributes = Boolean(product?.variantOptions?.length)
@@ -243,7 +265,7 @@ function ProductDetailPage() {
   }
 
   const handleAddToCart = async () => {
-    if (!product?.id || addingToCart) return
+    if (!product?.id || addingToCart || !canPurchase) return
 
     if (!hasAvailablePrice) {
       notifyError("Precio no disponible para este producto.")
@@ -542,14 +564,14 @@ function ProductDetailPage() {
             </div>
 
             <div className="editorial-product-show__price">
-              {canShowPrices && hasAvailablePrice ? (
+              {canViewPrice && hasAvailablePrice ? (
                 <>
                   <span>{formatMoney(displayPrice)}</span>
                   {comparePrice > displayPrice ? <del>{formatMoney(comparePrice)}</del> : null}
                 </>
               ) : (
                 <span className="is-note">
-                  {canShowPrices ? "Precio no disponible" : "Inicia sesión para ver precios"}
+                  {getPriceUnavailableMessage(canViewPrice, priceVisibilityReason)}
                 </span>
               )}
             </div>
@@ -628,7 +650,7 @@ function ProductDetailPage() {
                   <button type="button" className="editorial-product-show__cart" disabled>
                     Cargando...
                   </button>
-                ) : isAuthenticated ? (
+                ) : canPurchase ? (
                   <button
                     type="button"
                     className="editorial-product-show__cart"
@@ -656,8 +678,9 @@ function ProductDetailPage() {
                     type="button"
                     className="editorial-product-show__cart"
                     onClick={() => navigate("/login")}
+                    disabled={purchaseBlockReason !== "login_required"}
                   >
-                    Inicia sesión para comprar
+                    {getPurchaseBlockedMessage(purchaseBlockReason)}
                   </button>
                 )}
               </div>
@@ -837,7 +860,7 @@ function ProductDetailPage() {
             </div>
 
             <div className="product-detail__price-block">
-              {canShowPrices && hasAvailablePrice ? (
+              {canViewPrice && hasAvailablePrice ? (
                 <>
                   {comparePrice > displayPrice ? (
                     <div className="product-detail__old-price">
@@ -854,7 +877,7 @@ function ProductDetailPage() {
                 </>
               ) : (
                 <div className="product-detail__price-login">
-                  {canShowPrices ? "Precio no disponible" : "Inicia sesión para ver precios"}
+                  {getPriceUnavailableMessage(canViewPrice, priceVisibilityReason)}
                 </div>
               )}
               {selectedVariant ? (
@@ -1016,7 +1039,7 @@ function ProductDetailPage() {
                     >
                       <strong>{variant.name || variant.sku}</strong>
                       <span>{variant.sku}</span>
-                      {canShowPrices && hasAvailablePrice ? (
+                      {canViewPrice && hasAvailablePrice ? (
                         <small>${displayPrice.toLocaleString("es-MX")}</small>
                       ) : null}
                     </button>
@@ -1045,7 +1068,7 @@ function ProductDetailPage() {
                   <button type="button" className="product-detail__primary-btn" disabled>
                     Cargando...
                   </button>
-                ) : isAuthenticated ? (
+                ) : canPurchase ? (
                   <button
                     type="button"
                     className="product-detail__primary-btn"
@@ -1075,8 +1098,9 @@ function ProductDetailPage() {
                     type="button"
                     className="product-detail__primary-btn"
                     onClick={() => navigate("/login")}
+                    disabled={purchaseBlockReason !== "login_required"}
                   >
-                    Inicia sesión para comprar
+                    {getPurchaseBlockedMessage(purchaseBlockReason)}
                   </button>
                 )}
 
@@ -1270,6 +1294,37 @@ function extractValidationMessage(value) {
   if (Array.isArray(value)) return value.find(Boolean) || ""
   if (typeof value === "string") return value
   return ""
+}
+
+function resolvePricingPermission(pricingVisibility, storefrontAccessRules, permissionKey, fallbackRuleKey) {
+  if (pricingVisibility?.[permissionKey] !== undefined) {
+    return Boolean(pricingVisibility[permissionKey])
+  }
+
+  if (storefrontAccessRules?.[permissionKey] !== undefined) {
+    return Boolean(storefrontAccessRules[permissionKey])
+  }
+
+  return !(pricingVisibility?.[fallbackRuleKey] ?? storefrontAccessRules?.[fallbackRuleKey])
+}
+
+function resolveLoginRequiredReason(pricingVisibility, storefrontAccessRules, ruleKey) {
+  return pricingVisibility?.[ruleKey] ?? storefrontAccessRules?.[ruleKey]
+    ? "login_required"
+    : null
+}
+
+function getPriceUnavailableMessage(canViewPrice, reason) {
+  if (canViewPrice) return "Precio no disponible"
+  if (reason === "login_required") return "Inicia sesión para ver precios"
+
+  return "Precio no disponible"
+}
+
+function getPurchaseBlockedMessage(reason) {
+  if (reason === "login_required") return "Inicia sesión para comprar"
+
+  return "No disponible para compra"
 }
 
 function PromotionScaleList({ promotion }) {

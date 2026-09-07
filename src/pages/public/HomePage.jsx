@@ -671,6 +671,24 @@ const DEFAULT_PUBLIC_PLANS = [
   },
 ];
 
+const PLAN_COMPARISON_FEATURES = [
+  { label: "Publica tu tienda y valida tu idea.", minTier: 0 },
+  { label: "Configura productos iniciales.", minTier: 0 },
+  { label: "Empieza a recibir tus primeros pedidos.", minTier: 0 },
+  { label: "Catalogo y productos.", minTier: 0 },
+  { label: "Clientes y pedidos.", minTier: 0 },
+  { label: "Configuracion basica.", minTier: 0 },
+  { label: "Plantilla basica incluida.", minTier: 0 },
+  { label: "Fidelizacion y promociones.", minTier: 1 },
+  { label: "Conexion con envios.", minTier: 1 },
+  { label: "Personalizacion y marketing.", minTier: 2 },
+  { label: "Automatizacion y usuarios.", minTier: 2 },
+  { label: "Cupones.", minTier: 2 },
+  { label: "Fidelizacion.", minTier: 2 },
+  { label: "Carritos abandonados.", minTier: 2 },
+  { label: "Conecta tu dominio.", minTier: 3 },
+];
+
 export function CloudiShopMarketingHome({ createStorePath = "/registro", loginPath = "/login" }) {
   const rootRef = useRef(null);
   const [plans, setPlans] = useState(DEFAULT_PUBLIC_PLANS);
@@ -681,12 +699,15 @@ export function CloudiShopMarketingHome({ createStorePath = "/registro", loginPa
   );
 
   const landingMarkup = useMemo(() => {
-    const markup = withPublicPlans(defaultLandingMarkup, plansMarkup).replaceAll(
+    const markup = stripPlansSection(withPublicPlans(defaultLandingMarkup, plansMarkup)).replaceAll(
       'href="/registro"',
       `href="${createStorePath}"`
     ).replaceAll(
       'href="/login"',
       `href="${loginPath}"`
+    ).replaceAll(
+      'href="#planes"',
+      'href="/precios"'
     );
 
     return optimizeLandingMedia(markup);
@@ -844,6 +865,107 @@ export function CloudiShopMarketingHome({ createStorePath = "/registro", loginPa
   return <div ref={rootRef} className="cloudishop-home" dangerouslySetInnerHTML={{ __html: landingMarkup }} />;
 }
 
+export function CloudiShopPricingPage({ createStorePath = "/registro", loginPath = "/login" }) {
+  const rootRef = useRef(null);
+  const [plans, setPlans] = useState(DEFAULT_PUBLIC_PLANS);
+
+  const pricingMarkup = useMemo(() => {
+    const plansMarkup = buildPublicPlansMarkup(plans, createStorePath, "monthly");
+    const comparisonMarkup = buildPlanComparisonMarkup(plans, createStorePath);
+
+    return buildPricingMarkup(plansMarkup, comparisonMarkup, createStorePath, loginPath);
+  }, [createStorePath, loginPath, plans]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const nav = root?.querySelector(".nav");
+    const comparison = root?.querySelector(".pricing-comparison-wrap");
+    const faq = root?.querySelector(".pricing-faq-wrap");
+    let navTicking = false;
+
+    const updateNavState = () => {
+      if (!nav) return;
+      const comparisonTop = comparison ? comparison.offsetTop - 120 : Number.POSITIVE_INFINITY;
+      const comparisonBottom = faq
+        ? faq.offsetTop - 120
+        : comparison
+        ? comparison.offsetTop + comparison.offsetHeight - 180
+        : Number.NEGATIVE_INFINITY;
+      const isComparing = window.scrollY >= comparisonTop && window.scrollY < comparisonBottom;
+
+      nav.classList.toggle("is-scrolled", window.scrollY > 18);
+      nav.classList.toggle("is-hidden-on-comparison", isComparing);
+      root?.classList.toggle("is-comparing", isComparing);
+      navTicking = false;
+    };
+
+    updateNavState();
+    const onScroll = () => {
+      if (!navTicking) {
+        window.requestAnimationFrame(updateNavState);
+        navTicking = true;
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("visible");
+          observer.unobserve(entry.target);
+        }
+      }
+    }, { threshold: .14 });
+
+    root?.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+
+    const billingButtons = root?.querySelectorAll("[data-plan-period]");
+    const onBillingClick = (event) => {
+      const nextPeriod = event.currentTarget?.dataset?.planPeriod;
+      if (nextPeriod === "monthly" || nextPeriod === "annual") {
+        billingButtons?.forEach((button) => {
+          button.classList.toggle("is-active", button.dataset.planPeriod === nextPeriod);
+        });
+        updatePublicPlanPrices(root, plans, nextPeriod);
+      }
+    };
+    billingButtons?.forEach((button) => {
+      button.addEventListener("click", onBillingClick);
+    });
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+      billingButtons?.forEach((button) => {
+        button.removeEventListener("click", onBillingClick);
+      });
+    };
+  }, [pricingMarkup, plans]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    getPublicPlatformPlans()
+      .then((response) => {
+        if (!isActive) return;
+
+        const nextPlans = normalizePublicPlans(response);
+        if (nextPlans.length) {
+          setPlans(nextPlans);
+        }
+      })
+      .catch((error) => {
+        console.error("Error cargando planes públicos:", error?.data || error);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  return <div ref={rootRef} className="cloudishop-home cloudishop-pricing" dangerouslySetInnerHTML={{ __html: pricingMarkup }} />;
+}
+
 function withPublicPlans(markup, plansMarkup) {
   return markup.replace(
     /<div class="plans-billing-toggle"[\s\S]*?<\/div>\s*(?=<div class="plans-grid">)/,
@@ -854,12 +976,242 @@ function withPublicPlans(markup, plansMarkup) {
   );
 }
 
+function stripPlansSection(markup) {
+  return markup.replace(/\s*<section class="plans-section" id="planes">[\s\S]*?<\/section>\s*(?=<section class="final-cta")/, "\n\n    ");
+}
+
+function buildPricingMarkup(plansMarkup, comparisonMarkup, createStorePath, loginPath) {
+  return String.raw`<nav class="nav is-scrolled" aria-label="Navegacion principal">
+    <div class="shell">
+      <a class="brand" href="/" aria-label="CloudiShop inicio">
+        <img loading="lazy" src="/logo_blanco.png" alt="CloudiShop">
+      </a>
+      <div class="nav-links">
+        <a href="/#clientes">Soluciones</a>
+        <a href="/#caracteristicas-resultados">Plataforma</a>
+        <a href="/precios" aria-current="page">Precios</a>
+        <a href="/#clientes">Grandes marcas</a>
+      </div>
+      <div class="nav-actions">
+        <a class="login-link" href="${escapeHtml(loginPath)}">Ingresar</a>
+        <a class="btn btn-primary" href="${escapeHtml(createStorePath)}">Crear CloudiShop gratis</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="plans-section pricing-hero" id="planes">
+      <div class="shell">
+        <div class="pricing-heading">
+          <h1 class="plans-title pricing-title reveal"><span class="pricing-title-gradient">Prueba 14 días gratis,</span><span>configura y comienza a vender</span></h1>
+          <p class="plans-note reveal">Elige el plan que acompaña tu etapa: empieza sin tarjeta, activa tu tienda y cambia cuando tu operacion lo necesite.</p>
+        </div>
+
+        <div class="pricing-toolbar reveal">
+          ${buildPlansBillingToggleMarkup("monthly")}
+          <a href="#comparar" class="pricing-compare-link">Comparar todas las funciones</a>
+        </div>
+
+        <div class="plans-grid pricing-grid">${plansMarkup}</div>
+      </div>
+    </section>
+
+    <section class="pricing-comparison-wrap" id="comparar" aria-label="Comparativo de planes">
+      ${comparisonMarkup}
+    </section>
+
+    <section class="pricing-faq-wrap" id="preguntas-frecuentes" aria-label="Preguntas frecuentes">
+      ${buildPricingFaqMarkup()}
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footer-main">
+      <div class="footer-brand">
+        <img loading="lazy" src="/logo_blanco.png" alt="CloudiShop">
+        <p>Infraestructura ecommerce para empresas que venden online y en tienda, con control, personalizacion y crecimiento real.</p>
+      </div>
+
+      <div class="footer-col">
+        <h3>Contenido</h3>
+        <div class="footer-list">
+          <a href="/">Inicio</a>
+          <a href="/#caracteristicas-resultados">Plataforma</a>
+          <a href="/precios">Precios</a>
+          <a href="/#demo">Personalizacion</a>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <h3>Legal</h3>
+        <div class="footer-list">
+          <a href="/terminos-y-condiciones">Terminos</a>
+          <a href="/aviso-privacidad">Aviso de privacidad</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="shell">
+        <div class="footer-metrics">
+          <span>Ecommerce con mas de 100MDP procesados</span>
+          <span>+ de 100,000 pedidos</span>
+          <span>Especializados en B2B</span>
+        </div>
+        <div class="footer-credit">Dise&ntilde;ado por Cloudi&reg;</div>
+      </div>
+    </div>
+  </footer>`;
+}
+
 function buildPlansBillingToggleMarkup(billingPeriod = "monthly") {
   return `
         <div class="plans-billing-toggle" role="group" aria-label="Periodo de pago">
           <button type="button" class="${billingPeriod === "monthly" ? "is-active" : ""}" data-plan-period="monthly">Mensual</button>
           <button type="button" class="${billingPeriod === "annual" ? "is-active" : ""}" data-plan-period="annual">Anual</button>
         </div>`;
+}
+
+function buildPlanComparisonMarkup(plans, createStorePath) {
+  const comparisonPlans = getComparisonPlans(plans);
+  const planHeaders = comparisonPlans.map((plan) => {
+    const isFree = Number(plan.price || 0) === 0 && !plan.custom;
+    const ctaText = isFree ? "Crea gratis" : "Comienza gratis";
+
+    return `
+          <div class="compare-plan">
+            <strong>${escapeHtml(plan.name)}</strong>
+            <span class="compare-plan-price">${escapeHtml(formatPlanLabel(plan, "monthly"))}</span>
+            <a class="btn compare-plan-btn" href="${escapeHtml(createStorePath)}">${ctaText}</a>
+          </div>`;
+  }).join("");
+  const monthlyRow = buildComparisonRow("Pago mensual", comparisonPlans.map((plan) => formatPlanLabel(plan, "monthly")));
+  const annualRow = buildComparisonRow("Pago anual", comparisonPlans.map((plan) => formatPlanLabel(plan, "annual")));
+  const rows = PLAN_COMPARISON_FEATURES.map((feature) => {
+    const cells = comparisonPlans.map((plan, index) => {
+      const tier = getComparisonPlanTier(plan, index);
+      return tier >= feature.minTier ? '<span class="compare-check" aria-label="Incluido">&#10003;</span>' : '<span class="compare-dash">-</span>';
+    });
+
+    return buildComparisonRow(feature.label, cells, true);
+  }).join("");
+
+  return `
+      <div class="pricing-comparison-panel">
+        <div class="shell">
+          <div class="pricing-comparison-scroll">
+            <div class="pricing-comparison-grid">
+              <div class="pricing-comparison-head">
+                <h2>Comparar todas las funciones</h2>
+                ${planHeaders}
+              </div>
+              <div class="comparison-section-title">Precios</div>
+              ${monthlyRow}
+              ${annualRow}
+              <div class="comparison-section-title">Funciones principales</div>
+              ${rows}
+            </div>
+          </div>
+        </div>
+      </div>`;
+}
+
+function buildPricingFaqMarkup() {
+  const questions = [
+    {
+      question: "¿Qué es CloudiShop y cómo funciona?",
+      answer: "CloudiShop es una plataforma ecommerce para crear tu tienda online, configurar productos, recibir pedidos, administrar clientes, activar promociones y operar tus ventas desde un solo lugar. No necesitas programar para empezar.",
+    },
+    {
+      question: "¿Cuánto cuesta CloudiShop?",
+      answer: "Puedes comenzar con una prueba gratis de 14 dias. Despues puedes elegir el plan que mejor se ajuste a tu etapa: Free, Basico, Shop o Shop+.",
+    },
+    {
+      question: "¿Puedo cancelar o cambiar mi plan en cualquier momento?",
+      answer: "Si. Puedes cambiar de plan cuando tu negocio necesite mas funciones o ajustar tu suscripcion desde tu cuenta.",
+    },
+    {
+      question: "¿Hay cargos adicionales?",
+      answer: "CloudiShop no cobra cargos de configuracion para crear tu tienda. Pueden existir comisiones o costos de terceros segun el proveedor de pago, envio o integracion que uses.",
+    },
+    {
+      question: "¿Puedo usar mi propio dominio con CloudiShop?",
+      answer: "Si. En el plan Shop+ puedes conectar tu dominio para que tu tienda opere con la identidad de tu marca.",
+    },
+    {
+      question: "¿CloudiShop incluye alojamiento web?",
+      answer: "Si. Tu tienda se publica en la infraestructura de CloudiShop, por lo que no necesitas contratar alojamiento por separado para comenzar a vender.",
+    },
+  ];
+
+  const items = questions.map((item, index) => `
+          <details class="pricing-faq-item"${index === 0 ? " open" : ""}>
+            <summary>${escapeHtml(item.question)}</summary>
+            <p>${escapeHtml(item.answer)}</p>
+          </details>`).join("");
+
+  return `
+      <div class="pricing-faq-panel">
+        <div class="shell pricing-faq-grid">
+          <div class="pricing-faq-heading">
+            <h2 class="reveal">Preguntas frecuentes</h2>
+          </div>
+          <div class="pricing-faq-list reveal">
+            ${items}
+          </div>
+          ${buildPricingPaymentDisclosureMarkup()}
+        </div>
+      </div>`;
+}
+
+function buildPricingPaymentDisclosureMarkup() {
+  return `
+          <aside class="pricing-payment-disclosure reveal" aria-label="Informacion sobre servicios de pago">
+            <h3>CloudiShop Pay y servicios de pago</h3>
+            <p>CloudiShop es una empresa de tecnologia, no un banco ni una institucion financiera. Los servicios de procesamiento de pagos, liquidacion, prevencion de fraude, contracargos y disponibilidad de metodos de pago pueden ser provistos por terceros como Stripe, Mercado Pago, EcartPay o CloudiPay mediante infraestructura de EcartPay, cuando esten habilitados para el comercio.</p>
+            <p>La activacion, comisiones, tiempos de liquidacion, validaciones, restricciones y aprobaciones dependen de cada proveedor de pago y de sus propios terminos. CloudiShop facilita la conexion tecnica con estos servicios, pero no emite tarjetas, no otorga financiamiento, no custodia fondos como banco y no garantiza la aprobacion de cuentas o transacciones por parte de proveedores externos.</p>
+          </aside>`;
+}
+
+function getComparisonPlans(plans = []) {
+  const safePlans = plans.length ? plans : DEFAULT_PUBLIC_PLANS;
+  const standardPlans = safePlans.filter((plan) => {
+    const key = String(plan.key || "").toLowerCase();
+    const name = String(plan.name || "").toLowerCase();
+
+    return !plan.custom && !key.includes("custom") && !name.includes("medida");
+  });
+  const defaultStandardPlans = DEFAULT_PUBLIC_PLANS.filter((plan) => !plan.custom);
+  const mergedPlans = [...standardPlans];
+
+  defaultStandardPlans.forEach((defaultPlan) => {
+    const hasPlan = mergedPlans.some((plan) => String(plan.key || plan.name) === String(defaultPlan.key || defaultPlan.name));
+    if (!hasPlan) mergedPlans.push(defaultPlan);
+  });
+
+  return (mergedPlans.length ? mergedPlans : safePlans).slice(0, 4);
+}
+
+function getComparisonPlanTier(plan = {}, index = 0) {
+  const key = String(plan.key || "").toLowerCase();
+  const name = String(plan.name || "").toLowerCase();
+
+  if (key.includes("free") || name.includes("free") || name.includes("gratis")) return 0;
+  if (key.includes("basic") || key.includes("basico") || name.includes("basic") || name.includes("basico")) return 1;
+  if (key.includes("shop_plus") || key.includes("plus") || name.includes("shop+")) return 3;
+  if (key.includes("shop") || name.includes("shop")) return 2;
+
+  return Math.min(index, 3);
+}
+
+function buildComparisonRow(label, cells, allowHtml = false) {
+  const cellMarkup = cells.map((cell) => `<div>${allowHtml ? cell : escapeHtml(cell)}</div>`).join("");
+
+  return `
+              <div class="comparison-row">
+                <div>${escapeHtml(label)}</div>
+                ${cellMarkup}
+              </div>`;
 }
 
 function optimizeLandingMedia(markup) {

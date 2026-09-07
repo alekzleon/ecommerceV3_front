@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom"
 import { useSettings } from "../../../context/SettingsContext"
+import { can } from "../../../utils/adminAccess"
 import "./AdminSidebar.css"
 
 function AdminSidebar({ menu = [], currentUser, isOpen = false, onClose }) {
   const { brandName, logoUrl } = useSettings()
   const brandInitial = brandName?.charAt(0)?.toUpperCase() || "T"
-  const visibleMenu = addStorefrontAdminMenuItems(menu)
+  const visibleMenu = addStorefrontAdminMenuItems(menu, currentUser)
 
   return (
     <aside className={`admin-sidebar ${isOpen ? "admin-sidebar--open" : ""}`}>
@@ -91,9 +92,9 @@ function SidebarGroupLinks({ group, onClose }) {
   )
 }
 
-function addStorefrontAdminMenuItems(menu) {
+function addStorefrontAdminMenuItems(menu, currentUser) {
   const subscriptionItem = buildSubscriptionMenuItem()
-  const sidebarMenu = menu
+  const sidebarMenu = injectCouponMenuItem(menu, currentUser)
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => item.name !== "banners"),
@@ -182,6 +183,64 @@ function addStorefrontAdminMenuItems(menu) {
         ...group.items,
         subscriptionItem,
       ],
+    }
+  })
+}
+
+function injectCouponMenuItem(menu, currentUser) {
+  const hasCouponAccess = can(currentUser, "cupones") || can(currentUser, "coupons")
+  const alreadyHasCoupons = menu.some((group) =>
+    group.items.some((item) => ["cupones", "coupons"].includes(item.name))
+  )
+
+  if (!hasCouponAccess || alreadyHasCoupons) return menu
+
+  const couponItem = {
+    name: "cupones",
+    display_name: "Cupones",
+    front_path: "/admin/coupons",
+  }
+
+  const hasMarketingGroup = menu.some((group) => {
+    const groupKey = String(group.group_key || "").toLowerCase()
+    return groupKey === "marketing" || group.items.some((item) => ["marketing", "promociones", "promotions"].includes(item.name))
+  })
+
+  if (!hasMarketingGroup) {
+    return [
+      ...menu,
+      {
+        group_key: "marketing",
+        group_name: "Marketing",
+        items: [couponItem],
+      },
+    ]
+  }
+
+  return menu.map((group) => {
+    const groupKey = String(group.group_key || "").toLowerCase()
+    const isMarketingGroup = groupKey === "marketing" ||
+      group.items.some((item) => ["marketing", "promociones", "promotions"].includes(item.name))
+
+    if (!isMarketingGroup) return group
+
+    const items = []
+    let inserted = false
+
+    group.items.forEach((item) => {
+      items.push(item)
+
+      if (!inserted && ["promociones", "promotions"].includes(item.name)) {
+        items.push(couponItem)
+        inserted = true
+      }
+    })
+
+    if (!inserted) items.push(couponItem)
+
+    return {
+      ...group,
+      items,
     }
   })
 }

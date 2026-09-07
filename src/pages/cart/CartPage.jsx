@@ -48,6 +48,7 @@ const emptyCartState = {
 function CartPage() {
   const location = useLocation()
   const navigate = useNavigate()
+  const isGuestCheckout = !hasAuthSession()
   const [cart, setCart] = useState(emptyCartState)
   const [products, setProducts] = useState([])
   const [selected, setSelected] = useState([])
@@ -573,6 +574,11 @@ function CartPage() {
   const handleApplyCoupon = async (event) => {
     event.preventDefault()
 
+    if (isGuestCheckout) {
+      notifyWarning("Regístrate para usar un cupón.")
+      return
+    }
+
     const code = couponCode.trim()
 
     if (!code) {
@@ -975,6 +981,8 @@ function CartPage() {
   const cartEstimatedTotal = useMemo(() => {
     return Number(cart.total || 0) + Number(shippingEstimate?.amount || 0)
   }, [cart.total, shippingEstimate])
+  const selectedItemsCount = selected.length
+  const totalSavings = Number(cart.discount || 0)
 
   const allVisibleSelected =
     filteredProducts.length > 0 &&
@@ -1019,68 +1027,68 @@ function CartPage() {
   return (
     <div className="cart_page">
       <div className="cart_shell">
-        <header className="cart_header">
-          <div className="cart_header_left">
-            <h1 className="cart_title">Carrito</h1>
-            <p className="cart_meta">
-              {products.length} productos · {totalPieces.toFixed(2)} piezas
-            </p>
-          </div>
-
-          <div className="cart_header_actions">
-            <button
-              type="button"
-              className="btn btn_secondary"
-              onClick={handleClearCart}
-              disabled={!products.length || processingClear}
-            >
-              {processingClear ? "Vaciando..." : "Vaciar carrito"}
-            </button>
-
-            <button
-              type="button"
-              className="btn btn_secondary"
-              onClick={handleRemoveSelected}
-              disabled={!selected.length || processingRemoveSelected}
-            >
-              {processingRemoveSelected
-                ? "Eliminando..."
-                : "Eliminar seleccionados"}
-            </button>
-
-            <Link to="/carrito/excel" className="btn btn_secondary">
-              Procesar pedido
-            </Link>
-          </div>
-        </header>
-
-        <div className="cart_tools">
-          <div className="cart_search">
-            <input
-              type="text"
-              placeholder="Buscar dentro del carrito"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="cart_tools_info">
-            {search.trim() ? (
-              <span>
-                Mostrando {filteredProducts.length} de {products.length} productos
-              </span>
-            ) : (
-              <span>Pedido rápido de mayoreo</span>
-            )}
-          </div>
-        </div>
-
         {products.length ? (
-          <FreeShippingProgress
-            shipping={shippingEstimate}
-            formatMoney={formatMoney}
-          />
-        ) : null}
+          <>
+            <div className="cart_select_all_bar">
+              <label className="cart_select_all_label">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectAllVisible}
+                />
+                <span>Todos los productos</span>
+              </label>
+
+            </div>
+
+            <div className="cart_tools cart_tools--market">
+              <div className="cart_search">
+                <input
+                  type="text"
+                  placeholder="Buscar dentro del carrito"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="cart_tools_actions">
+                {search.trim() ? (
+                  <span>
+                    Mostrando {filteredProducts.length} de {products.length}
+                  </span>
+                ) : (
+                  <span>{products.length} productos · {totalPieces.toFixed(2)} piezas</span>
+                )}
+
+                <button
+                  type="button"
+                  className="cart_text_btn"
+                  onClick={handleRemoveSelected}
+                  disabled={!selected.length || processingRemoveSelected}
+                >
+                  {processingRemoveSelected ? "Eliminando..." : "Eliminar seleccionados"}
+                </button>
+
+                <button
+                  type="button"
+                  className="cart_text_btn"
+                  onClick={handleClearCart}
+                  disabled={!products.length || processingClear}
+                >
+                  {processingClear ? "Vaciando..." : "Vaciar carrito"}
+                </button>
+
+              </div>
+            </div>
+          </>
+        ) : (
+          <header className="cart_header">
+            <div className="cart_header_left">
+              <h1 className="cart_title">Carrito</h1>
+              <p className="cart_meta">Tu carrito está listo para recibir productos.</p>
+            </div>
+          </header>
+        )}
 
         {!products.length ? (
           <div className="cart_empty cart_empty--full">
@@ -1110,7 +1118,6 @@ function CartPage() {
                     <span className="group_title">Productos</span>
                   </label>
 
-                  <span className="group_count">({filteredProducts.length})</span>
                 </div>
 
                 <div className="cart_rows">
@@ -1242,7 +1249,7 @@ function CartPage() {
                                 ) : null}
 
                                 <div className="cart_item_price">
-                                  P. Unitario {formatMoney(product.price)}
+                                  {formatMoney(product.price)}
                                 </div>
 
                                 {product.discount > 0 ? (
@@ -1261,34 +1268,50 @@ function CartPage() {
 
                             <div className="cart_item_bottom">
                               <div className="cart_item_qty_area">
-                                <div className="qty_control">
+                                <div className="cart_item_quantity_line">
+                                  <div className="qty_control">
+                                    <button
+                                      type="button"
+                                      className="qty_btn"
+                                      onClick={() => updateQuantityByDelta(product, -1)}
+                                      disabled={isItemLoading}
+                                    >
+                                      -
+                                    </button>
+
+                                    <input
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={product.quantity}
+                                      onChange={(e) =>
+                                        handleQuantityInput(product.id, e.target.value)
+                                      }
+                                      onBlur={() => commitQuantityChange(product)}
+                                      disabled={isItemLoading}
+                                    />
+
+                                    <button
+                                      type="button"
+                                      className="qty_btn"
+                                      onClick={() => updateQuantityByDelta(product, 1)}
+                                      disabled={isItemLoading}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+
                                   <button
                                     type="button"
-                                    className="qty_btn"
-                                    onClick={() => updateQuantityByDelta(product, -1)}
+                                    className="item_action_btn delete"
+                                    onClick={() => handleRemoveItem(product.id)}
                                     disabled={isItemLoading}
+                                    aria-label={`Eliminar ${product.name}`}
                                   >
-                                    -
-                                  </button>
-
-                                  <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={product.quantity}
-                                    onChange={(e) =>
-                                      handleQuantityInput(product.id, e.target.value)
-                                    }
-                                    onBlur={() => commitQuantityChange(product)}
-                                    disabled={isItemLoading}
-                                  />
-
-                                  <button
-                                    type="button"
-                                    className="qty_btn"
-                                    onClick={() => updateQuantityByDelta(product, 1)}
-                                    disabled={isItemLoading}
-                                  >
-                                    +
+                                    {isItemLoading ? (
+                                      "..."
+                                    ) : (
+                                      <i className="bi bi-trash" aria-hidden="true" />
+                                    )}
                                   </button>
                                 </div>
 
@@ -1299,21 +1322,6 @@ function CartPage() {
                                     ? "Disponible"
                                     : "Revisar disponibilidad"}
                                 </span>
-                              </div>
-
-                              <div className="cart_item_actions">
-                                <button type="button" className="item_action_btn" disabled>
-                                  Guardar en lista
-                                </button>
-
-                                <button
-                                  type="button"
-                                  className="item_action_btn delete"
-                                  onClick={() => handleRemoveItem(product.id)}
-                                  disabled={isItemLoading}
-                                >
-                                  {isItemLoading ? "Eliminando..." : "Eliminar"}
-                                </button>
                               </div>
 
                               <div className="cart_item_subtotal">
@@ -1329,6 +1337,27 @@ function CartPage() {
                     })
                   )}
                 </div>
+
+                <div className="cart_group_shipping">
+                  <FreeShippingProgress
+                    shipping={shippingEstimate}
+                    formatMoney={formatMoney}
+                  />
+
+                  <CartPromotionsSummary
+                    promotions={cart.promotionsApplied}
+                    isPromotionLoading={isPromotionLoading}
+                    getSelectedGiftItem={getSelectedGiftItem}
+                    getPromotionDisplayGiftItems={getPromotionDisplayGiftItems}
+                    hasGiftProductInCart={hasGiftProductInCart}
+                    getGiftAccountingText={getGiftAccountingText}
+                    getGiftItemsText={getGiftItemsText}
+                    onSelectGift={handleSelectPromotionGift}
+                    onClearGift={handleClearPromotionGiftSelection}
+                    onAddGiftProduct={handleAddPromotionGiftProduct}
+                    formatMoney={formatMoney}
+                  />
+                </div>
               </div>
             </section>
 
@@ -1336,219 +1365,16 @@ function CartPage() {
               <div className="summary_card">
                 <h2 className="summary_title">Resumen de compra</h2>
 
-                {Array.isArray(cart.promotionsApplied) && cart.promotionsApplied.length > 0 ? (
-                <div className="summary_promotions">
-                  {cart.promotionsApplied.map((promotion, index) => {
-                    const giftOptions = normalizeGiftItems(
-                      promotion.snapshot?.gift_items ?? promotion.giftItems
-                    )
-                    const selectedGiftItem = getSelectedGiftItem(promotion)
-                    const brandSubtotal = Number(
-                      promotion.snapshot?.brand_subtotal ?? 0
-                    )
-                    const minimumAmount = Number(
-                      promotion.snapshot?.minimum_amount ?? 0
-                    )
-                    const targetProductAdded = hasGiftProductInCart(promotion)
-                    const selectingGift = isPromotionLoading(
-                      promotion.id,
-                      "select-gift"
-                    )
-                    const clearingGift = isPromotionLoading(
-                      promotion.id,
-                      "clear-gift"
-                    )
-                    const addingGiftProduct = isPromotionLoading(
-                      promotion.id,
-                      "add-gift-product"
-                    )
-
-                    return (
-                      <div
-                        className="summary_promotion_item"
-                        key={promotion.id ?? `promotion-${index}`}
-                      >
-                        <strong>{promotion.name || "Promoción aplicada"}</strong>
-
-                        {promotion.totalDiscount > 0 ? (
-                          <span>Ahorras {formatMoney(promotion.totalDiscount)}</span>
-                        ) : null}
-
-                        {brandSubtotal > 0 && minimumAmount > 0 ? (
-                          <span>
-                            Marca {promotion.snapshot?.brand || "-"}:{" "}
-                            {formatMoney(brandSubtotal)} de {formatMoney(minimumAmount)}
-                          </span>
-                        ) : null}
-
-                        {promotion.giftUnits > 0 ? (
-                          <span>
-                            {getGiftAccountingText({
-                              giftUnits: promotion.giftUnits,
-                              giftUnitAccountingPrice:
-                                promotion.snapshot?.gift_unit_accounting_price,
-                              giftLineTotal: promotion.giftLineTotal,
-                            })}
-                          </span>
-                        ) : null}
-
-                        {(() => {
-                          const displayGift = getPromotionDisplayGiftItems(promotion)
-
-                          return displayGift.giftItemUnits > 0 ? (
-                            <span>
-                              {displayGift.hasSelection
-                                ? `Regalo elegido: ${getGiftItemsText(
-                                    displayGift.giftItems,
-                                    displayGift.giftItemUnits
-                                  )}`
-                                : `${displayGift.giftItemUnits} regalo(s) pendiente(s) por elegir`}
-                            </span>
-                          ) : null
-                        })()}
-
-                        {promotion.type === "brand_amount_choose_gift_item" ? (
-                          <div className="summary_promotion_interactive">
-                            {selectedGiftItem ? (
-                              <div className="summary_selected_gift">
-                                {selectedGiftItem.imageUrl ? (
-                                  <img loading="lazy"
-                                    src={normalizeMediaUrl(selectedGiftItem.imageUrl)}
-                                    alt={selectedGiftItem.name}
-                                  />
-                                ) : (
-                                  <div className="summary_selected_gift_placeholder">
-                                    Regalo
-                                  </div>
-                                )}
-
-                                <div>
-                                  <span className="summary_selected_gift_label">
-                                    Regalo seleccionado
-                                  </span>
-                                  <strong>{selectedGiftItem.name}</strong>
-                                  {selectedGiftItem.code ? (
-                                    <small>{selectedGiftItem.code}</small>
-                                  ) : null}
-                                </div>
-                              </div>
-                            ) : (
-                              <small className="summary_promotion_alert">
-                                Elige tu regalo para completar esta promoción.
-                              </small>
-                            )}
-
-                            {giftOptions.length > 0 ? (
-                              <div className="summary_gift_options">
-                                {giftOptions.map((giftItem) => {
-                                  const isSelected =
-                                    Number(promotion.snapshot?.selected_gift_item_id ?? 0) ===
-                                    Number(giftItem.id)
-
-                                  return (
-                                    <button
-                                      key={giftItem.id}
-                                      type="button"
-                                      className={`summary_gift_option ${
-                                        isSelected ? "is-selected" : ""
-                                      }`}
-                                      onClick={() =>
-                                        handleSelectPromotionGift(
-                                          promotion.id,
-                                          giftItem.id
-                                        )
-                                      }
-                                      disabled={selectingGift || clearingGift}
-                                    >
-                                      {giftItem.imageUrl ? (
-                                        <img loading="lazy"
-                                          src={normalizeMediaUrl(giftItem.imageUrl)}
-                                          alt={giftItem.name}
-                                        />
-                                      ) : (
-                                        <div className="summary_gift_option_placeholder">
-                                          Regalo
-                                        </div>
-                                      )}
-
-                                      <span>{giftItem.name}</span>
-                                      {giftItem.unitLabel ? (
-                                        <small>{giftItem.unitLabel}</small>
-                                      ) : null}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            ) : null}
-
-                            <div className="summary_promotion_actions_inline">
-                              {selectedGiftItem ? (
-                                <button
-                                  type="button"
-                                  className="btn btn_secondary summary_promotion_button"
-                                  onClick={() =>
-                                    handleClearPromotionGiftSelection(promotion.id)
-                                  }
-                                  disabled={selectingGift || clearingGift}
-                                >
-                                  {clearingGift ? "Quitando..." : "Quitar selección"}
-                                </button>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {promotion.type === "brand_amount_get_product" ? (
-                          <div className="summary_promotion_interactive">
-                            <small>
-                              SKU regalo #{promotion.snapshot?.target_product_id || "-"} ·
-                              Cantidad {promotion.snapshot?.target_quantity || 0}
-                            </small>
-
-                            {targetProductAdded ? (
-                              <small className="summary_promotion_success">
-                                El SKU regalo ya está en tu carrito.
-                              </small>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn_secondary summary_promotion_button"
-                                onClick={() =>
-                                  handleAddPromotionGiftProduct(promotion.id)
-                                }
-                                disabled={addingGiftProduct}
-                              >
-                                {addingGiftProduct ? "Agregando..." : "Agregar regalo"}
-                              </button>
-                            )}
-                          </div>
-                        ) : null}
-
-                        {promotion.snapshot?.accounting_note ? (
-                          <small>{promotion.snapshot.accounting_note}</small>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : null}
-
-                <CartLoyaltySummary
-                  loyalty={cart.loyalty}
-                  accountCashback={accountCashback}
-                  formatMoney={formatMoney}
-                />
-
                 <div className="summary_rows">
                   <div className="summary_row">
-                    <span>Productos ({cart.items_count || products.length})</span>
+                    <span>Producto{products.length === 1 ? "" : "s"}</span>
                     <span>{formatMoney(cart.subtotal)}</span>
                   </div>
 
                   {Number(cart.discount || 0) > 0 ? (
                     <div className="summary_row">
-                      <span>Descuento</span>
-                      <span>- {formatMoney(cart.discount)}</span>
+                      <span>Descuento de productos</span>
+                      <span className="summary_discount">- {formatMoney(cart.discount)}</span>
                     </div>
                   ) : null}
 
@@ -1562,7 +1388,9 @@ function CartPage() {
                   {shippingEstimate?.enabled ? (
                     <div className="summary_row">
                       <span>{shippingEstimate.label || "Envío"}</span>
-                      <span>{shippingEstimate.amount > 0 ? formatMoney(shippingEstimate.amount) : "Gratis"}</span>
+                      <span className={shippingEstimate.amount > 0 ? "" : "summary_free"}>
+                        {shippingEstimate.amount > 0 ? formatMoney(shippingEstimate.amount) : "Gratis"}
+                      </span>
                     </div>
                   ) : null}
 
@@ -1573,16 +1401,30 @@ function CartPage() {
                   <strong>{formatMoney(shippingEstimate?.enabled ? cartEstimatedTotal : cart.total)}</strong>
                 </div>
 
+                {totalSavings > 0 ? (
+                  <div className="summary_savings">
+                    Ahorras {formatMoney(totalSavings)}
+                  </div>
+                ) : null}
+
+                <CartLoyaltySummary
+                  loyalty={cart.loyalty}
+                  accountCashback={accountCashback}
+                  formatMoney={formatMoney}
+                />
+
                 <CartCouponBox
                   coupon={cart.coupon}
                   couponCode={couponCode}
                   couponLoading={couponLoading}
                   isOpen={couponOpen}
+                  canUseCoupon={!isGuestCheckout}
                   onToggle={() => setCouponOpen((current) => !current)}
                   onCouponCodeChange={setCouponCode}
                   onApplyCoupon={handleApplyCoupon}
                   onClearCoupon={handleClearCoupon}
                   formatMoney={formatMoney}
+                  plain
                 />
 
                 <CartCashbackBox
@@ -1604,6 +1446,7 @@ function CartPage() {
                   onApplyCashback={handleApplyCashback}
                   onClearCashback={handleClearCashback}
                   formatMoney={formatMoney}
+                  plain
                 />
 
                 <div className="summary_actions">
@@ -1615,7 +1458,7 @@ function CartPage() {
                     onClick={handleCheckoutNavigation}
                     aria-disabled={hasPendingGiftSelection || hasInvalidStockItems}
                   >
-                    Continuar a pago
+                    Continuar ({selectedItemsCount || products.length})
                   </Link>
 
                   <Link to="/productos" className="btn btn_ghost">
@@ -1872,11 +1715,199 @@ function hasRecentStripeSuccessReturn() {
   }
 }
 
+function CartPromotionsSummary({
+  promotions = [],
+  isPromotionLoading,
+  getSelectedGiftItem,
+  getPromotionDisplayGiftItems,
+  hasGiftProductInCart,
+  getGiftAccountingText,
+  getGiftItemsText,
+  onSelectGift,
+  onClearGift,
+  onAddGiftProduct,
+  formatMoney,
+}) {
+  if (!Array.isArray(promotions) || !promotions.length) return null
+
+  return (
+    <div className="summary_promotions cart_benefits_block">
+      <h3 className="cart_benefits_title">Promociones aplicadas</h3>
+
+      {promotions.map((promotion, index) => {
+        const giftOptions = normalizeGiftItems(
+          promotion.snapshot?.gift_items ?? promotion.giftItems
+        )
+        const selectedGiftItem = getSelectedGiftItem(promotion)
+        const brandSubtotal = Number(promotion.snapshot?.brand_subtotal ?? 0)
+        const minimumAmount = Number(promotion.snapshot?.minimum_amount ?? 0)
+        const targetProductAdded = hasGiftProductInCart(promotion)
+        const selectingGift = isPromotionLoading(promotion.id, "select-gift")
+        const clearingGift = isPromotionLoading(promotion.id, "clear-gift")
+        const addingGiftProduct = isPromotionLoading(promotion.id, "add-gift-product")
+
+        return (
+          <div
+            className="summary_promotion_item"
+            key={promotion.id ?? `promotion-${index}`}
+          >
+            <strong>{promotion.name || "Promoción aplicada"}</strong>
+
+            {promotion.totalDiscount > 0 ? (
+              <span>Ahorras {formatMoney(promotion.totalDiscount)}</span>
+            ) : null}
+
+            {brandSubtotal > 0 && minimumAmount > 0 ? (
+              <span>
+                Marca {promotion.snapshot?.brand || "-"}: {formatMoney(brandSubtotal)} de {formatMoney(minimumAmount)}
+              </span>
+            ) : null}
+
+            {promotion.giftUnits > 0 ? (
+              <span>
+                {getGiftAccountingText({
+                  giftUnits: promotion.giftUnits,
+                  giftUnitAccountingPrice: promotion.snapshot?.gift_unit_accounting_price,
+                  giftLineTotal: promotion.giftLineTotal,
+                })}
+              </span>
+            ) : null}
+
+            {(() => {
+              const displayGift = getPromotionDisplayGiftItems(promotion)
+
+              return displayGift.giftItemUnits > 0 ? (
+                <span>
+                  {displayGift.hasSelection
+                    ? `Regalo elegido: ${getGiftItemsText(
+                        displayGift.giftItems,
+                        displayGift.giftItemUnits
+                      )}`
+                    : `${displayGift.giftItemUnits} regalo(s) pendiente(s) por elegir`}
+                </span>
+              ) : null
+            })()}
+
+            {promotion.type === "brand_amount_choose_gift_item" ? (
+              <div className="summary_promotion_interactive">
+                {selectedGiftItem ? (
+                  <div className="summary_selected_gift">
+                    {selectedGiftItem.imageUrl ? (
+                      <img
+                        loading="lazy"
+                        src={normalizeMediaUrl(selectedGiftItem.imageUrl)}
+                        alt={selectedGiftItem.name}
+                      />
+                    ) : (
+                      <div className="summary_selected_gift_placeholder">
+                        Regalo
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="summary_selected_gift_label">
+                        Regalo seleccionado
+                      </span>
+                      <strong>{selectedGiftItem.name}</strong>
+                      {selectedGiftItem.code ? <small>{selectedGiftItem.code}</small> : null}
+                    </div>
+                  </div>
+                ) : (
+                  <small className="summary_promotion_alert">
+                    Elige tu regalo para completar esta promoción.
+                  </small>
+                )}
+
+                {giftOptions.length > 0 ? (
+                  <div className="summary_gift_options">
+                    {giftOptions.map((giftItem) => {
+                      const isSelected =
+                        Number(promotion.snapshot?.selected_gift_item_id ?? 0) ===
+                        Number(giftItem.id)
+
+                      return (
+                        <button
+                          key={giftItem.id}
+                          type="button"
+                          className={`summary_gift_option ${isSelected ? "is-selected" : ""}`}
+                          onClick={() => onSelectGift(promotion.id, giftItem.id)}
+                          disabled={selectingGift || clearingGift}
+                        >
+                          {giftItem.imageUrl ? (
+                            <img
+                              loading="lazy"
+                              src={normalizeMediaUrl(giftItem.imageUrl)}
+                              alt={giftItem.name}
+                            />
+                          ) : (
+                            <div className="summary_gift_option_placeholder">
+                              Regalo
+                            </div>
+                          )}
+
+                          <span>{giftItem.name}</span>
+                          {giftItem.unitLabel ? <small>{giftItem.unitLabel}</small> : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                <div className="summary_promotion_actions_inline">
+                  {selectedGiftItem ? (
+                    <button
+                      type="button"
+                      className="btn btn_secondary summary_promotion_button"
+                      onClick={() => onClearGift(promotion.id)}
+                      disabled={selectingGift || clearingGift}
+                    >
+                      {clearingGift ? "Quitando..." : "Quitar selección"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {promotion.type === "brand_amount_get_product" ? (
+              <div className="summary_promotion_interactive">
+                <small>
+                  SKU regalo #{promotion.snapshot?.target_product_id || "-"} · Cantidad {promotion.snapshot?.target_quantity || 0}
+                </small>
+
+                {targetProductAdded ? (
+                  <small className="summary_promotion_success">
+                    El SKU regalo ya está en tu carrito.
+                  </small>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn_secondary summary_promotion_button"
+                    onClick={() => onAddGiftProduct(promotion.id)}
+                    disabled={addingGiftProduct}
+                  >
+                    {addingGiftProduct ? "Agregando..." : "Agregar regalo"}
+                  </button>
+                )}
+              </div>
+            ) : null}
+
+            {promotion.snapshot?.accounting_note ? (
+              <small>{promotion.snapshot.accounting_note}</small>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function CartCouponBox({
   coupon,
   couponCode,
   couponLoading,
   isOpen,
+  canUseCoupon,
+  plain = false,
   onToggle,
   onCouponCodeChange,
   onApplyCoupon,
@@ -1884,7 +1915,7 @@ function CartCouponBox({
   formatMoney,
 }) {
   return (
-    <div className={`summary_coupon ${coupon ? "has-coupon" : ""} ${coupon?.is_valid === false ? "is-invalid" : ""}`}>
+    <div className={`summary_coupon ${plain ? "summary_coupon--plain" : ""} ${coupon ? "has-coupon" : ""} ${coupon?.is_valid === false ? "is-invalid" : ""}`}>
       {coupon ? (
         <div className="summary_coupon_applied">
           <div>
@@ -1905,7 +1936,7 @@ function CartCouponBox({
             {couponLoading ? "Quitando..." : "Quitar"}
           </button>
         </div>
-      ) : (
+      ) : canUseCoupon ? (
         <>
           <button
             type="button"
@@ -1933,6 +1964,10 @@ function CartCouponBox({
             </form>
           ) : null}
         </>
+      ) : (
+        <p className="summary_coupon_guest_message">
+          <Link to="/registro">Regístrate</Link> para usar un cupón.
+        </p>
       )}
     </div>
   )
@@ -1944,6 +1979,7 @@ function CartCashbackBox({
   cashbackAmount,
   cashbackLoading,
   isOpen,
+  plain = false,
   onToggle,
   onCashbackAmountChange,
   onApplyCashback,
@@ -1967,7 +2003,7 @@ function CartCashbackBox({
   if (!canRender) return null
 
   return (
-    <div className={`summary_coupon summary_cashback ${appliedAmount > 0 ? "has-coupon" : ""}`}>
+    <div className={`summary_coupon summary_cashback ${plain ? "summary_coupon--plain" : ""} ${appliedAmount > 0 ? "has-coupon" : ""}`}>
       {appliedAmount > 0 ? (
         <div className="summary_coupon_applied">
           <div>

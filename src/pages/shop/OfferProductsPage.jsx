@@ -1,22 +1,30 @@
 import { useEffect, useState } from "react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useParams, useSearchParams } from "react-router-dom"
 import ProductGrid from "../../components/product/ProductGrid/ProductGrid"
 import ProductListSkeleton from "../../components/product/ProductListSkeleton/ProductListSkeleton"
-import { getAllPromotions } from "../../services/api/promotionsService"
+import { getPromotionProducts } from "../../services/api/promotionsService"
 import { notifyError } from "../../utils/toast"
+import { normalizeMediaUrl } from "../../utils/mediaUrl"
 import "./offerspage.css"
 
-const PROMOTIONS_LOOKUP_PER_PAGE = 100
-const MAX_PROMOTION_LOOKUP_PAGES = 20
+const PRODUCTS_PER_PAGE = 16
 const PRODUCT_IMAGE_PLACEHOLDER = "https://via.placeholder.com/400x400?text=Producto"
-const PRICE_UNAVAILABLE_SOURCE = "precios_articulos_default_missing"
 
 function OfferProductsPage() {
   const { promotionKey } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const page = Number(searchParams.get("page")) || 1
+
   const [promotion, setPromotion] = useState(null)
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [meta, setMeta] = useState({
+    current_page: 1,
+    last_page: 1,
+    per_page: PRODUCTS_PER_PAGE,
+    total: 0,
+  })
 
   useEffect(() => {
     const loadPromotionProducts = async () => {
@@ -24,20 +32,36 @@ function OfferProductsPage() {
         setLoading(true)
         setError("")
 
-        const foundPromotion = await findPromotionByKey(promotionKey)
-        const normalizedProducts = normalizePromotionProducts(foundPromotion)
+        const response = await getPromotionProducts(promotionKey, {
+          page,
+          per_page: PRODUCTS_PER_PAGE,
+        })
+        const rawProducts = Array.isArray(response?.data) ? response.data : []
+        const normalizedProducts = rawProducts.map(normalizeProduct)
 
-        setPromotion(foundPromotion)
+        setPromotion(response?.promotion || response?.data?.promotion || null)
         setProducts(normalizedProducts)
+        setMeta({
+          current_page: response?.meta?.current_page ?? 1,
+          last_page: response?.meta?.last_page ?? 1,
+          per_page: response?.meta?.per_page ?? PRODUCTS_PER_PAGE,
+          total: response?.meta?.total ?? normalizedProducts.length,
+        })
 
         if (!normalizedProducts.length) {
-          setError("No fue posible cargar los productos de esta promoción.")
+          setError("Esta promoción no tiene productos disponibles.")
         }
       } catch (err) {
         console.error("Error al cargar productos de promoción:", err?.response?.data || err)
         notifyError(err?.response?.data?.message || "No fue posible cargar los productos de la promoción.")
         setPromotion(null)
         setProducts([])
+        setMeta({
+          current_page: 1,
+          last_page: 1,
+          per_page: PRODUCTS_PER_PAGE,
+          total: 0,
+        })
         setError("No fue posible cargar los productos de esta promoción.")
       } finally {
         setLoading(false)
@@ -45,7 +69,19 @@ function OfferProductsPage() {
     }
 
     loadPromotionProducts()
-  }, [promotionKey])
+  }, [page, promotionKey])
+
+  const handlePageChange = (nextPage) => {
+    const nextParams = new URLSearchParams(searchParams)
+
+    if (nextPage <= 1) {
+      nextParams.delete("page")
+    } else {
+      nextParams.set("page", String(nextPage))
+    }
+
+    setSearchParams(nextParams, { replace: true })
+  }
 
   return (
     <section className="offer-products-page">
@@ -59,7 +95,7 @@ function OfferProductsPage() {
               {promotion?.name || "Productos de la promoción"}
             </h1>
             <p className="offers-page__results">
-              {loading ? "Cargando productos..." : `${products.length} producto(s)`}
+              {loading ? "Cargando productos..." : `${meta.total} producto(s)`}
             </p>
           </div>
         </div>
@@ -75,106 +111,140 @@ function OfferProductsPage() {
             </Link>
           </div>
         ) : (
-          <ProductGrid products={products} />
+          <>
+            <ProductGrid products={products} />
+
+            {meta.last_page > 1 ? (
+              <div className="offers-page__pagination">
+                <button
+                  type="button"
+                  className="offers-page__page-btn"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1}
+                >
+                  Anterior
+                </button>
+
+                {Array.from({ length: meta.last_page }).map((_, index) => {
+                  const pageNumber = index + 1
+
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      className={`offers-page__page-number ${page === pageNumber ? "is-active" : ""}`}
+                      onClick={() => handlePageChange(pageNumber)}
+                    >
+                      {pageNumber}
+                    </button>
+                  )
+                })}
+
+                <button
+                  type="button"
+                  className="offers-page__page-btn"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page === meta.last_page}
+                >
+                  Siguiente
+                </button>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </section>
   )
 }
 
-async function findPromotionByKey(promotionKey) {
-  const key = decodeURIComponent(String(promotionKey || ""))
-  let currentPage = 1
-  let lastPage = 1
+function normalizeProduct(item = {}) {
+  const price = Number(item?.default_price ?? item?.final_price ?? item?.price ?? 0)
+  const activePromotions = Array.isArray(item?.active_promotions)
+    ? item.active_promotions
+    : []
+  const mainPromotion = activePromotions[0] || null
+  const promotionMessage =
+    mainPromotion?.message ||
+    mainPromotion?.label ||
+    mainPromotion?.name ||
+    ""
 
-  do {
-    const response = await getAllPromotions({
-      page: currentPage,
-      per_page: PROMOTIONS_LOOKUP_PER_PAGE,
-    })
-    const promotions = Array.isArray(response?.data) ? response.data : []
-    const promotion = promotions.find((item) => matchesPromotionKey(item, key))
-
-    if (promotion) return promotion
-
-    lastPage = Number(response?.meta?.last_page || 1)
-    currentPage += 1
-  } while (currentPage <= lastPage && currentPage <= MAX_PROMOTION_LOOKUP_PAGES)
-
-  throw new Error("Promoción no encontrada.")
+  return {
+    id: item?.id ?? null,
+    name: item?.name ?? "Producto sin nombre",
+    slug: item?.slug ?? "",
+    image: getProductImage(item),
+    price,
+    oldPrice: Number(item?.default_price ?? price),
+    priceInfo: item?.price_info ?? null,
+    brand: item?.brand ?? "Sin marca",
+    shortDescription: item?.short_description ?? "Producto disponible en catálogo.",
+    description: item?.description ?? "Producto disponible en catálogo.",
+    category: item?.category?.name ?? "",
+    family: item?.family?.name ?? "",
+    sku: item?.sku ?? "",
+    rating: 4.8,
+    sold: "Promoción vigente",
+    shipping: "Entrega disponible",
+    discountLabel: "",
+    badges: promotionMessage ? [promotionMessage] : [],
+    activePromotions,
+    promotionMessage,
+    stock: item?.stock ?? null,
+    stockStatus: item?.stock_status ?? getStockStatus(item),
+    stockMessage: item?.stock_message ?? "",
+    isFavorite: Boolean(item?.is_favorite),
+    relevanceScore: item?.relevance_score ?? null,
+    matchReasons: Array.isArray(item?.match_reasons) ? item.match_reasons : [],
+  }
 }
 
-function matchesPromotionKey(promotion = {}, key = "") {
-  return String(promotion?.slug || "") === key || String(promotion?.id || "") === key
-}
-
-function normalizePromotionProducts(promotion = {}) {
-  const products = Array.isArray(promotion?.products) ? promotion.products : []
-
-  return products
-    .filter((product) => product?.slug)
-    .map((product) => {
-      const price = Number(product?.final_price || product?.default_price || product?.price || 0)
-      const oldPrice = Number(product?.default_price || product?.old_price || price)
-
-      return {
-        id: product?.id ?? null,
-        name: product?.name || "Producto sin nombre",
-        slug: product?.slug || "",
-        image: normalizeProductImage(product?.image_url || product?.image_path || product?.image),
-        price,
-        oldPrice,
-        priceInfo: product?.price_info ?? (price > 0 ? null : { source: PRICE_UNAVAILABLE_SOURCE }),
-        brand: product?.brand || product?.brand_name || "Sin marca",
-        shortDescription: product?.short_description || "Producto disponible en promoción.",
-        description: product?.description || "Producto disponible en promoción.",
-        category: product?.category?.name || "",
-        family: product?.family?.name || "",
-        sku: product?.sku || "",
-        rating: 4.8,
-        sold: "Promoción vigente",
-        shipping: "Entrega disponible",
-        discountLabel: "",
-        badges: [promotion?.label || promotion?.name || "Promoción"].filter(Boolean),
-        activePromotions: [promotion],
-        promotionMessage: promotion?.label || promotion?.name || "",
-        stock: product?.stock ?? null,
-        stockStatus: product?.stock_status || product?.stockStatus || "untracked",
-        stockMessage: product?.stock_message || product?.stockMessage || "",
-        isFavorite: Boolean(product?.is_favorite),
-      }
-    })
-}
-
-function normalizeProductImage(value) {
-  const image = String(value || "").trim()
-
-  if (!image) return PRODUCT_IMAGE_PLACEHOLDER
-
-  const nestedUrlMatch = image.match(/https?:\/\/.+?(https?:\/\/.+)$/)
-  const cleanImage = nestedUrlMatch?.[1] || image
-  const mediaBaseUrl = getMediaBaseUrl()
-
-  if (/^https?:\/\//i.test(cleanImage)) {
-    try {
-      const parsedUrl = new URL(cleanImage)
-      return `${mediaBaseUrl}${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
-    } catch {
-      return cleanImage
-    }
+function getStockStatus(item = {}) {
+  if (item?.stock === null || item?.stock === undefined || item?.stock === "") {
+    return "untracked"
   }
 
-  return `${mediaBaseUrl}/${cleanImage.replace(/^\/+/, "")}`
+  return Number(item.stock) > 0 ? "in_stock" : "out_of_stock"
 }
 
-function getMediaBaseUrl() {
-  return String(
-    import.meta.env.VITE_MEDIA_BASE_URL ||
-      import.meta.env.VITE_API_URL ||
-      ""
+function getProductImage(item = {}) {
+  const galleryImage = Array.isArray(item?.gallery)
+    ? item.gallery.find((media) => {
+        const isActive = Boolean(media?.is_active ?? true)
+        const mediaType = media?.media_type || media?.type || "image"
+
+        return isActive && mediaType !== "video" && getProductImageSource(media)
+      })
+    : null
+
+  const rawImage =
+    item?.image_url ||
+    item?.image_path ||
+    item?.main_image_url ||
+    item?.main_image_path ||
+    item?.media_url ||
+    item?.media_path ||
+    item?.thumbnail_url ||
+    item?.thumbnail_path ||
+    item?.file_url ||
+    item?.url ||
+    item?.image ||
+    getProductImageSource(galleryImage)
+
+  return normalizeMediaUrl(rawImage) || PRODUCT_IMAGE_PLACEHOLDER
+}
+
+function getProductImageSource(media = {}) {
+  return (
+    media?.media_url ||
+    media?.media_path ||
+    media?.image_url ||
+    media?.image_path ||
+    media?.file_url ||
+    media?.url ||
+    media?.path ||
+    ""
   )
-    .replace(/\/api\/v1\/?$/, "")
-    .replace(/\/+$/, "")
 }
 
 export default OfferProductsPage

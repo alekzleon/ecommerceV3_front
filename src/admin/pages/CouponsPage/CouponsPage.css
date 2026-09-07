@@ -136,6 +136,29 @@
   font-size: 0.78rem;
 }
 
+.coupons-page__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.coupons-page__badge {
+  width: fit-content;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.68rem;
+  font-weight: 900;
+  padding: 0.12rem 0.45rem;
+}
+
+.coupons-page__badge--blue {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
 .coupons-page__muted-stack span,
 .coupons-page__usage strong {
   color: #334155;

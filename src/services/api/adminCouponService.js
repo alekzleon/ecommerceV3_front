@@ -20,6 +20,11 @@ export async function updateAdminCoupon(id, payload) {
   return response.data
 }
 
+export async function assignAdminCouponUsers(id, payload) {
+  const response = await api.post(`/admin/coupons/${id}/assign-users`, payload)
+  return response.data
+}
+
 export async function deleteAdminCoupon(id) {
   const response = await api.delete(`/admin/coupons/${id}`)
   return response.data
@@ -27,11 +32,6 @@ export async function deleteAdminCoupon(id) {
 
 export async function toggleAdminCoupon(id) {
   const response = await api.patch(`/admin/coupons/${id}/toggle`)
-  return response.data
-}
-
-export async function sendAdminCoupon(id, payload) {
-  const response = await api.post(`/admin/coupons/${id}/send`, payload)
   return response.data
 }
 
